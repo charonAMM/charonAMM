@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 contract Charon{
 
@@ -28,8 +28,16 @@ contract Charon{
 
     }
 
+    function secretDepositToOtherChain(){
+
+    }
+
     //withdraw your tokens (like a market order from the other chain)
     function secretWithdraw(){
+
+    }
+
+    function getDepositInfoForOracle(){
 
     }
 

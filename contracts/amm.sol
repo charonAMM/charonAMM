@@ -78,46 +78,27 @@ contract AMM is Token, Math {
         _swapFee = _swapFee;
     }
 
-    function isPublicSwap()
-        external view
-        returns (bool)
-    {
+    function isPublicSwap() external view returns (bool){
         return _publicSwap;
     }
 
-    function isFinalized()
-        external view
-        returns (bool)
-    {
+    function isFinalized() external view returns (bool){
         return _finalized;
     }
 
-    function isBound(address t)
-        external view
-        returns (bool)
-    {
+    function isBound(address t) external view returns (bool){
         return _records[t].bound;
     }
 
-    function getNumTokens()
-        external view
-        returns (uint) 
-    {
+    function getNumTokens()external view returns (uint) {
         return _tokens.length;
     }
 
-    function getCurrentTokens()
-        external view _viewlock_
-        returns (address[] memory tokens)
-    {
+    function getCurrentTokens() external view _viewlock_ returns (address[] memory tokens){
         return _tokens;
     }
 
-    function getFinalTokens()
-        external view
-        _viewlock_
-        returns (address[] memory tokens)
-    {
+    function getFinalTokens() external view _viewlock_ returns (address[] memory tokens){
         require(_finalized, "ERR_NOT_FINALIZED");
         return _tokens;
     }
@@ -148,21 +129,6 @@ contract AMM is Token, Math {
 
     function getSwapFee() external view _viewlock_ returns (uint256){
         return swapFee;
-    }
-
-    function getController() external view _viewlock_ returns (address){
-        return _controller;
-    }
-
-    function setController(address manager) external _logs_ _lock_ {
-        require(msg.sender == _controller, "ERR_NOT_CONTROLLER");
-        _controller = manager;
-    }
-
-    function setPublicSwap(bool public_) external _logs_ _lock_{
-        require(!_finalized, "ERR_IS_FINALIZED");
-        require(msg.sender == _controller, "ERR_NOT_CONTROLLER");
-        _publicSwap = public_;
     }
 
     function finalize() external _logs_ _lock_ {
@@ -549,7 +515,7 @@ contract AMM is Token, Math {
         uint exitFee = bmul(poolAmountIn, EXIT_FEE);
         emit LOG_EXIT(msg.sender, tokenOut, tokenAmountOut);
         _pull(msg.sender, poolAmountIn);
-        _burn(bsub(poolAmountIn, exitFee));
+        _burn(poolAmountIn - exitFee));
         _push(_owner, exitFee);
         _pushUnderlying(tokenOut, msg.sender, tokenAmountOut);        
         return poolAmountIn;

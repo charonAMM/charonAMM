@@ -35,44 +35,19 @@ contract Mixer is MerkleTree{
     uint256 _denomination,
     uint32 _merkleTreeHeight,
     IERC20 _token
-  ) MerkleTreeWithHistory(_merkleTreeHeight, _hasher) {
+  ) MerkleTree(_merkleTreeHeight, _hasher) {
     require(_denomination > 0, "denomination should be greater than 0");
     verifier = _verifier;
     denomination = _denomination;
-     _status = _NOT_ENTERED;
-     token = _token;
+    _status = _NOT_ENTERED;
+    token = _token;
   }
 
-    modifier nonReentrant() {
-        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
-        _status = _ENTERED;
-        _;
-        _status = _NOT_ENTERED;
-    }
-
-  function _processDeposit() internal override {
-    require(msg.value == 0, "ETH value is supposed to be 0 for ERC20 instance");
-    token.safeTransferFrom(msg.sender, address(this), denomination);
-  }
-
-  function _processWithdraw(
-    address payable _recipient,
-    address payable _relayer,
-    uint256 _fee,
-    uint256 _refund
-  ) internal override {
-    require(msg.value == _refund, "Incorrect refund amount received by the contract");
-    token.safeTransfer(_recipient, denomination - _fee);
-    if (_fee > 0) {
-      token.safeTransfer(_relayer, _fee);
-    }
-    if (_refund > 0) {
-      (bool success, ) = _recipient.call{ value: _refund }("");
-      if (!success) {
-        // let's return _refund back to the relayer
-        _relayer.transfer(_refund);
-      }
-    }
+  modifier nonReentrant() {
+      require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+      _status = _ENTERED;
+      _;
+      _status = _NOT_ENTERED;
   }
 
   /**
@@ -81,9 +56,10 @@ contract Mixer is MerkleTree{
   */
   function deposit(bytes32 _commitment) external payable nonReentrant {
     require(!commitments[_commitment], "The commitment has been submitted");
+    require(msg.value == 0, "ETH value is supposed to be 0 for ERC20 instance");
     uint32 insertedIndex = _insert(_commitment);
     commitments[_commitment] = true;
-    _processDeposit();
+    token.safeTransferFrom(msg.sender, address(this), denomination);
     emit Deposit(_commitment, insertedIndex, block.timestamp);
   }
 
@@ -115,7 +91,18 @@ contract Mixer is MerkleTree{
       "Invalid withdraw proof"
     );
     nullifierHashes[_nullifierHash] = true;
-    _processWithdraw(_recipient, _relayer, _fee, _refund);
+    require(msg.value == _refund, "Incorrect refund amount received by the contract");
+    token.safeTransfer(_recipient, denomination - _fee);
+    if (_fee > 0) {
+      token.safeTransfer(_relayer, _fee);
+    }
+    if (_refund > 0) {
+      (bool success, ) = _recipient.call{ value: _refund }("");
+      if (!success) {
+        // let's return _refund back to the relayer
+        _relayer.transfer(_refund);
+      }
+    }
     emit Withdrawal(_recipient, _nullifierHash, _relayer, _fee);
   }
 

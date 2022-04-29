@@ -2,13 +2,39 @@
 pragma solidity ^0.8.4;
 
 import "usingtellor/contracts/UsingTellor.sol";
+import "./interfaces/IERC20.sol";
+import "./Token.sol";
+import "./helpers/Math.sol";
+import "./Math.sol";
 
 contract Charon is Token,usingTellor{
 
-    IERC20 public token;
+    IERC20 public token1;
     IVerifier public verifier;
     uint256 public fee;
+    address public controller;
+    bool public finalized;
+    bool private _mutex;
+    mapping(address=>Record) private  _records;
+    uint256 public totalWeight;
+
     mapping(uint256 => mapping(uint256 => bytes)) secretDepositInfo; //chainID to depositID to secretDepositInfo
+
+    event LPDeposit(address _lp,uint256 _amount);
+
+    modifier _lock_() {
+        require(!_mutex, "ERR_REENTRY");
+        _mutex = true;
+        _;
+        _mutex = false;
+    }
+
+    modifier _finalized_() {
+      if(!finalized){
+        require(msg.sender == controller)
+      }
+      _;
+    }
 
     /**
      * @dev constructor to start
@@ -18,16 +44,41 @@ contract Charon is Token,usingTellor{
         verifier = _verifier;
         token = _token;
         fee = _fee;
+        IVerifier _verifier,
+        IHasher _hasher,
+        uint256 _denomination,
+        uint32 _merkleTreeHeight,
     }
 
-    function lpDeposit(uint256 _amount) external{
-        require(token.transferFrom(msg.sender,address(this),_amount));
-        uint256 _calcAmount = ;
-        _mint(msg.sender,_calcAmount);
 
+    function lpDeposit(uint _tokenAmountIn, uint _minPoolAmountOut)
+        external
+        _lock_
+        _finalized_
+        returns (uint poolAmountOut)
+
+    {        
+        require(_records[tokenIn].bound, "ERR_NOT_BOUND");
+        require(tokenAmountIn <= bmul(_records[tokenIn].balance, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
+        Record storage inRecord = _records[tokenIn];
+        poolAmountOut = calcPoolOutGivenSingleIn(
+                            inRecord.balance,
+                            inRecord.denorm,
+                            _totalSupply,
+                            _totalWeight,
+                            tokenAmountIn,
+                            _swapFee
+                        );
+        require(poolAmountOut >= minPoolAmountOut, "ERR_LIMIT_OUT");
+        inRecord.balance = badd(inRecord.balance, tokenAmountIn);
+        emit LPDeposit(msg.sender,tokenAmountIn);
+        _mint(poolAmountOut);
+        _push(msg.sender, poolAmountOut);
+        _pullUnderlying(token.address, msg.sender, tokenAmountIn);
+        return poolAmountOut;
     }
 
-    function lpWithdraw() external{
+    function lpWithdraw() _finalized_ external{
        require(token.transfer(address(this),_amount));
        uint256 _calcAmount = ;
        _burn(_calcAmount;
@@ -43,7 +94,7 @@ contract Charon is Token,usingTellor{
         require(_didGet);
     }
 
-    function secretDepositToOtherChain() externa returns(uint256 _depositId){
+    function secretDepositToOtherChain() external _finalized_ returns(uint256 _depositId){
 
     }
 
@@ -56,7 +107,7 @@ contract Charon is Token,usingTellor{
         address payable _relayer,
         uint256 _fee,
         uint256 _refund
-  ) external payable nonReentrant {
+    ) external payable _lock_  _finalized_{
     require(_fee <= denomination, "Fee exceeds transfer value");
     require(!nullifierHashes[_nullifierHash], "The note has been already spent");
     require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
@@ -75,6 +126,35 @@ contract Charon is Token,usingTellor{
 
     function getDepositInfoForOracle(){
 
+    }
+
+    function bind(uint _balance)
+        external
+    {
+        _records[token] = Record({
+            balance: 0   // and set by `rebind`
+        });
+        rebind(token.address,_balance);
+    }
+    
+    
+    function rebind(address token, uint balance)
+        public
+        _logs_
+        _lock_
+        { 
+        // Adjust the balance record and actual token balance
+        uint oldBalance = _records[token].balance;
+        _records[token].balance = balance;
+        if (balance > oldBalance) {
+            _pullUnderlying(token, msg.sender, bsub(balance, oldBalance));
+        } else if (balance < oldBalance) {
+            // In this case liquidity is being withdrawn, so charge EXIT_FEE
+            uint tokenBalanceWithdrawn = bsub(oldBalance, balance);
+            uint tokenExitFee = bmul(tokenBalanceWithdrawn, EXIT_FEE);
+            _pushUnderlying(token, msg.sender, bsub(tokenBalanceWithdrawn, tokenExitFee));
+            _pushUnderlying(token, _owner, tokenExitFee);
+        }
     }
 
 }

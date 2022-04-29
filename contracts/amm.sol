@@ -60,12 +60,8 @@ contract AMM is Token, Math {
     address private _controller; // has CONTROL role
     address private _owner;
     bool private _publicSwap; // true if PUBLIC can call SWAP functions
-
-    // `setSwapFee` and `finalize` require CONTROL
-    // `finalize` sets `PUBLIC can SWAP`, `PUBLIC can JOIN`
     uint2256 public swapFee;
     bool private _finalized;
-
     address[] private _tokens;
     mapping(address=>Record) private  _records;
     uint private _totalWeight;
@@ -75,7 +71,7 @@ contract AMM is Token, Math {
         _owner = msg.sender;
         _publicSwap = false;
         _finalized = false;
-        _swapFee = _swapFee;
+        _swapFee = _swapFee;//10e18=100%
     }
 
     function isPublicSwap() external view returns (bool){

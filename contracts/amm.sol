@@ -1,10 +1,9 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.8.4;
 
-import "./Math.sol";
 import "./Token.sol";
 
-contract AMM is Token, Math {
+contract AMM is Token{
 
     struct Record {
         bool bound;   // is token bound to pool
@@ -59,7 +58,6 @@ contract AMM is Token, Math {
     bool private _mutex;
     address private _controller; // has CONTROL role
     address private _owner;
-    bool private _publicSwap; // true if PUBLIC can call SWAP functions
     uint2256 public swapFee;
     bool private _finalized;
     address[] private _tokens;
@@ -69,13 +67,8 @@ contract AMM is Token, Math {
     constructor(uint256 _swapFee) public {
         _controller = msg.sender;
         _owner = msg.sender;
-        _publicSwap = false;
         _finalized = false;
         _swapFee = _swapFee;//10e18=100%
-    }
-
-    function isPublicSwap() external view returns (bool){
-        return _publicSwap;
     }
 
     function isFinalized() external view returns (bool){
@@ -131,7 +124,6 @@ contract AMM is Token, Math {
         require(msg.sender == _controller, "ERR_NOT_CONTROLLER");
         require(!_finalized, "ERR_IS_FINALIZED");
         _finalized = true;
-        _publicSwap = true;
         _mint(INIT_POOL_SUPPLY);
         _push(msg.sender, INIT_POOL_SUPPLY);
     }
@@ -309,7 +301,6 @@ contract AMM is Token, Math {
     {
         require(_records[tokenIn].bound, "ERR_NOT_BOUND");
         require(_records[tokenOut].bound, "ERR_NOT_BOUND");
-        require(_publicSwap, "ERR_SWAP_NOT_PUBLIC");
         Record storage inRecord = _records[address(tokenIn)];
         Record storage outRecord = _records[address(tokenOut)];
         require(tokenAmountIn <= bmul(inRecord.balance, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
@@ -362,7 +353,6 @@ contract AMM is Token, Math {
     {
         require(_records[tokenIn].bound, "ERR_NOT_BOUND");
         require(_records[tokenOut].bound, "ERR_NOT_BOUND");
-        require(_publicSwap, "ERR_SWAP_NOT_PUBLIC");
         Record storage inRecord = _records[address(tokenIn)];
         Record storage outRecord = _records[address(tokenOut)];
         require(tokenAmountOut <= bmul(outRecord.balance, MAX_OUT_RATIO), "ERR_MAX_OUT_RATIO");
@@ -453,7 +443,7 @@ contract AMM is Token, Math {
         emit LOG_JOIN(msg.sender, tokenIn, tokenAmountIn);
         _mint(poolAmountOut);
         _push(msg.sender, poolAmountOut);
-        _pullUnderlying(tokenIn, msg.sender, tokenAmountIn);d
+        _pullUnderlying(tokenIn, msg.sender, tokenAmountIn);
         return tokenAmountIn;
     }
 

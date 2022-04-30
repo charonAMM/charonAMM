@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./IERC20.sol";
+import "./interfaces/IERC20.sol";
 import "./Token.sol";
 import "./helpers/MerkleTree.sol";
 
@@ -59,7 +59,7 @@ contract Mixer is MerkleTree{
     require(msg.value == 0, "ETH value is supposed to be 0 for ERC20 instance");
     uint32 insertedIndex = _insert(_commitment);
     commitments[_commitment] = true;
-    token.safeTransferFrom(msg.sender, address(this), denomination);
+    token.transferFrom(msg.sender, address(this), denomination);
     emit Deposit(_commitment, insertedIndex, block.timestamp);
   }
 
@@ -92,9 +92,9 @@ contract Mixer is MerkleTree{
     );
     nullifierHashes[_nullifierHash] = true;
     require(msg.value == _refund, "Incorrect refund amount received by the contract");
-    token.safeTransfer(_recipient, denomination - _fee);
+    token.transfer(_recipient, denomination - _fee);
     if (_fee > 0) {
-      token.safeTransfer(_relayer, _fee);
+      token.transfer(_relayer, _fee);
     }
     if (_refund > 0) {
       (bool success, ) = _recipient.call{ value: _refund }("");

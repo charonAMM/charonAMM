@@ -27,11 +27,27 @@ describe("End-to-End Tests - Nine", function() {
 
     //mint initial token supplies (1M)
     await token1.mint(accounts[0],web3.utils.toWei("1000000"))
-    await token2.mint(accounts[0],web3.utils.toWei("1000000"))
+    await token2.mint(accounts[0],web3.utils.toWei("2000000"))
+
+    //approve tokens 
+    await token1.approve(amm.address,web3.utils.toWei("100000"))
+    await token2.approve(amm.address,web3.utils.toWei("200000"))
+    //bind tokens
+    await amm.bind(token1.address,web3.utils.toWei("100000"),web3.utils.toWei("1")) //argument on end is denorm weight (can weight multi tokens)
+    await amm.bind(token2.address,web3.utils.toWei("200000"),web3.utils.toWei("1"))
+    //finalize pool
 
   });
   it("e2eTest", async function() {
-  
+
+      //user gets tokesn
+      //user approves tokens
+      //user joinPool
+      //user runs swapExactAmountIn (trades with a specific input)
+      //user runs swapExactAmountOut (variable amount in?)
+
+        //test other functions?  What are they all and which one do we want? 
+      //Test AMM pool token interactions
   });
 
 

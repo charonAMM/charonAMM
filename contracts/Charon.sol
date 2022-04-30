@@ -4,8 +4,6 @@ pragma solidity ^0.8.4;
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 import "./Token.sol";
-import "./helpers/Math.sol";
-import "./Math.sol";
 
 contract Charon is Token,usingTellor{
 
@@ -31,7 +29,7 @@ contract Charon is Token,usingTellor{
 
     modifier _finalized_() {
       if(!finalized){
-        require(msg.sender == controller)
+        require(msg.sender == controller);
       }
       _;
     }

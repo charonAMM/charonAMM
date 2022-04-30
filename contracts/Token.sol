@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.8.4;
 
-import "./Math.sol";
+import "./helpers/Math.sol";
 
 contract Token is Math{
 

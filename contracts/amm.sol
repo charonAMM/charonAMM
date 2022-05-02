@@ -501,7 +501,7 @@ contract AMM is Token{
         uint exitFee = bmul(poolAmountIn, EXIT_FEE);
         emit LOG_EXIT(msg.sender, tokenOut, tokenAmountOut);
         _pull(msg.sender, poolAmountIn);
-        _burn(poolAmountIn - exitFee));
+        _burn(poolAmountIn - exitFee);
         _push(_owner, exitFee);
         _pushUnderlying(tokenOut, msg.sender, tokenAmountOut);        
         return poolAmountIn;

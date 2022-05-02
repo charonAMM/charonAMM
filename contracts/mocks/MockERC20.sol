@@ -36,7 +36,7 @@ contract MockERC20{
     }
 
     function transfer(address to, uint256 amount) public virtual override returns (bool) {
-        address owner = msgSender();
+        address owner = msg.sender;
         _transfer(owner, to, amount);
         return true;
     }
@@ -46,7 +46,7 @@ contract MockERC20{
     }
 
     function approve(address spender, uint256 amount) public virtual override returns (bool) {
-        address owner = msgSender();
+        address owner = msg.sender;
         _approve(owner, spender, amount);
         return true;
     }
@@ -56,20 +56,20 @@ contract MockERC20{
         address to,
         uint256 amount
     ) public virtual override returns (bool) {
-        address spender = msgSender();
+        address spender = msg.sender;
         _spendAllowance(from, spender, amount);
         _transfer(from, to, amount);
         return true;
     }
 
     function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-        address owner = msgSender();
+        address owner = msg.sender;
         _approve(owner, spender, allowance(owner, spender) + addedValue);
         return true;
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-        address owner = msgSender();
+        address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, spender);
         require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
         unchecked {

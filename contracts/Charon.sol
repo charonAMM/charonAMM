@@ -10,6 +10,8 @@ contract Charon is Token,usingTellor{
     IERC20 public token1;
     IVerifier public verifier;
     uint256 public fee;
+    uint256 public denomination;
+    uint32 public merkleTreeHeight;
     address public controller;
     bool public finalized;
     bool private _mutex;
@@ -38,14 +40,14 @@ contract Charon is Token,usingTellor{
      * @dev constructor to start
      * @param _address of token to be deposited
      */
-    constructor(address _verifier,address _token, uint256 _fee, address _tellor) UsingTellor(_tellor) external{
+    constructor(address _verifier,address _token, uint256 _fee, address _tellor, uint256 _denomination, uint32 _merkeTreeHeight) UsingTellor(_tellor) external{
         verifier = _verifier;
         token = _token;
         fee = _fee;
-        IVerifier _verifier,
-        IHasher _hasher,
-        uint256 _denomination,
-        uint32 _merkleTreeHeight,
+        IVerifier _verifier;
+        IHasher _hasher;
+        denomination = _denomination;
+        merkleTreeHeight = _merkleTreeHeight;
     }
 
 
@@ -55,9 +57,7 @@ contract Charon is Token,usingTellor{
         _finalized_
         returns (uint poolAmountOut)
 
-    {        
-        require(_records[tokenIn].bound, "ERR_NOT_BOUND");
-        require(tokenAmountIn <= bmul(_records[tokenIn].balance, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
+    {   
         Record storage inRecord = _records[tokenIn];
         poolAmountOut = calcPoolOutGivenSingleIn(
                             inRecord.balance,
@@ -76,23 +76,44 @@ contract Charon is Token,usingTellor{
         return poolAmountOut;
     }
 
-    function lpWithdraw() _finalized_ external{
-       require(token.transfer(address(this),_amount));
-       uint256 _calcAmount = ;
-       _burn(_calcAmount;
-
+   function lpWithdraw(uint _poolAmountIn, uint _minAmountOut)
+        external
+        _finalized_
+        _lock_
+        returns (uint _tokenAmountOut)
+    {
+        Record storage outRecord = _records[tokenOut];
+        _tokenAmountOut = calcSingleOutGivenPoolIn(
+                            outRecord.balance,
+                            outRecord.denorm,
+                            _totalSupply,
+                            _totalWeight,
+                            poolAmountIn,
+                            _swapFee
+                        );
+        outRecord.balance = outRecord.balance - tokenAmountOut;
+        uint exitFee = poolAmountIn * fee;
+        emit LOG_EXIT(msg.sender, tokenOut, tokenAmountOut);
+        _pull(msg.sender, poolAmountIn);
+        _burn(poolAmountIn - exitFee);
+        _push(_owner, exitFee);
+        _pushUnderlying(tokenOut, msg.sender,_tokenAmountOut);
     }
 
     //read Tellor, add the deposit to the pool and wait for withdraw
     function oracleDeposit(uint256 _chain, uint256 _depositId) external{
-        bytes _depositInfo;
+        bytes _commitment;
         bool _didGet;
         bytes32 _queryId = abi.encode("Charon",abi.encode(_chain,_depositId));
-        (_didGet,depositInfo) =  getDataBefore(_queryId, now - 1 hours);//what should this timeframe be? (should be an easy verify)
+        (_didGet,_commitment) =  getDataBefore(_queryId, now - 1 hours);//what should this timeframe be? (should be an easy verify)
         require(_didGet);
+        uint32 insertedIndex = _insert(_commitment);
+        commitments[_commitment] = true;
+        emit Deposit(_commitment, insertedIndex, block.timestamp);
     }
 
-    function secretDepositToOtherChain() external _finalized_ returns(uint256 _depositId){
+    function secretDepositToOtherChain(bytes32 _commitment) external _finalized_ returns(uint256 _depositId){
+        //store in a mapping/array and emit an event saying it's deposited and ready for deposit on other chain
 
     }
 
@@ -129,6 +150,7 @@ contract Charon is Token,usingTellor{
     function bind(uint _balance)
         external
     {
+        require(!finalized);//should not be finalized yet
         _records[token] = Record({
             balance: 0   // and set by `rebind`
         });
@@ -154,5 +176,20 @@ contract Charon is Token,usingTellor{
             _pushUnderlying(token, _owner, tokenExitFee);
         }
     }
+
+/** @dev whether a note is already spent */
+  function isSpent(bytes32 _nullifierHash) public view returns (bool) {
+    return nullifierHashes[_nullifierHash];
+  }
+
+  /** @dev whether an array of notes is already spent */
+  function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory spent) {
+    spent = new bool[](_nullifierHashes.length);
+    for (uint256 i = 0; i < _nullifierHashes.length; i++) {
+      if (isSpent(_nullifierHashes[i])) {
+        spent[i] = true;
+      }
+    }
+  }
 
 }

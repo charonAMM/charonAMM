@@ -79,7 +79,7 @@ describe("Mixer Tests", function() {
     logs[0].args.leafIndex.should.be.eq.BN(0)
   });
   it("Test Withdraw", async function() {
-    const deposit = generateDeposit()
+      const deposit = generateDeposit()
       const user = accounts[4]
       tree.insert(deposit.commitment)
       await token.mint(user, tokenDenomination)
@@ -98,7 +98,6 @@ describe("Mixer Tests", function() {
         recipient,
         fee,
         refund,
-
         // private
         nullifier: deposit.nullifier,
         secret: deposit.secret,
@@ -107,7 +106,7 @@ describe("Mixer Tests", function() {
       })
       const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
       const { proof } = websnarkUtils.toSolidityInput(proofData)
-      const balanceTornadoBefore = await token.balanceOf(tornado.address)
+      const balanceMixerBefore = await token.balanceOf(mixer.address)
       const balanceRelayerBefore = await token.balanceOf(relayer)
       const balanceReceiverBefore = await token.balanceOf(toFixedHex(recipient, 20))
       const ethBalanceOperatorBefore = await web3.eth.getBalance(operator)
@@ -143,11 +142,7 @@ describe("Mixer Tests", function() {
       logs[0].args.nullifierHash.should.be.equal(toFixedHex(input.nullifierHash))
       logs[0].args.relayer.should.be.eq.BN(relayer)
       logs[0].args.fee.should.be.eq.BN(feeBN)
-      isSpent = await tornado.isSpent(toFixedHex(input.nullifierHash))
+      isSpent = await mixer.isSpent(toFixedHex(input.nullifierHash))
       isSpent.should.be.equal(true)
-  });
-  it("Test isSpent", async function() {
-  });
-  it("Test isSpentArray", async function() {
   });
 });

@@ -36,6 +36,7 @@ describe("End-to-End Tests - Nine", function() {
     await amm.bind(token1.address,web3.utils.toWei("100000"),web3.utils.toWei("1")) //argument on end is denorm weight (can weight multi tokens)
     await amm.bind(token2.address,web3.utils.toWei("200000"),web3.utils.toWei("1"))
     //finalize pool
+    await amm.finalize();
 
   });
   it("e2eTest", async function() {

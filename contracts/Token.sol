@@ -56,37 +56,29 @@ contract Token is Math{
         require(msg.sender == src || amt <= _allowance[src][msg.sender], "ERR_BTOKEN_BAD_CALLER");
         _move(src, dst, amt);
         if (msg.sender != src && _allowance[src][msg.sender] != uint256(-1)) {
-            _allowance[src][msg.sender] = bsub(_allowance[src][msg.sender], amt);
+            _allowance[src][msg.sender] = _allowance[src][msg.sender] -  amt;
             emit Approval(msg.sender, dst, _allowance[src][msg.sender]);
         }
         return true;
     }
 
     function _mint(uint amt) internal {
-        _balance[address(this)] = badd(_balance[address(this)], amt);
-        _totalSupply = badd(_totalSupply, amt);
+        _balance[address(this)] = _balance[address(this)] + amt;
+        _totalSupply = _totalSupply + amt;
         emit Transfer(address(0), address(this), amt);
     }
 
     function _burn(uint amt) internal {
         require(_balance[address(this)] >= amt, "ERR_INSUFFICIENT_BAL");
-        _balance[address(this)] = bsub(_balance[address(this)], amt);
-        _totalSupply = bsub(_totalSupply, amt);
+        _balance[address(this)] = _balance[address(this)] - amt;
+        _totalSupply = _totalSupply - amt;
         emit Transfer(address(this), address(0), amt);
     }
 
-    function _move(address src, address dst, uint amt) internal {
-        require(_balance[src] >= amt, "ERR_INSUFFICIENT_BAL");
-        _balance[src] = bsub(_balance[src], amt);
-        _balance[dst] = badd(_balance[dst], amt);
-        emit Transfer(src, dst, amt);
-    }
-
-    function _push(address to, uint amt) internal {
-        _move(address(this), to, amt);
-    }
-
-    function _pull(address from, uint amt) internal {
-        _move(from, address(this), amt);
+    function _move(address _src, address _dst, uint _amt) internal {
+        require(_balance[_src] >= _amt, "ERR_INSUFFICIENT_BAL");
+        _balance[_src] = _balance[_src] - _amt;
+        _balance[_dst] = _balance[_dst] + _amt;
+        emit Transfer(_src, _dst, _amt);
     }
 }

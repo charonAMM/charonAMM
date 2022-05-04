@@ -12,7 +12,8 @@ const bigInt = snarkjs.bigInt
 const crypto = require('crypto')
 const circomlib = require('circomlib')
 const MerkleTree = require('fixed-merkle-tree')
-
+const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
+const h = require("usingtellor/test/helpers/helpers.js");
 const rbigint = (nbytes) => snarkjs.bigInt.leBuff2int(crypto.randomBytes(nbytes))
 const pedersenHash = (data) => circomlib.babyJub.unpackPoint(circomlib.pedersenHash.hash(data))[0]
 const toFixedHex = (number, length = 32) =>
@@ -33,7 +34,7 @@ function generateDeposit() {
 }
 
 describe("Mixer Tests", function() {
-  let mixer,mfac,ivfac,ihfac,verifier;
+  let mixer,mfac,ivfac,ihfac,verifier,tellor;
   let hasher= 0x83584f83f26af4edda9cbe8c730bc87c364b28fe;
   let denomination = web3.utils.toWei("10")
   let tree
@@ -64,10 +65,15 @@ describe("Mixer Tests", function() {
     token = await token.deploy();
     await token.deployed("Dissapearing Space Monkey","DSM");
     await token.mint(accounts[0],web3.utils.toWei("1000000"))
-    //deploy mixer
-    mfac = await ethers.getContractFactory("contracts/Mixer.sol:Mixer");
-    mixer = await mfac.deploy(verifier.address,hasher,denomination,merkleTreeHeight,token.address);
+    //deploy tellor
+    let TellorOracle = await ethers.getContractFactory(abi, bytecode);
+    tellorOracle = await TellorOracle.deploy();
+    await tellorOracle.deployed();
+    //deploy charon
+    mfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
+    mixer = await mfac.deploy(verifier.address,token.address,fee,tellor.address,hasher,denomination,merkleTreeHeight);
     await mixer.deployed();
+    //deploy everything again on the next chain
 
   });
   it("Test Deposit", async function() {

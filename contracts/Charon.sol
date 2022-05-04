@@ -2,14 +2,15 @@
 pragma solidity ^0.8.4;
 
 import "usingtellor/contracts/UsingTellor.sol";
+import "./helpers/MerkleTree.sol";
 import "./interfaces/IERC20.sol";
 import "./Token.sol";
 
-contract Charon is Token,UsingTellor{
+contract Charon is Token, UsingTellor, MerkleTree{
 
     IERC20 public token1;
     IVerifier public verifier;
-    uint256 public fee;
+    uint256 public fee;//fee when liquidity is withdrawn
     uint256 public denomination;
     uint32 public merkleTreeHeight;
     address public controller;
@@ -45,13 +46,11 @@ contract Charon is Token,UsingTellor{
     /**
      * @dev constructor to start
      */
-    constructor(address _verifier,address _token, uint256 _fee, address _tellor, uint256 _denomination, uint32 _merkeTreeHeight) UsingTellor(_tellor) external{
+    constructor(address _verifier,address _token, uint256 _fee, address _tellor, uint256 _denomination, uint32 _merkeTreeHeight) UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher) external{
         verifier = _verifier;
         token = _token;
         fee = _fee;
-        IHasher _hasher;
         denomination = _denomination;
-        merkleTreeHeight = _merkleTreeHeight;
     }
 
 
@@ -76,7 +75,7 @@ contract Charon is Token,UsingTellor{
         emit LPDeposit(msg.sender,tokenAmountIn);
         _mint(poolAmountOut);
         _move(address(this),msg.sender, poolAmountOut);
-        _pullUnderlying(token.address, msg.sender, tokenAmountIn);
+        require (token1.transferFrom(msg.sender address(this), tokenAmountIn));
         return poolAmountOut;
     }
 
@@ -101,7 +100,7 @@ contract Charon is Token,UsingTellor{
         _move(msg.sender,address(this), poolAmountIn);
         _burn(poolAmountIn - exitFee);
         _move(address(this),_owner, exitFee);
-        _pushUnderlying(tokenOut, msg.sender,_tokenAmountOut);
+        require(token1.transfer(msg.sender, _tokenAmountOut));
     }
 
     //read Tellor, add the deposit to the pool and wait for withdraw
@@ -175,13 +174,13 @@ contract Charon is Token,UsingTellor{
         uint oldBalance = _records[token].balance;
         _records[token].balance = balance;
         if (balance > oldBalance) {
-            _pullUnderlying(token, msg.sender, balance - oldBalance);
+          require (token1.transferFrom(msg.sender, address(this), balance-oldBalance));
         } else if (balance < oldBalance) {
-            // In this case liquidity is being withdrawn, so charge EXIT_FEE
+            // In this case liquidity is being withdrawn, so charge fee
             uint tokenBalanceWithdrawn = oldBalance - balance;
-            uint tokenExitFee = tokenBalanceWithdrawn * EXIT_FEE;
-            _pushUnderlying(token, msg.sender, tokenBalanceWithdrawn - tokenExitFee);
-            _pushUnderlying(token, _owner, tokenExitFee);
+            uint tokenExitFee = tokenBalanceWithdrawn * fee;
+            require(token1.transfer(msg.sender, tokenBalanceWithdrawn - tokenExitFee));
+            require(token1.transfer(_owner, tokenExitFee));
         }
     }
 
@@ -199,12 +198,6 @@ contract Charon is Token,UsingTellor{
       }
     }
   }
-
-      // 'Underlying' token-manipulation functions make external calls but are NOT locked
-    // You must `_lock_` or otherwise ensure reentry-safety
-    function _pullUnderlying(address erc20, address from, uint amount) internal {
-        require (IERC20(erc20).transferFrom(from, address(this), amount));
-    }
 
     function _pushUnderlying(address erc20, address to, uint amount) internal {
         require(IERC20(erc20).transfer(to, amount));

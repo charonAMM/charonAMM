@@ -69,7 +69,7 @@ contract AMM is Token{
         _controller = msg.sender;
         _owner = msg.sender;
         _finalized = false;
-        _swapFee = _swapFee;//10e18=100%
+        swapFee = _swapFee;//10e18=100%
     }
 
     function isFinalized() external view returns (bool){
@@ -109,7 +109,7 @@ contract AMM is Token{
     {
         require(_records[token].bound, "ERR_NOT_BOUND");
         uint denorm = _records[token].denorm;
-        return bdiv(denorm, _totalWeight);
+        return (denorm / _totalWeight);
     }
 
     function getBalance(address token) external view _viewlock_ returns (uint){
@@ -161,22 +161,22 @@ contract AMM is Token{
         // Adjust the denorm and totalWeight
         uint oldWeight = _records[token].denorm;
         if (denorm > oldWeight) {
-            _totalWeight = badd(_totalWeight, bsub(denorm, oldWeight));
+            _totalWeight = _totalWeight +  (denorm - oldWeight);
             require(_totalWeight <= MAX_TOTAL_WEIGHT, "ERR_MAX_TOTAL_WEIGHT");
         } else if (denorm < oldWeight) {
-            _totalWeight = bsub(_totalWeight, bsub(oldWeight, denorm));
+            _totalWeight = _totalWeight - (oldWeight - denorm);
         }        
         _records[token].denorm = denorm;
         // Adjust the balance record and actual token balance
         uint oldBalance = _records[token].balance;
         _records[token].balance = balance;
         if (balance > oldBalance) {
-            _pullUnderlying(token, msg.sender, bsub(balance, oldBalance));
+            _pullUnderlying(token, msg.sender, balance - oldBalance);
         } else if (balance < oldBalance) {
             // In this case liquidity is being withdrawn, so charge EXIT_FEE
-            uint tokenBalanceWithdrawn = bsub(oldBalance, balance);
-            uint tokenExitFee = bmul(tokenBalanceWithdrawn, EXIT_FEE);
-            _pushUnderlying(token, msg.sender, bsub(tokenBalanceWithdrawn, tokenExitFee));
+            uint tokenBalanceWithdrawn = oldBalance - balance;
+            uint tokenExitFee = tokenBalanceWithdrawn * EXIT_FEE;
+            _pushUnderlying(token, msg.sender, tokenBalanceWithdrawn - tokenExitFee);
             _pushUnderlying(token, _owner, tokenExitFee);
         }
     }
@@ -190,8 +190,8 @@ contract AMM is Token{
         require(_records[token].bound, "ERR_NOT_BOUND");
         require(!_finalized, "ERR_IS_FINALIZED");
         uint tokenBalance = _records[token].balance;
-        uint tokenExitFee = bmul(tokenBalance, EXIT_FEE);
-        _totalWeight = bsub(_totalWeight, _records[token].denorm);
+        uint tokenExitFee = tokenBalance * EXIT_FEE;
+        _totalWeight = _totalWeight - _records[token].denorm;
         // Swap the token-to-unbind with the last token,
         // then delete the last token
         uint index = _records[token].index;
@@ -205,7 +205,7 @@ contract AMM is Token{
             denorm: 0,
             balance: 0
         });
-        _pushUnderlying(token, msg.sender, bsub(tokenBalance, tokenExitFee));
+        _pushUnderlying(token, msg.sender, tokenBalance - tokenExitFee);
         _pushUnderlying(token, _owner, tokenExitFee);
     }
 
@@ -224,7 +224,7 @@ contract AMM is Token{
         require(_records[tokenOut].bound, "ERR_NOT_BOUND");
         Record storage inRecord = _records[tokenIn];
         Record storage outRecord = _records[tokenOut];
-        return calcSpotPrice(inRecord.balance, inRecord.denorm, outRecord.balance, outRecord.denorm, _swapFee);
+        return calcSpotPrice(inRecord.balance, inRecord.denorm, outRecord.balance, outRecord.denorm, swapFee);
     }
 
     function getSpotPriceSansFee(address tokenIn, address tokenOut)
@@ -246,15 +246,15 @@ contract AMM is Token{
     {
         require(_finalized, "ERR_NOT_FINALIZED");
         uint poolTotal = totalSupply();
-        uint ratio = bdiv(poolAmountOut, poolTotal);
+        uint ratio = poolAmountOut / poolTotal;
         require(ratio != 0, "ERR_MATH_APPROX");
         for (uint i = 0; i < _tokens.length; i++) {
             address t = _tokens[i];
             uint bal = _records[t].balance;
-            uint tokenAmountIn = bmul(ratio, bal);
+            uint tokenAmountIn = ratio * bal;
             require(tokenAmountIn != 0, "ERR_MATH_APPROX");
             require(tokenAmountIn <= maxAmountsIn[i], "ERR_LIMIT_IN");
-            _records[t].balance = badd(_records[t].balance, tokenAmountIn);
+            _records[t].balance = _records[t].balance + tokenAmountIn;
             emit LOG_JOIN(msg.sender, t, tokenAmountIn);
             _pullUnderlying(t, msg.sender, tokenAmountIn);
         }
@@ -310,7 +310,7 @@ contract AMM is Token{
                                     inRecord.denorm,
                                     outRecord.balance,
                                     outRecord.denorm,
-                                    _swapFee
+                                    swapFee
                                 );
         require(spotPriceBefore <= maxPrice, "ERR_BAD_LIMIT_PRICE");
         tokenAmountOut = calcOutGivenIn(
@@ -319,7 +319,7 @@ contract AMM is Token{
                             outRecord.balance,
                             outRecord.denorm,
                             tokenAmountIn,
-                            _swapFee
+                            swapFee
                         );
         require(tokenAmountOut >= minAmountOut, "ERR_LIMIT_OUT");
         inRecord.balance = inRecord.balance + tokenAmountIn;
@@ -329,7 +329,7 @@ contract AMM is Token{
                                 inRecord.denorm,
                                 outRecord.balance,
                                 outRecord.denorm,
-                                _swapFee
+                                swapFee
                             );
         require(spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
         require(spotPriceAfter <= maxPrice, "ERR_LIMIT_PRICE");
@@ -362,7 +362,7 @@ contract AMM is Token{
                                     inRecord.denorm,
                                     outRecord.balance,
                                     outRecord.denorm,
-                                    _swapFee
+                                    swapFee
                                 );
         require(spotPriceBefore <= maxPrice, "ERR_BAD_LIMIT_PRICE");
         tokenAmountIn = calcInGivenOut(
@@ -371,7 +371,7 @@ contract AMM is Token{
                             outRecord.balance,
                             outRecord.denorm,
                             tokenAmountOut,
-                            _swapFee
+                            swapFee
                         );
         require(tokenAmountIn <= maxAmountIn, "ERR_LIMIT_IN");
         inRecord.balance = inRecord.balance + tokenAmountIn;
@@ -381,7 +381,7 @@ contract AMM is Token{
                                 inRecord.denorm,
                                 outRecord.balance,
                                 outRecord.denorm,
-                                _swapFee
+                                swapFee
                             );
         require(spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");
         require(spotPriceAfter <= maxPrice, "ERR_LIMIT_PRICE");
@@ -409,7 +409,7 @@ contract AMM is Token{
                             _totalSupply,
                             _totalWeight,
                             tokenAmountIn,
-                            _swapFee
+                            swapFee
                         );
         require(poolAmountOut >= minPoolAmountOut, "ERR_LIMIT_OUT");
         inRecord.balance =  inRecord.balance + tokenAmountIn;
@@ -435,7 +435,7 @@ contract AMM is Token{
                             _totalSupply,
                             _totalWeight,
                             poolAmountOut,
-                            _swapFee
+                            swapFee
                         );
         require(tokenAmountIn != 0, "ERR_MATH_APPROX");
         require(tokenAmountIn <= maxAmountIn, "ERR_LIMIT_IN");
@@ -463,15 +463,15 @@ contract AMM is Token{
                             _totalSupply,
                             _totalWeight,
                             poolAmountIn,
-                            _swapFee
+                            swapFee
                         );
         require(tokenAmountOut >= minAmountOut, "ERR_LIMIT_OUT");
         require(tokenAmountOut <=  _records[tokenOut].balance * MAX_OUT_RATIO, "ERR_MAX_OUT_RATIO");
         outRecord.balance =  outRecord.balance - tokenAmountOut;
         uint exitFee = poolAmountIn * EXIT_FEE;
         emit LOG_EXIT(msg.sender, tokenOut, tokenAmountOut);
-        _pull(msg.sender, poolAmountIn);
-        _burn(bsub(poolAmountIn, exitFee));
+        _move(msg.sender, address(this),poolAmountIn);
+        _burn(poolAmountIn - exitFee);
         _move(address(this),_owner, exitFee);
         _pushUnderlying(tokenOut, msg.sender, tokenAmountOut);
         return tokenAmountOut;
@@ -485,7 +485,7 @@ contract AMM is Token{
     {
         require(_finalized, "ERR_NOT_FINALIZED");
         require(_records[tokenOut].bound, "ERR_NOT_BOUND");
-        require(tokenAmountOut <= bmul(_records[tokenOut].balance, MAX_OUT_RATIO), "ERR_MAX_OUT_RATIO");
+        require(tokenAmountOut <= _records[tokenOut].balance * MAX_OUT_RATIO, "ERR_MAX_OUT_RATIO");
         Record storage outRecord = _records[tokenOut];
         poolAmountIn = calcPoolInGivenSingleOut(
                             outRecord.balance,

@@ -4,9 +4,15 @@ pragma solidity ^0.8.4;
 import "usingtellor/contracts/UsingTellor.sol";
 import "./helpers/MerkleTree.sol";
 import "./interfaces/IERC20.sol";
+import "./interfaces/IVerifier.sol";
 import "./Token.sol";
 
 contract Charon is Token, UsingTellor, MerkleTree{
+
+    struct Record {
+        uint index;   // private
+        uint balance;
+    }
 
     IERC20 public token1;
     IVerifier public verifier;
@@ -46,7 +52,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
     /**
      * @dev constructor to start
      */
-    constructor(address _verifier,address _token, uint256 _fee, address _tellor, uint256 _denomination, uint32 _merkeTreeHeight) UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher) external{
+    constructor(address _verifier,address _hasher,address _token, uint256 _fee, address _tellor, uint256 _denomination, uint32 _merkleTreeHeight) UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher) external{
         verifier = _verifier;
         token = _token;
         fee = _fee;
@@ -64,9 +70,9 @@ contract Charon is Token, UsingTellor, MerkleTree{
         Record storage inRecord = _records[tokenIn];
         poolAmountOut = calcPoolOutGivenSingleIn(
                             inRecord.balance,
-                            inRecord.denorm,
+                            100e18,
                             _totalSupply,
-                            _totalWeight,
+                            200e18,//we can later edit this part out of the math func
                             tokenAmountIn,
                             _swapFee
                         );
@@ -75,7 +81,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
         emit LPDeposit(msg.sender,tokenAmountIn);
         _mint(poolAmountOut);
         _move(address(this),msg.sender, poolAmountOut);
-        require (token1.transferFrom(msg.sender address(this), tokenAmountIn));
+        require (token1.transferFrom(msg.sender,address(this), tokenAmountIn));
         return poolAmountOut;
     }
 
@@ -88,9 +94,9 @@ contract Charon is Token, UsingTellor, MerkleTree{
         Record storage outRecord = _records[tokenOut];
         _tokenAmountOut = calcSingleOutGivenPoolIn(
                             outRecord.balance,
-                            outRecord.denorm,
+                            100e18,
                             _totalSupply,
-                            _totalWeight,
+                            200e18,
                             poolAmountIn,
                             _swapFee
                         );

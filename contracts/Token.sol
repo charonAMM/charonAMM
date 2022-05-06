@@ -55,7 +55,7 @@ contract Token is Math{
     function transferFrom(address src, address dst, uint amt) external returns (bool) {
         require(msg.sender == src || amt <= _allowance[src][msg.sender], "ERR_BTOKEN_BAD_CALLER");
         _move(src, dst, amt);
-        if (msg.sender != src && _allowance[src][msg.sender] != uint256(-1)) {
+        if (msg.sender != src) {
             _allowance[src][msg.sender] = _allowance[src][msg.sender] -  amt;
             emit Approval(msg.sender, dst, _allowance[src][msg.sender]);
         }

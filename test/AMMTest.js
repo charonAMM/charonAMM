@@ -49,6 +49,7 @@ describe("End-to-End Tests - Nine", function() {
       //user joinPool
       await amm.connect(accounts[1])joinPool(web3.utils.toWei("10"),web3.utils.toWei("100"))//pool amount out, maxIn
       //user runs swapExactAmountIn (trades with a specific input)
+      await amm.connect(accounts[2].swapExactAmountIn(token2.address,web3.utils.toWei("10"),token2.addreess,web3.utils.toWei("5"),2))
       //user runs swapExactAmountOut (variable amount in?)
 
         //test other functions?  What are they all and which one do we want? 

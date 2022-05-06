@@ -9,12 +9,7 @@ import "./Token.sol";
 
 contract Charon is Token, UsingTellor, MerkleTree{
 
-    struct Record {
-        uint index;   // private
-        uint balance;
-    }
-
-    IERC20 public token1;
+    IERC20 public token;
     IVerifier public verifier;
     uint256 public fee;//fee when liquidity is withdrawn
     uint256 public denomination;
@@ -22,7 +17,9 @@ contract Charon is Token, UsingTellor, MerkleTree{
     address public controller;
     bool public finalized;
     bool private _mutex;
-    mapping(address=>Record) private  _records;
+    uint256 recordBalance;
+    uint256 recordBalanceSynth;
+    mapping(bytes32 => bool) public nullifierHashes;
     mapping(bytes32=>bool) public commitments;
     mapping(bytes32=>bool) public didDepositCommitment;
     bytes32[] public depositCommitments;
@@ -31,9 +28,11 @@ contract Charon is Token, UsingTellor, MerkleTree{
     mapping(uint256 => mapping(uint256 => bytes)) secretDepositInfo; //chainID to depositID to secretDepositInfo
 
     event LPDeposit(address _lp,uint256 _amount);
-    event LPWithdrawa(address _lp, uint256 _amount);
+    event LPWithdrawal(address _lp, uint256 _amount);
     event OracleDeposit(bytes32 _commitment,uint32 _insertedIndex,uint256 _timestamp);
     event DepositToOtherChain(bytes32 _commitment, uint256 _timestamp);
+    event SecretLP(address _recipient,uint256 poolAmountOut);
+    event SecretMarketOrder(address _recipient, uint256 _tokenAmountOut);
 
     modifier _lock_() {
         require(!_mutex, "ERR_REENTRY");
@@ -52,9 +51,9 @@ contract Charon is Token, UsingTellor, MerkleTree{
     /**
      * @dev constructor to start
      */
-    constructor(address _verifier,address _hasher,address _token, uint256 _fee, address _tellor, uint256 _denomination, uint32 _merkleTreeHeight) UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher) external{
-        verifier = _verifier;
-        token = _token;
+    constructor(address _verifier,IHasher _hasher,address _token, uint256 _fee, address payable _tellor, uint256 _denomination, uint32 _merkleTreeHeight) UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher){
+        verifier = IVerifier(_verifier);
+        token = IERC20(_token);
         fee = _fee;
         denomination = _denomination;
     }
@@ -64,24 +63,22 @@ contract Charon is Token, UsingTellor, MerkleTree{
         external
         _lock_
         _finalized_
-        returns (uint poolAmountOut)
-
+        returns (uint256 poolAmountOut)
     {   
-        Record storage inRecord = _records[tokenIn];
         poolAmountOut = calcPoolOutGivenSingleIn(
-                            inRecord.balance,
-                            100e18,
+                            recordBalance,
+                            1,
                             _totalSupply,
-                            200e18,//we can later edit this part out of the math func
-                            tokenAmountIn,
-                            _swapFee
+                            2,//totalWeight, we can later edit this part out of the math func
+                            _tokenAmountIn,
+                            fee
                         );
-        require(poolAmountOut >= minPoolAmountOut, "ERR_LIMIT_OUT");
-        inRecord.balance = inRecord.balance + tokenAmountIn;
-        emit LPDeposit(msg.sender,tokenAmountIn);
+        recordBalance += _tokenAmountIn;
+        require(poolAmountOut > _minPoolAmountOut, "not enough squeeze");
         _mint(poolAmountOut);
         _move(address(this),msg.sender, poolAmountOut);
-        require (token1.transferFrom(msg.sender,address(this), tokenAmountIn));
+        require (token.transferFrom(msg.sender,address(this), _tokenAmountIn));
+        emit LPDeposit(msg.sender,_tokenAmountIn);
         return poolAmountOut;
     }
 
@@ -89,48 +86,48 @@ contract Charon is Token, UsingTellor, MerkleTree{
         external
         _finalized_
         _lock_
-        returns (uint _tokenAmountOut)
+        returns (uint256 _tokenAmountOut)
     {
-        Record storage outRecord = _records[tokenOut];
         _tokenAmountOut = calcSingleOutGivenPoolIn(
-                            outRecord.balance,
+                            recordBalance,
                             100e18,
                             _totalSupply,
                             200e18,
-                            poolAmountIn,
-                            _swapFee
+                            _poolAmountIn,
+                            fee
                         );
-        outRecord.balance = outRecord.balance - tokenAmountOut;
-        uint exitFee = poolAmountIn * fee;
-        emit LOG_EXIT(msg.sender, tokenOut, tokenAmountOut);
-        _move(msg.sender,address(this), poolAmountIn);
-        _burn(poolAmountIn - exitFee);
-        _move(address(this),_owner, exitFee);
-        require(token1.transfer(msg.sender, _tokenAmountOut));
+        recordBalance -= _tokenAmountOut;
+        require(_tokenAmountOut > _minAmountOut, "not enough squeeze");
+        uint exitFee = _poolAmountIn * fee;
+        _move(msg.sender,address(this), _poolAmountIn);
+        _burn(_poolAmountIn - exitFee);
+        _move(address(this),controller, exitFee);//we need the fees to go to the LP's!!
+        require(token.transfer(msg.sender, _tokenAmountOut));
     }
 
     //read Tellor, add the deposit to the pool and wait for withdraw
     function oracleDeposit(uint256 _chain, uint256 _depositId) external{
-        bytes _commitment;
+        bytes memory _value;
         bool _didGet;
-        bytes32 _queryId = abi.encode("Charon",abi.encode(_chain,_depositId));
-        (_didGet,_commitment) =  getDataBefore(_queryId, now - 1 hours);//what should this timeframe be? (should be an easy verify)
+        bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));
+        (_didGet,_value,) =  getDataBefore(_queryId,block.timestamp - 1 hours);//what should this timeframe be? (should be an easy verify)
         require(_didGet);
+        bytes32 _commitment = bytesToBytes32((_value), 0);
         uint32 insertedIndex = _insert(_commitment);
         commitments[_commitment] = true;
         emit OracleDeposit(_commitment, insertedIndex, block.timestamp);
     }
 
     function depositToOtherChain(bytes32 _commitment) external _finalized_ returns(uint256 _depositId){
-        require(msg.value == 0, "ETH value is supposed to be 0 for ERC20 instance");
         didDepositCommitment[_commitment] = true;
-        depositedCommitments.push(_commitment);
+        depositCommitments.push(_commitment);
+        _depositId = depositCommitments.length;
         token.transferFrom(msg.sender, address(this), denomination);
         emit DepositToOtherChain(_commitment, block.timestamp);
     }
 
-    function getDepositCommitmentsByIndex(uint _index) external view returns(bytes32){
-      return depositedCommitements[_index];
+    function getDepositCommitmentsById(uint256 _id) external view returns(bytes32){
+      return depositCommitments[_id - 1];
     }
 
     //withdraw your tokens (like a market order from the other chain)
@@ -150,44 +147,96 @@ contract Charon is Token, UsingTellor, MerkleTree{
     require(
       verifier.verifyProof(
         _proof,
-        [uint256(_root), uint256(_nullifierHash), uint256(_recipient), uint256(_relayer), _fee, _refund]
+        [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
       ),
       "Invalid withdraw proof"
     );
     nullifierHashes[_nullifierHash] = true;
-    _processWithdraw(_recipient, _relayer, _fee, _refund);
-    emit Withdrawal(_recipient, _nullifierHash, _relayer, _fee);
+    require(msg.value == _refund, "Incorrect refund amount received by the contract");
+    uint256 tokenAmountIn = denomination - _fee;
+    if(_lp){
+        uint256 poolAmountOut = calcPoolOutGivenSingleIn(
+                            recordBalanceSynth,
+                            100e18,
+                            _totalSupply,
+                            200e18,//we can later edit this part out of the math func
+                            tokenAmountIn,
+                            fee
+                        );
+        recordBalanceSynth += tokenAmountIn;
+        emit LPDeposit(_recipient,tokenAmountIn);
+        _mint(poolAmountOut);
+        _move(address(this),_recipient, poolAmountOut);
+        emit SecretLP(_recipient,poolAmountOut);
     }
-
-    function bind(uint _balance) external {
-        require(!finalized);//should not be finalized yet
-        _records[token] = Record({
-            balance: 0   // and set by `rebind`
-        });
-        rebind(token.address,_balance);
+    else{
+      //market order
+        uint spotPriceBefore = calcSpotPrice(
+                                    recordBalanceSynth,
+                                    100e18,
+                                    recordBalance,
+                                    100e18,
+                                    fee
+                                );
+        uint256 tokenAmountOut = calcOutGivenIn(
+                                    recordBalanceSynth,
+                                    100e18,
+                                    recordBalance,
+                                    100e18,
+                                    tokenAmountIn,
+                                    fee
+                                );
+        recordBalance -= tokenAmountOut;
+        uint256 spotPriceAfter = calcSpotPrice(
+                                recordBalanceSynth,
+                                100e18,
+                                recordBalance,
+                                100e18,
+                                fee
+                            );
+        require(spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
+        require(spotPriceBefore <=  tokenAmountIn / tokenAmountOut, "ERR_MATH_APPROX");
+        require(token.transfer(_recipient,tokenAmountOut));
+        emit SecretMarketOrder(_recipient,tokenAmountOut);
+    }
+    if (_fee > 0) {
+      token.transfer(_relayer, _fee);
+    }
+    if (_refund > 0) {
+      (bool success, ) = _recipient.call{ value: _refund }("");
+      if (!success) {
+        // let's return _refund back to the relayer
+        _relayer.transfer(_refund);
+      }
+    }
     }
     
     function finalize() external _lock_ {
-        require(msg.sender == _controller, "ERR_NOT_CONTROLLER");
-        require(!_finalized, "ERR_IS_FINALIZED");
+        require(msg.sender == controller, "ERR_NOT_CONTROLLER");
+        require(!finalized, "ERR_IS_FINALIZED");
         finalized = true;
         _mint(INIT_POOL_SUPPLY);
         _move(address(this),msg.sender, INIT_POOL_SUPPLY);
     }
 
-    function rebind(address token, uint balance) public _lock_{ 
+    function bind(uint balance) public _lock_{ 
+        require(!finalized);//should not be finalized yet
         // Adjust the balance record and actual token balance
-        uint oldBalance = _records[token].balance;
-        _records[token].balance = balance;
+        uint oldBalance = recordBalance;
+        recordBalance = balance;
         if (balance > oldBalance) {
-          require (token1.transferFrom(msg.sender, address(this), balance-oldBalance));
+          require (token.transferFrom(msg.sender, address(this), balance-oldBalance));
         } else if (balance < oldBalance) {
             // In this case liquidity is being withdrawn, so charge fee
             uint tokenBalanceWithdrawn = oldBalance - balance;
             uint tokenExitFee = tokenBalanceWithdrawn * fee;
-            require(token1.transfer(msg.sender, tokenBalanceWithdrawn - tokenExitFee));
-            require(token1.transfer(_owner, tokenExitFee));
+            require(token.transfer(msg.sender, tokenBalanceWithdrawn - tokenExitFee));
+            require(token.transfer(controller, tokenExitFee));
         }
+    }
+
+    function changeController(address _newController) external{
+      controller = _newController;
     }
 
 /** @dev whether a note is already spent */
@@ -205,9 +254,11 @@ contract Charon is Token, UsingTellor, MerkleTree{
     }
   }
 
-    function _pushUnderlying(address erc20, address to, uint amount) internal {
-        require(IERC20(erc20).transfer(to, amount));
+  function bytesToBytes32(bytes memory b, uint offset) internal pure returns (bytes32) {
+    bytes32 out;
+    for (uint i = 0; i < 32; i++) {
+      out |= bytes32(b[offset + i] & 0xFF) >> (i * 8);
     }
-
-
+    return out;
+  }
 }

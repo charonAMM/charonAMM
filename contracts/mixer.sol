@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "./interfaces/IERC20.sol";
+import "./interfaces/IVerifier.sol";
 import "./Token.sol";
 import "./helpers/MerkleTree.sol";
 
@@ -12,8 +13,6 @@ contract Mixer is MerkleTree{
   uint256 private constant _NOT_ENTERED = 1;
   uint256 private constant _ENTERED = 2;
   uint256 private _status;
-
-  using SafeERC20 for IERC20;
   IERC20 public token;
 
   mapping(bytes32 => bool) public nullifierHashes;
@@ -86,7 +85,7 @@ contract Mixer is MerkleTree{
     require(
       verifier.verifyProof(
         _proof,
-        [uint256(_root), uint256(_nullifierHash), uint256(_recipient), uint256(_relayer), _fee, _refund]
+        [uint256(_root), uint256(_nullifierHash), uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
       ),
       "Invalid withdraw proof"
     );

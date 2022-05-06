@@ -65,7 +65,7 @@ contract AMM is Token{
     mapping(address=>Record) private  _records;
     uint private _totalWeight;
 
-    constructor(uint256 _swapFee) public {
+    constructor(uint256 _swapFee){
         _controller = msg.sender;
         _owner = msg.sender;
         _finalized = false;

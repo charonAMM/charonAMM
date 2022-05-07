@@ -3,7 +3,7 @@ var assert = require('assert');
 const web3 = require('web3');
 const fs = require('fs')
 const { toBN } = require('web3-utils')
-const { takeSnapshot, revertSnapshot } = require('../scripts/ganacheHelper')
+const { takeSnapshot, revertSnapshot } = require('./helpers/ganacheHelper')
 const websnarkUtils = require('websnark/src/utils')
 const buildGroth16 = require('websnark/src/groth16')
 const stringifyBigInts = require('websnark/tools/stringifybigint').stringifyBigInts
@@ -33,7 +33,7 @@ function generateDeposit() {
   return deposit
 }
 
-describe("Mixer Tests", function() {
+describe("Charon Funciton Tests", function() {
   let mixer,mfac,ivfac,ihfac,verifier,tellor;
   let hasher= 0x83584f83f26af4edda9cbe8c730bc87c364b28fe;
   let denomination = web3.utils.toWei("10")
@@ -76,84 +76,35 @@ describe("Mixer Tests", function() {
     //deploy everything again on the next chain
 
   });
-  it("Test Deposit", async function() {
-    const commitment = toFixedHex(43)
-    await token.approve(mixer.address,denomination)
-    let { logs } = await mixer.deposit(commitment, { from: sender })
-    logs[0].event.should.be.equal('Deposit')
-    logs[0].args.commitment.should.be.equal(commitment)
-    logs[0].args.leafIndex.should.be.eq.BN(0)
+  it("Test Constructor", async function() {
+    assert(0==1)
   });
-  it("Test Withdraw", async function() {
-    const deposit = generateDeposit()
-      const user = accounts[4]
-      tree.insert(deposit.commitment)
-      await token.mint(user, tokenDenomination)
-      const balanceUserBefore = await token.balanceOf(user)
-      await token.approve(mixer.address, tokenDenomination, { from: user })
-      await mixer.deposit(toFixedHex(deposit.commitment), { from: user, gasPrice: '0' })
-      const balanceUserAfter = await token.balanceOf(user)
-      balanceUserAfter.should.be.eq.BN(toBN(balanceUserBefore).sub(toBN(tokenDenomination)))
-      const { pathElements, pathIndices } = tree.path(0)
-      // Circuit input
-      const input = stringifyBigInts({
-        // public
-        root: tree.root(),
-        nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
-        relayer,
-        recipient,
-        fee,
-        refund,
+  it("Test bind", async function() {
+  });
+  it("Test changeController", async function() {
+  });
+  it("Test depositToOtherChain", async function() {
+  });
+  it("Test finalize", async function() {
+  });
+  it("Test lpDeposit", async function() {
+  });
+  it("Test lpWithdraw", async function() {
+  });
 
-        // private
-        nullifier: deposit.nullifier,
-        secret: deposit.secret,
-        pathElements: pathElements,
-        pathIndices: pathIndices,
-      })
-      const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
-      const { proof } = websnarkUtils.toSolidityInput(proofData)
-      const balanceTornadoBefore = await token.balanceOf(tornado.address)
-      const balanceRelayerBefore = await token.balanceOf(relayer)
-      const balanceReceiverBefore = await token.balanceOf(toFixedHex(recipient, 20))
-      const ethBalanceOperatorBefore = await web3.eth.getBalance(operator)
-      const ethBalanceReceiverBefore = await web3.eth.getBalance(toFixedHex(recipient, 20))
-      const ethBalanceRelayerBefore = await web3.eth.getBalance(relayer)
-      let isSpent = await mixer.isSpent(toFixedHex(input.nullifierHash))
-      isSpent.should.be.equal(false)
-      const args = [
-        toFixedHex(input.root),
-        toFixedHex(input.nullifierHash),
-        toFixedHex(input.recipient, 20),
-        toFixedHex(input.relayer, 20),
-        toFixedHex(input.fee),
-        toFixedHex(input.refund),
-      ]
-      const { logs } = await mixer.withdraw(proof, ...args, { value: refund, from: relayer, gasPrice: '0' })
-      const balanceMixerAfter = await token.balanceOf(mixer.address)
-      const balanceRelayerAfter = await token.balanceOf(relayer)
-      const ethBalanceOperatorAfter = await web3.eth.getBalance(operator)
-      const balanceReceiverAfter = await token.balanceOf(toFixedHex(recipient, 20))
-      const ethBalanceReceiverAfter = await web3.eth.getBalance(toFixedHex(recipient, 20))
-      const ethBalanceRelayerAfter = await web3.eth.getBalance(relayer)
-      const feeBN = toBN(fee.toString())
-      balanceMixerAfter.should.be.eq.BN(toBN(balanceMixerBefore).sub(toBN(tokenDenomination)))
-      balanceRelayerAfter.should.be.eq.BN(toBN(balanceRelayerBefore).add(feeBN))
-      balanceReceiverAfter.should.be.eq.BN(
-        toBN(balanceReceiverBefore).add(toBN(tokenDenomination).sub(feeBN)),
-      )
-      ethBalanceOperatorAfter.should.be.eq.BN(toBN(ethBalanceOperatorBefore))
-      ethBalanceReceiverAfter.should.be.eq.BN(toBN(ethBalanceReceiverBefore).add(toBN(refund)))
-      ethBalanceRelayerAfter.should.be.eq.BN(toBN(ethBalanceRelayerBefore).sub(toBN(refund)))
-      logs[0].event.should.be.equal('Withdrawal')
-      logs[0].args.nullifierHash.should.be.equal(toFixedHex(input.nullifierHash))
-      logs[0].args.relayer.should.be.eq.BN(relayer)
-      logs[0].args.fee.should.be.eq.BN(feeBN)
-      isSpent = await tornado.isSpent(toFixedHex(input.nullifierHash))
-      isSpent.should.be.equal(true)
+  it("Test oracleDeposit", async function() {
+  });
+
+  it("Test secretWithdraw - no LP", async function() {
+  });
+  it("Test secretWithdraw - to LP", async function() {
+  });
+  it("Test getDepositCommitmentsById", async function() {
   });
   it("Test isSpent", async function() {
   });
   it("Test isSpentArray", async function() {
+  });
+  it("Test bytesToBytes32", async function() {
   });
 });

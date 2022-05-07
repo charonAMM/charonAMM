@@ -31,7 +31,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
     event LPWithdrawal(address _lp, uint256 _amount);
     event OracleDeposit(bytes32 _commitment,uint32 _insertedIndex,uint256 _timestamp);
     event DepositToOtherChain(bytes32 _commitment, uint256 _timestamp);
-    event SecretLP(address _recipient,uint256 poolAmountOut);
+    event SecretLP(address _recipient,uint256 _poolAmountOut);
     event SecretMarketOrder(address _recipient, uint256 _tokenAmountOut);
 
     modifier _lock_() {
@@ -58,14 +58,49 @@ contract Charon is Token, UsingTellor, MerkleTree{
         denomination = _denomination;
     }
 
+      function bind(uint256 _balance) public _lock_{ 
+        require(!finalized);//should not be finalized yet
+        // Adjust the balance record and actual token balance
+        uint256 _oldBalance = recordBalance;
+        recordBalance = _balance;
+        if(_balance > _oldBalance) {
+          require (token.transferFrom(msg.sender, address(this), _balance - _oldBalance));
+        } else if (_balance < _oldBalance) {
+            // In this case liquidity is being withdrawn, so charge fee
+            uint256 _tokenBalanceWithdrawn = _oldBalance - _balance;
+            uint256 _tokenExitFee = bmul(_tokenBalanceWithdrawn , fee);
+            require(token.transfer(msg.sender, _tokenBalanceWithdrawn - _tokenExitFee));
+            require(token.transfer(controller, _tokenExitFee));
+        }
+    }
+
+    function changeController(address _newController) external{
+      controller = _newController;
+    }
+
+    function depositToOtherChain(bytes32 _commitment) external _finalized_ returns(uint256 _depositId){
+        didDepositCommitment[_commitment] = true;
+        depositCommitments.push(_commitment);
+        _depositId = depositCommitments.length;
+        token.transferFrom(msg.sender, address(this), denomination);
+        emit DepositToOtherChain(_commitment, block.timestamp);
+    }
+
+    function finalize() external _lock_ {
+        require(msg.sender == controller, "ERR_NOT_CONTROLLER");
+        require(!finalized, "ERR_IS_FINALIZED");
+        finalized = true;
+        _mint(INIT_POOL_SUPPLY);
+        _move(address(this),msg.sender, INIT_POOL_SUPPLY);
+    }
 
     function lpDeposit(uint _tokenAmountIn, uint _minPoolAmountOut)
         external
         _lock_
         _finalized_
-        returns (uint256 poolAmountOut)
+        returns (uint256 _poolAmountOut)
     {   
-        poolAmountOut = calcPoolOutGivenSingleIn(
+        _poolAmountOut = calcPoolOutGivenSingleIn(
                             recordBalance,
                             1,
                             _totalSupply,
@@ -74,12 +109,11 @@ contract Charon is Token, UsingTellor, MerkleTree{
                             fee
                         );
         recordBalance += _tokenAmountIn;
-        require(poolAmountOut > _minPoolAmountOut, "not enough squeeze");
-        _mint(poolAmountOut);
-        _move(address(this),msg.sender, poolAmountOut);
+        require(_poolAmountOut > _minPoolAmountOut, "not enough squeeze");
+        _mint(_poolAmountOut);
+        _move(address(this),msg.sender, _poolAmountOut);
         require (token.transferFrom(msg.sender,address(this), _tokenAmountIn));
         emit LPDeposit(msg.sender,_tokenAmountIn);
-        return poolAmountOut;
     }
 
    function lpWithdraw(uint _poolAmountIn, uint _minAmountOut)
@@ -98,7 +132,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
                         );
         recordBalance -= _tokenAmountOut;
         require(_tokenAmountOut > _minAmountOut, "not enough squeeze");
-        uint exitFee = _poolAmountIn * fee;
+        uint exitFee = bmul(_poolAmountIn, fee);
         _move(msg.sender,address(this), _poolAmountIn);
         _burn(_poolAmountIn - exitFee);
         _move(address(this),controller, exitFee);//we need the fees to go to the LP's!!
@@ -112,22 +146,10 @@ contract Charon is Token, UsingTellor, MerkleTree{
         bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));
         (_didGet,_value,) =  getDataBefore(_queryId,block.timestamp - 1 hours);//what should this timeframe be? (should be an easy verify)
         require(_didGet);
-        bytes32 _commitment = bytesToBytes32((_value), 0);
-        uint32 insertedIndex = _insert(_commitment);
+        bytes32 _commitment = _bytesToBytes32((_value), 0);
+        uint32 _insertedIndex = _insert(_commitment);
         commitments[_commitment] = true;
-        emit OracleDeposit(_commitment, insertedIndex, block.timestamp);
-    }
-
-    function depositToOtherChain(bytes32 _commitment) external _finalized_ returns(uint256 _depositId){
-        didDepositCommitment[_commitment] = true;
-        depositCommitments.push(_commitment);
-        _depositId = depositCommitments.length;
-        token.transferFrom(msg.sender, address(this), denomination);
-        emit DepositToOtherChain(_commitment, block.timestamp);
-    }
-
-    function getDepositCommitmentsById(uint256 _id) external view returns(bytes32){
-      return depositCommitments[_id - 1];
+        emit OracleDeposit(_commitment, _insertedIndex, block.timestamp);
     }
 
     //withdraw your tokens (like a market order from the other chain)
@@ -153,51 +175,51 @@ contract Charon is Token, UsingTellor, MerkleTree{
     );
     nullifierHashes[_nullifierHash] = true;
     require(msg.value == _refund, "Incorrect refund amount received by the contract");
-    uint256 tokenAmountIn = denomination - _fee;
+    uint256 _tokenAmountIn = denomination - _fee;
     if(_lp){
-        uint256 poolAmountOut = calcPoolOutGivenSingleIn(
+        uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
                             recordBalanceSynth,
                             100e18,
                             _totalSupply,
                             200e18,//we can later edit this part out of the math func
-                            tokenAmountIn,
+                            _tokenAmountIn,
                             fee
                         );
-        recordBalanceSynth += tokenAmountIn;
-        emit LPDeposit(_recipient,tokenAmountIn);
-        _mint(poolAmountOut);
-        _move(address(this),_recipient, poolAmountOut);
-        emit SecretLP(_recipient,poolAmountOut);
+        recordBalanceSynth += _tokenAmountIn;
+        emit LPDeposit(_recipient,_tokenAmountIn);
+        _mint(_poolAmountOut);
+        _move(address(this),_recipient, _poolAmountOut);
+        emit SecretLP(_recipient,_poolAmountOut);
     }
     else{
       //market order
-        uint spotPriceBefore = calcSpotPrice(
+        uint256 _spotPriceBefore = calcSpotPrice(
                                     recordBalanceSynth,
                                     100e18,
                                     recordBalance,
                                     100e18,
                                     fee
                                 );
-        uint256 tokenAmountOut = calcOutGivenIn(
+        uint256 _tokenAmountOut = calcOutGivenIn(
                                     recordBalanceSynth,
                                     100e18,
                                     recordBalance,
                                     100e18,
-                                    tokenAmountIn,
+                                    _tokenAmountIn,
                                     fee
                                 );
-        recordBalance -= tokenAmountOut;
-        uint256 spotPriceAfter = calcSpotPrice(
+        recordBalance -= _tokenAmountOut;
+        uint256 _spotPriceAfter = calcSpotPrice(
                                 recordBalanceSynth,
                                 100e18,
                                 recordBalance,
                                 100e18,
                                 fee
                             );
-        require(spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
-        require(spotPriceBefore <=  tokenAmountIn / tokenAmountOut, "ERR_MATH_APPROX");
-        require(token.transfer(_recipient,tokenAmountOut));
-        emit SecretMarketOrder(_recipient,tokenAmountOut);
+        require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
+        require(_spotPriceBefore <=  bdiv(_tokenAmountIn,_tokenAmountOut), "ERR_MATH_APPROX");
+        require(token.transfer(_recipient,_tokenAmountOut));
+        emit SecretMarketOrder(_recipient,_tokenAmountOut);
     }
     if (_fee > 0) {
       token.transfer(_relayer, _fee);
@@ -210,35 +232,12 @@ contract Charon is Token, UsingTellor, MerkleTree{
       }
     }
     }
-    
-    function finalize() external _lock_ {
-        require(msg.sender == controller, "ERR_NOT_CONTROLLER");
-        require(!finalized, "ERR_IS_FINALIZED");
-        finalized = true;
-        _mint(INIT_POOL_SUPPLY);
-        _move(address(this),msg.sender, INIT_POOL_SUPPLY);
-    }
 
-    function bind(uint balance) public _lock_{ 
-        require(!finalized);//should not be finalized yet
-        // Adjust the balance record and actual token balance
-        uint oldBalance = recordBalance;
-        recordBalance = balance;
-        if (balance > oldBalance) {
-          require (token.transferFrom(msg.sender, address(this), balance-oldBalance));
-        } else if (balance < oldBalance) {
-            // In this case liquidity is being withdrawn, so charge fee
-            uint tokenBalanceWithdrawn = oldBalance - balance;
-            uint tokenExitFee = tokenBalanceWithdrawn * fee;
-            require(token.transfer(msg.sender, tokenBalanceWithdrawn - tokenExitFee));
-            require(token.transfer(controller, tokenExitFee));
-        }
-    }
+    //GETTERS
 
-    function changeController(address _newController) external{
-      controller = _newController;
+    function getDepositCommitmentsById(uint256 _id) external view returns(bytes32){
+      return depositCommitments[_id - 1];
     }
-
 /** @dev whether a note is already spent */
   function isSpent(bytes32 _nullifierHash) public view returns (bool) {
     return nullifierHashes[_nullifierHash];
@@ -254,11 +253,9 @@ contract Charon is Token, UsingTellor, MerkleTree{
     }
   }
 
-  function bytesToBytes32(bytes memory b, uint offset) internal pure returns (bytes32) {
-    bytes32 out;
-    for (uint i = 0; i < 32; i++) {
-      out |= bytes32(b[offset + i] & 0xFF) >> (i * 8);
+  function _bytesToBytes32(bytes memory _b, uint8 _offset) internal pure returns (bytes32 _out) {
+    for (uint8 _i = 0; _i < 32; _i++) {
+      _out |= bytes32(_b[_offset + _i] & 0xFF) >> (_i * 8);
     }
-    return out;
   }
 }

@@ -3,7 +3,7 @@ var assert = require('assert');
 const web3 = require('web3');
 const fs = require('fs')
 const { toBN } = require('web3-utils')
-const { takeSnapshot, revertSnapshot } = require('../scripts/ganacheHelper')
+const { takeSnapshot, revertSnapshot } = require('./helpers/ganacheHelper')
 const websnarkUtils = require('websnark/src/utils')
 const buildGroth16 = require('websnark/src/groth16')
 const stringifyBigInts = require('websnark/tools/stringifybigint').stringifyBigInts
@@ -12,6 +12,7 @@ const bigInt = snarkjs.bigInt
 const crypto = require('crypto')
 const circomlib = require('circomlib')
 const MerkleTree = require('fixed-merkle-tree')
+const fetch = require('node-fetch')
 
 const rbigint = (nbytes) => snarkjs.bigInt.leBuff2int(crypto.randomBytes(nbytes))
 const pedersenHash = (data) => circomlib.babyJub.unpackPoint(circomlib.pedersenHash.hash(data))[0]
@@ -33,11 +34,12 @@ function generateDeposit() {
 }
 
 describe("Mixer Tests", function() {
-  let mixer,mfac,ivfac,ihfac,verifier;
-  let hasher= 0x83584f83f26af4edda9cbe8c730bc87c364b28fe;
+  let mixer,mfac,ivfac,ihfac,verifier,token,tree;
+  let hasher= "0x83584f83f26af4edda9cbe8c730bc87c364b28fe";
   let denomination = web3.utils.toWei("10")
-  let tree
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
+  let run = 0;
+  let mainnetBlock = 0;
 
   beforeEach("deploy and setup mixer", async function() {
     tree = new MerkleTree(merkleTreeHeight)
@@ -60,34 +62,37 @@ describe("Mixer Tests", function() {
     verifier = await ivfac.deploy()
     await verifier.deployed();
     //deploy mock token
-    tfac = await ethers.getContractFactory("contracts/MockERC20.sol:MockERC20");
-    token = await token.deploy();
-    await token.deployed("Dissapearing Space Monkey","DSM");
-    await token.mint(accounts[0],web3.utils.toWei("1000000"))
+    tfac = await ethers.getContractFactory("contracts/mocks/MockERC20.sol:MockERC20");
+    token = await tfac.deploy("Dissapearing Space Monkey","DSM");
+    await token.deployed();
+    await token.mint(accounts[1].address,web3.utils.toWei("1000000"))
     //deploy mixer
     mfac = await ethers.getContractFactory("contracts/Mixer.sol:Mixer");
     mixer = await mfac.deploy(verifier.address,hasher,denomination,merkleTreeHeight,token.address);
     await mixer.deployed();
-
   });
   it("Test Deposit", async function() {
     const commitment = toFixedHex(43)
-    await token.approve(mixer.address,denomination)
-    let { logs } = await mixer.deposit(commitment, { from: sender })
-    logs[0].event.should.be.equal('Deposit')
-    logs[0].args.commitment.should.be.equal(commitment)
-    logs[0].args.leafIndex.should.be.eq.BN(0)
+    await token.connect(accounts[1]).approve(mixer.address,denomination)
+    await mixer.connect(accounts[1]).deposit(commitment)
+    console.log("here")
+    let val = await mixer.commitments.call(commitment)
+    assert(val == true, "commitment should be deposited")
+    val = await mixer.currentRootIndex.call()
+    assert(val == 1, "index should grow")
+    val = await token.balanceOf(mixer.address)
+    assert(val == denomination, "balance should be deposited")
   });
   it("Test Withdraw", async function() {
       const deposit = generateDeposit()
-      const user = accounts[4]
+      const user = accounts[4].address
       tree.insert(deposit.commitment)
-      await token.mint(user, tokenDenomination)
+      await token.mint(user, denomination)
       const balanceUserBefore = await token.balanceOf(user)
-      await token.approve(mixer.address, tokenDenomination, { from: user })
-      await mixer.deposit(toFixedHex(deposit.commitment), { from: user, gasPrice: '0' })
+      await token.connect(accounts[4]).approve(mixer.address, denomination)
+      await mixer.connect(accounts[4]).deposit(toFixedHex(deposit.commitment),{gasPrice: '0' })
       const balanceUserAfter = await token.balanceOf(user)
-      balanceUserAfter.should.be.eq.BN(toBN(balanceUserBefore).sub(toBN(tokenDenomination)))
+      balanceUserAfter.should.be.eq.BN(toBN(balanceUserBefore).sub(toBN(denomination)))
       const { pathElements, pathIndices } = tree.path(0)
       // Circuit input
       const input = stringifyBigInts({
@@ -130,10 +135,10 @@ describe("Mixer Tests", function() {
       const ethBalanceReceiverAfter = await web3.eth.getBalance(toFixedHex(recipient, 20))
       const ethBalanceRelayerAfter = await web3.eth.getBalance(relayer)
       const feeBN = toBN(fee.toString())
-      balanceMixerAfter.should.be.eq.BN(toBN(balanceMixerBefore).sub(toBN(tokenDenomination)))
+      balanceMixerAfter.should.be.eq.BN(toBN(balanceMixerBefore).sub(toBN(denomination)))
       balanceRelayerAfter.should.be.eq.BN(toBN(balanceRelayerBefore).add(feeBN))
       balanceReceiverAfter.should.be.eq.BN(
-        toBN(balanceReceiverBefore).add(toBN(tokenDenomination).sub(feeBN)),
+        toBN(balanceReceiverBefore).add(toBN(denomination).sub(feeBN)),
       )
       ethBalanceOperatorAfter.should.be.eq.BN(toBN(ethBalanceOperatorBefore))
       ethBalanceReceiverAfter.should.be.eq.BN(toBN(ethBalanceReceiverBefore).add(toBN(refund)))

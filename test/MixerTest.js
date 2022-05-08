@@ -85,6 +85,7 @@ describe("Mixer Tests", function() {
   });
   it("Test Withdraw", async function() {
       const deposit = generateDeposit()
+      console.log(deposit)
       const user = accounts[4].address
       tree.insert(deposit.commitment)
       await token.mint(user, denomination)

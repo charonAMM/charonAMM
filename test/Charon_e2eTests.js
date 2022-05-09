@@ -42,16 +42,6 @@ describe("Charon e2e Tests", function() {
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
   let run = 0;
   let mainnetBlock = 0;
-
-  beforeEach("deploy and setup mixer", async function() {
-    let charon,cfac,ivfac,ihfac,verifier,tellor,accounts;
-    let hasher= "0x83584f83f26af4edda9cbe8c730bc87c364b28fe";
-    let denomination = web3.utils.toWei("10")
-    let tree
-    let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
-    let run = 0;
-    let fee = 0;//what range should this be in?
-    let mainnetBlock = 0;
   
     beforeEach("deploy and setup mixer", async function() {
       tree = new MerkleTree(merkleTreeHeight)

@@ -6,7 +6,7 @@ const { ethers } = require("hardhat");
 const { keccak256 } = require("ethers/lib/utils");
 
 describe("Test AMM", function() {
-  const swapFee = web3.utils.toWei("0.01") //1%
+  const swapFee = web3.utils.toWei("0.000001") //1%
   let tfac,token1,token2,afac,amm,accounts;
 
   beforeEach("deploy and setup TellorX", async function() {
@@ -39,9 +39,9 @@ describe("Test AMM", function() {
       //user approves tokens
       await token1.connect(accounts[1]).approve(amm.address,web3.utils.toWei("100"))
       console.log("here")
-      //current balance is init 100000 , each weight is 1e18, init poolSupply is 100e18, totalWeight is 2e18, put 10e18 in, fee 0 
-      let amountOut = await amm.calcPoolOutGivenSingleIn(web3.utils.toWei("100000"),web3.utils.toWei("1"),web3.utils.toWei("100"),web3.utils.toWei("2"),web3.utils.toWei("10"),0)
-      console.log(web3.utils.fromWei(amountOut))
+      //current balance is init 100000 , each weight is 1, init poolSupply is 100e18, totalWeight is 2, put 10e18 in, fee is min 10e16
+      let amountOut = await (await amm.calcPoolOutGivenSingleIn(web3.utils.toWei("100000"),1,web3.utils.toWei("100"),2,web3.utils.toWei("10"),swapFee))
+      console.log("amount out", amountOut)
       //user joinPool
       await amm.connect(accounts[1]).joinswapExternAmountIn(token1.address,web3.utils.toWei("10"),amountOut)//pool amount out, maxIn
       //user runs swapExactAmountIn (trades with a specific input)

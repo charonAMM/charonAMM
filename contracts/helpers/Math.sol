@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.8.4;
-
+import "hardhat/console.sol";
 contract Math{
     uint public constant BONE              = 10**18;
     uint public constant EXIT_FEE          = 0;
@@ -121,7 +121,7 @@ contract Math{
         uint tokenAmountIn,
         uint swapFee
     )
-        public pure
+        public
         returns (uint poolAmountOut)
     {
         // Charge the trading fee for the proportion of tokenAi
@@ -129,14 +129,16 @@ contract Math{
         // That proportion is (1- weightTokenIn)
         // tokenAiAfterFee = tAi * (1 - (1-weightTi) * poolFee);
         uint normalizedWeight = bdiv(tokenWeightIn, totalWeight);
-        uint zaz = bmul((BONE - normalizedWeight), swapFee); 
-        uint tokenAmountInAfterFee = bmul(tokenAmountIn,(BONE - zaz));
-        uint newTokenBalanceIn = tokenBalanceIn + tokenAmountInAfterFee;
+        uint zaz = bmul(bsub(BONE, normalizedWeight), swapFee); 
+        uint tokenAmountInAfterFee = bmul(tokenAmountIn, bsub(BONE, zaz));
+
+        uint newTokenBalanceIn = badd(tokenBalanceIn, tokenAmountInAfterFee);
         uint tokenInRatio = bdiv(newTokenBalanceIn, tokenBalanceIn);
+
         // uint newPoolSupply = (ratioTi ^ weightTi) * poolSupply;
         uint poolRatio = bpow(tokenInRatio, normalizedWeight);
         uint newPoolSupply = bmul(poolRatio, poolSupply);
-        poolAmountOut = newPoolSupply - poolSupply;
+        poolAmountOut = bsub(newPoolSupply, poolSupply);
         return poolAmountOut;
     }
 
@@ -268,20 +270,18 @@ contract Math{
     // Compute b^(e.w) by splitting it into (b^e)*(b^0.w).
     // Use `bpowi` for `b^e` and `bpowK` for k iterations
     // of approximation of b^0.w
-    function bpow(uint base, uint exp)
+function bpow(uint base, uint exp)
         internal pure
         returns (uint)
     {
         require(base >= MIN_BPOW_BASE, "ERR_BPOW_BASE_TOO_LOW");
         require(base <= MAX_BPOW_BASE, "ERR_BPOW_BASE_TOO_HIGH");
-        uint whole  = bfloor(exp);   
-        uint remain = exp - whole;
+        uint whole  = bfloor(exp);
+        uint remain = bsub(exp,whole);
         uint wholePow = bpowi(base, btoi(whole));
         if (remain == 0) {
             return wholePow;
         }
-        uint partialResult = bpowApprox(base, remain, BPOW_PRECISION);
-        return (wholePow * partialResult);
     }
 
     function bpowApprox(uint base, uint exp, uint precision)
@@ -351,4 +351,21 @@ function bmul(uint a, uint b)
         return c2;
     }
 
+    function bsub(uint a, uint b)
+        internal pure
+        returns (uint)
+    {
+        (uint c, bool flag) = bsubSign(a, b);
+        require(!flag, "ERR_SUB_UNDERFLOW");
+        return c;
+    }
+
+        function badd(uint a, uint b)
+        internal pure
+        returns (uint)
+    {
+        uint c = a + b;
+        require(c >= a, "ERR_ADD_OVERFLOW");
+        return c;
+    }
 }

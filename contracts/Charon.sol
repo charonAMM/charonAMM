@@ -51,27 +51,26 @@ contract Charon is Token, UsingTellor, MerkleTree{
     /**
      * @dev constructor to start
      */
-    constructor(address _verifier,IHasher _hasher,address _token, uint256 _fee, address payable _tellor, uint256 _denomination, uint32 _merkleTreeHeight) UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher){
+    constructor(address _verifier,
+                IHasher _hasher,
+                address _token,
+                uint256 _fee,
+                address payable _tellor,
+                uint256 _denomination,
+                uint32 _merkleTreeHeight) 
+              UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher){
         verifier = IVerifier(_verifier);
         token = IERC20(_token);
         fee = _fee;
         denomination = _denomination;
+        controller = msg.sender;
     }
 
       function bind(uint256 _balance) public _lock_{ 
-        require(!finalized);//should not be finalized yet
-        // Adjust the balance record and actual token balance
-        uint256 _oldBalance = recordBalance;
+        require(!finalized, "must be finalized");//should not be finalized yet
+        require(msg.sender == controller,"should be controler");
         recordBalance = _balance;
-        if(_balance > _oldBalance) {
-          require (token.transferFrom(msg.sender, address(this), _balance - _oldBalance));
-        } else if (_balance < _oldBalance) {
-            // In this case liquidity is being withdrawn, so charge fee
-            uint256 _tokenBalanceWithdrawn = _oldBalance - _balance;
-            uint256 _tokenExitFee = bmul(_tokenBalanceWithdrawn , fee);
-            require(token.transfer(msg.sender, _tokenBalanceWithdrawn - _tokenExitFee));
-            require(token.transfer(controller, _tokenExitFee));
-        }
+        require (token.transferFrom(msg.sender, address(this), _balance));
     }
 
     function changeController(address _newController) external{
@@ -83,6 +82,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
         depositCommitments.push(_commitment);
         _depositId = depositCommitments.length;
         token.transferFrom(msg.sender, address(this), denomination);
+        recordBalance += denomination;
         emit DepositToOtherChain(_commitment, block.timestamp);
     }
 
@@ -163,74 +163,76 @@ contract Charon is Token, UsingTellor, MerkleTree{
         uint256 _refund,
         bool _lp //should we deposit as an LP or if false, place as a market order
     ) external payable _lock_  _finalized_{
-    require(_fee <= denomination, "Fee exceeds transfer value");
-    require(!nullifierHashes[_nullifierHash], "The note has been already spent");
-    require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
-    require(
-      verifier.verifyProof(
-        _proof,
-        [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
-      ),
-      "Invalid withdraw proof"
-    );
-    nullifierHashes[_nullifierHash] = true;
-    require(msg.value == _refund, "Incorrect refund amount received by the contract");
-    uint256 _tokenAmountIn = denomination - _fee;
-    if(_lp){
-        uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
-                            recordBalanceSynth,
-                            100e18,
-                            _totalSupply,
-                            200e18,//we can later edit this part out of the math func
-                            _tokenAmountIn,
-                            fee
-                        );
-        recordBalanceSynth += _tokenAmountIn;
-        emit LPDeposit(_recipient,_tokenAmountIn);
-        _mint(_poolAmountOut);
-        _move(address(this),_recipient, _poolAmountOut);
-        emit SecretLP(_recipient,_poolAmountOut);
-    }
-    else{
-      //market order
-        uint256 _spotPriceBefore = calcSpotPrice(
-                                    recordBalanceSynth,
-                                    100e18,
-                                    recordBalance,
-                                    100e18,
-                                    fee
-                                );
-        uint256 _tokenAmountOut = calcOutGivenIn(
-                                    recordBalanceSynth,
-                                    100e18,
-                                    recordBalance,
-                                    100e18,
-                                    _tokenAmountIn,
-                                    fee
-                                );
-        recordBalance -= _tokenAmountOut;
-        uint256 _spotPriceAfter = calcSpotPrice(
-                                recordBalanceSynth,
-                                100e18,
-                                recordBalance,
-                                100e18,
-                                fee
-                            );
-        require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
-        require(_spotPriceBefore <=  bdiv(_tokenAmountIn,_tokenAmountOut), "ERR_MATH_APPROX");
-        require(token.transfer(_recipient,_tokenAmountOut));
-        emit SecretMarketOrder(_recipient,_tokenAmountOut);
-    }
-    if (_fee > 0) {
-      token.transfer(_relayer, _fee);
-    }
-    if (_refund > 0) {
-      (bool success, ) = _recipient.call{ value: _refund }("");
-      if (!success) {
-        // let's return _refund back to the relayer
-        _relayer.transfer(_refund);
+      require(_fee <= denomination, "Fee exceeds transfer value");
+      require(!nullifierHashes[_nullifierHash], "The note has been already spent");
+      require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
+      require(
+        verifier.verifyProof(
+          _proof,
+          [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
+        ),
+        "Invalid withdraw proof"
+      );
+      nullifierHashes[_nullifierHash] = true;
+      require(msg.value == _refund, "Incorrect refund amount received by the contract");
+      uint256 _tokenAmountIn = denomination - _fee;
+      if(_lp){
+          if(finalized){
+            uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
+                              recordBalanceSynth,
+                              100e18,
+                              _totalSupply,
+                              200e18,//we can later edit this part out of the math func
+                              _tokenAmountIn,
+                              fee
+                          );
+            emit LPDeposit(_recipient,_tokenAmountIn);
+            _mint(_poolAmountOut);
+            _move(address(this),_recipient, _poolAmountOut);
+            emit SecretLP(_recipient,_poolAmountOut);
+          }
+          recordBalanceSynth += _tokenAmountIn;
       }
-    }
+      else{
+        //market order
+          uint256 _spotPriceBefore = calcSpotPrice(
+                                      recordBalanceSynth,
+                                      100e18,
+                                      recordBalance,
+                                      100e18,
+                                      fee
+                                  );
+          uint256 _tokenAmountOut = calcOutGivenIn(
+                                      recordBalanceSynth,
+                                      100e18,
+                                      recordBalance,
+                                      100e18,
+                                      _tokenAmountIn,
+                                      fee
+                                  );
+          recordBalance -= _tokenAmountOut;
+          uint256 _spotPriceAfter = calcSpotPrice(
+                                  recordBalanceSynth,
+                                  100e18,
+                                  recordBalance,
+                                  100e18,
+                                  fee
+                              );
+          require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
+          require(_spotPriceBefore <=  bdiv(_tokenAmountIn,_tokenAmountOut), "ERR_MATH_APPROX");
+          require(token.transfer(_recipient,_tokenAmountOut));
+          emit SecretMarketOrder(_recipient,_tokenAmountOut);
+      }
+      if (_fee > 0) {
+        token.transfer(_relayer, _fee);
+      }
+      if (_refund > 0) {
+        (bool success, ) = _recipient.call{ value: _refund }("");
+        if (!success) {
+          // let's return _refund back to the relayer
+          _relayer.transfer(_refund);
+        }
+      }
     }
 
     //GETTERS

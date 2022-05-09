@@ -75,8 +75,8 @@ describe("Mixer Tests", function() {
     const commitment = toFixedHex(43)
     await token.connect(accounts[1]).approve(mixer.address,denomination)
     await mixer.connect(accounts[1]).deposit(commitment)
+    let val = await mixer.commitments(commitment)
     console.log("here")
-    let val = await mixer.commitments.call(commitment)
     assert(val == true, "commitment should be deposited")
     val = await mixer.currentRootIndex.call()
     assert(val == 1, "index should grow")
@@ -85,7 +85,6 @@ describe("Mixer Tests", function() {
   });
   it("Test Withdraw", async function() {
       const deposit = generateDeposit()
-      console.log(deposit)
       const user = accounts[4].address
       tree.insert(deposit.commitment)
       await token.mint(user, denomination)
@@ -93,7 +92,7 @@ describe("Mixer Tests", function() {
       await token.connect(accounts[4]).approve(mixer.address, denomination)
       await mixer.connect(accounts[4]).deposit(toFixedHex(deposit.commitment),{gasPrice: '0' })
       const balanceUserAfter = await token.balanceOf(user)
-      balanceUserAfter.should.be.eq.BN(toBN(balanceUserBefore).sub(toBN(denomination)))
+      assert(balanceUserAfter == balanceUserBefore - denomination,"balances should be correct")
       const { pathElements, pathIndices } = tree.path(0)
       // Circuit input
       const input = stringifyBigInts({

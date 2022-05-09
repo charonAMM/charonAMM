@@ -10,6 +10,7 @@ const stringifyBigInts = require('websnark/tools/stringifybigint').stringifyBigI
 const snarkjs = require('snarkjs')
 const bigInt = snarkjs.bigInt
 const crypto = require('crypto')
+const fetch = require('node-fetch')
 const circomlib = require('circomlib')
 const MerkleTree = require('fixed-merkle-tree')
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
@@ -33,12 +34,19 @@ function generateDeposit() {
   return deposit
 }
 
+//to do - figure out how to deploy hasher on different chain
+//figure out how to have different curves for multiple chains
+
 describe("Charon Funciton Tests", function() {
-  let mixer,mfac,ivfac,ihfac,verifier,tellor;
-  let hasher= 0x83584f83f26af4edda9cbe8c730bc87c364b28fe;
+  let charon,cfac,ivfac,ihfac,verifier,tellor,accounts,token;
+  let charon2,verifier2,tellor2, token2;
+  let hasher= "0x83584f83f26af4edda9cbe8c730bc87c364b28fe";
   let denomination = web3.utils.toWei("10")
   let tree
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
+  let run = 0;
+  let fee = 0;//what range should this be in?
+  let mainnetBlock = 0;
 
   beforeEach("deploy and setup mixer", async function() {
     tree = new MerkleTree(merkleTreeHeight)
@@ -61,50 +69,95 @@ describe("Charon Funciton Tests", function() {
     verifier = await ivfac.deploy()
     await verifier.deployed();
     //deploy mock token
-    tfac = await ethers.getContractFactory("contracts/MockERC20.sol:MockERC20");
-    token = await token.deploy();
-    await token.deployed("Dissapearing Space Monkey","DSM");
-    await token.mint(accounts[0],web3.utils.toWei("1000000"))
+    tfac = await ethers.getContractFactory("contracts/mocks/MockERC20.sol:MockERC20");
+    token = await tfac.deploy("Dissapearing Space Monkey","DSM");
+    await token.deployed();
+    await token.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
     //deploy tellor
     let TellorOracle = await ethers.getContractFactory(abi, bytecode);
-    tellorOracle = await TellorOracle.deploy();
-    await tellorOracle.deployed();
+    tellor = await TellorOracle.deploy();
+    await tellor.deployed();
     //deploy charon
-    mfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
-    mixer = await mfac.deploy(verifier.address,token.address,fee,tellor.address,hasher,denomination,merkleTreeHeight);
-    await mixer.deployed();
+    cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
+    charon= await cfac.deploy(verifier.address,hasher,token.address,fee,tellor.address,denomination,merkleTreeHeight);
+    await charon.deployed();
+
+    //now deploy on other chain (same chain, but we pretend w/ oracles)
+        //deploy mock token
+        verifier2 = await ivfac.deploy()
+        await verifier2.deployed();
+        token2 = await tfac.deploy("Dissapearing Space Monkey2","DSM2");
+        await token2.deployed();
+        await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
+        tellor2 = await TellorOracle.deploy();
+        await tellor2.deployed();
+        charon2= await cfac.deploy(verifier2.address,hasher,token2.address,fee,tellor2.address,denomination,merkleTreeHeight);
+        await charon2.deployed();
+
+
+    //now set both of them. 
+    await token.approve(charon.address,web3.utils.toWei("100000"))//100k
+    await charon.bind(web3.utils.toWei("100000"))
+    
+    await charon.f
     //deploy everything again on the next chain
+    //can we assume it will work with two chains if just testing one?
 
   });
   it("Test Constructor", async function() {
-    assert(0==1)
+    assert(await charon.tellor() == tellor.address, "tellor address should be set")
+    assert(await charon.levels() == merkleTreeHeight, "merkle Tree height should be set")
+    assert(await charon.hasher() == web3.utils.toChecksumAddress(hasher), "hasher should be set")
+    assert(await charon.verifier() == verifier.address, "verifier should be set")
+    assert(await charon.token() == token.address, "token should be set")
+    assert(await charon.fee() == fee, "fee should be set")
+    assert(await charon.denomination() == denomination, "denomination should be set")
+    assert(await charon.controller() == accounts[0].address, "controller should be set")
   });
   it("Test bind", async function() {
+    assert(await charon.recordBalance() == web3.utils.toWei("100000"), "record balance should be init")
+    assert(await token.balanceOf(charon.address) == web3.utils.toWei("100000"), "charon should have balance")
+    assert(await token.balanceOf(accounts[0]) == web3.utils.toWei("900000"), "controller balance should be lower")
   });
   it("Test changeController", async function() {
+    await charon.changeController(accounts[1].address)
+    assert(await charon.controller() == accounts[1].address, "controller should change")
   });
   it("Test depositToOtherChain", async function() {
+
+    const commitment = toFixedHex(43)
+    await token.connect(accounts[1]).approve(mixer.address,denomination)
+    await mixer.connect(accounts[1]).deposit(commitment)
+    assert(0==1)
   });
   it("Test finalize", async function() {
+    assert(0==1)
   });
   it("Test lpDeposit", async function() {
+    assert(0==1)
   });
   it("Test lpWithdraw", async function() {
+    assert(0==1)
   });
-
   it("Test oracleDeposit", async function() {
+    assert(0==1)
   });
-
   it("Test secretWithdraw - no LP", async function() {
+    assert(0==1)
   });
   it("Test secretWithdraw - to LP", async function() {
+    assert(0==1)
   });
   it("Test getDepositCommitmentsById", async function() {
+    assert(0==1)
   });
   it("Test isSpent", async function() {
+    assert(0==1)
   });
   it("Test isSpentArray", async function() {
+    assert(0==1)
   });
   it("Test bytesToBytes32", async function() {
+    assert(0==1)
   });
 });

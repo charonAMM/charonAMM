@@ -42,6 +42,7 @@ describe("Charon e2e Tests", function() {
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
   let run = 0;
   let mainnetBlock = 0;
+  let fee = 0;//what range should this be in?
   
     beforeEach("deploy and setup mixer", async function() {
       tree = new MerkleTree(merkleTreeHeight)

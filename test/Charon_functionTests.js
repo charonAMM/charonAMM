@@ -98,8 +98,64 @@ describe("Charon Funciton Tests", function() {
     //now set both of them. 
     await token.approve(charon.address,web3.utils.toWei("100000"))//100k
     await charon.bind(web3.utils.toWei("100000"))
+    await token2.approve(charon2.address,web3.utils.toWei("100000"))//100k
+    await charon2.bind(web3.utils.toWei("100000"))
+    await token.approve(charon.address,web3.utils.toWei("100"))//100k
+    await token2.approve(charon.address,web3.utils.toWei("100"))//100k
+    let deposit;
+    let root;
+    let queryData, queryId,depositId,nonce;
+    for(var i=0;i<1;i++){
+      deposit = generateDeposit()
+      tree.insert(deposit.commitment)
+      await charon.depositToOtherChain(toFixedHex(deposit.commitment));
+      const { pathElements, pathIndices } = tree.path(root)
+      root++
+      // Circuit input
+      const input = stringifyBigInts({
+        root: tree.root(),
+        nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
+        relayer,
+        recipient,
+        fee,
+        refund,
+        nullifier: deposit.nullifier,
+        secret: deposit.secret,
+        pathElements: pathElements,
+        pathIndices: pathIndices,
+      })
+      const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
+      const { proof } = websnarkUtils.toSolidityInput(proofData)
+      const args = [
+        toFixedHex(input.root),
+        toFixedHex(input.nullifierHash),
+        toFixedHex(input.recipient, 20),
+        toFixedHex(input.relayer, 20),
+        toFixedHex(input.fee),
+        toFixedHex(input.refund),
+      ]
+      //pass value w/tellor
+      depositId = await charon.getDepositIdByCommitment(commitment)
+      queryData = web3.eth.abi.encodeParameters(
+        ['string', 'bytes'],
+        ['Charon', web3.eth.abi.encodeParameters(
+          ['uint256','uint256'],
+          [1,depositId]
+        );]
+      );
+      queryId = h.hash(queryData)
+      nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+      await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
+      await h.advanceTime(43200)//12 hours
     
-    await charon.f
+      //withdraw on other chain
+      await charon2.oracleDeposit(1,depositId)
+      await charon2.withdraw(proof, ...args, { value: refund, from: relayer, gasPrice: '0' })
+      deposit = generateDeposit()
+      tree.insert(deposit.commitment)
+      await charon2.depositToOtherChain(toFixedHex(deposit.commitment));
+    }
+
     //deploy everything again on the next chain
     //can we assume it will work with two chains if just testing one?
 

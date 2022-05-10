@@ -17,11 +17,12 @@ contract Charon is Token, UsingTellor, MerkleTree{
     address public controller;
     bool public finalized;
     bool private _mutex;
-    uint256 recordBalance;
-    uint256 recordBalanceSynth;
+    uint256 public recordBalance;
+    uint256 public recordBalanceSynth;
     mapping(bytes32 => bool) public nullifierHashes;
     mapping(bytes32=>bool) public commitments;
     mapping(bytes32=>bool) public didDepositCommitment;
+    mapping(bytes32 => uint256) public depositIdByCommitment;
     bytes32[] public depositCommitments;
     uint256 public totalWeight;
 
@@ -81,6 +82,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
         didDepositCommitment[_commitment] = true;
         depositCommitments.push(_commitment);
         _depositId = depositCommitments.length;
+        depositIdByCommitment[_commitment] = _depositId;
         token.transferFrom(msg.sender, address(this), denomination);
         recordBalance += denomination;
         emit DepositToOtherChain(_commitment, block.timestamp);
@@ -239,6 +241,10 @@ contract Charon is Token, UsingTellor, MerkleTree{
 
     function getDepositCommitmentsById(uint256 _id) external view returns(bytes32){
       return depositCommitments[_id - 1];
+    }
+
+    function getDepositIdByCommitment(bytes32 _commitment) external view returns(uint){
+      return depositIdByCommitment[_commitment];
     }
 /** @dev whether a note is already spent */
   function isSpent(bytes32 _nullifierHash) public view returns (bool) {

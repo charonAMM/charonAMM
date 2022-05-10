@@ -256,35 +256,41 @@ contract Math{
     // DSMath.wpow
     function bpowi(uint a, uint n)
         internal pure
-        returns (uint z)
+        returns (uint)
     {
-        z = n % 2 != 0 ? a : BONE;
+        uint z = n % 2 != 0 ? a : BONE;
         for (n /= 2; n != 0; n /= 2) {
-            a = a * a;
+            a = bmul(a, a);
             if (n % 2 != 0) {
-                z = z * a;
+                z = bmul(z, a);
             }
         }
+        return z;
     }
-
     // Compute b^(e.w) by splitting it into (b^e)*(b^0.w).
     // Use `bpowi` for `b^e` and `bpowK` for k iterations
     // of approximation of b^0.w
-function bpow(uint base, uint exp)
+    function bpow(uint base, uint exp)
         internal pure
         returns (uint)
     {
         require(base >= MIN_BPOW_BASE, "ERR_BPOW_BASE_TOO_LOW");
         require(base <= MAX_BPOW_BASE, "ERR_BPOW_BASE_TOO_HIGH");
-        uint whole  = bfloor(exp);
-        uint remain = bsub(exp,whole);
+
+        uint whole  = bfloor(exp);   
+        uint remain = bsub(exp, whole);
+
         uint wholePow = bpowi(base, btoi(whole));
+
         if (remain == 0) {
             return wholePow;
         }
+
+        uint partialResult = bpowApprox(base, remain, BPOW_PRECISION);
+        return bmul(wholePow, partialResult);
     }
 
-    function bpowApprox(uint base, uint exp, uint precision)
+ function bpowApprox(uint base, uint exp, uint precision)
         internal pure
         returns (uint)
     {
@@ -300,16 +306,17 @@ function bpow(uint base, uint exp)
         // continue until term is less than precision
         for (uint i = 1; term >= precision; i++) {
             uint bigK = i * BONE;
-            (uint c, bool cneg) = bsubSign(a, bigK - BONE);
-            term = term * c * x;
-            term = term / bigK;
+            (uint c, bool cneg) = bsubSign(a, bsub(bigK, BONE));
+            term = bmul(term, bmul(c, x));
+            term = bdiv(term, bigK);
             if (term == 0) break;
+
             if (xneg) negative = !negative;
             if (cneg) negative = !negative;
             if (negative) {
-                sum -= term;
+                sum = bsub(sum, term);
             } else {
-                sum += term;
+                sum = badd(sum, term);
             }
         }
         return sum;

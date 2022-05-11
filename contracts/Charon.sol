@@ -36,7 +36,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
     event SecretMarketOrder(address _recipient, uint256 _tokenAmountOut);
 
     modifier _lock_() {
-        require(!_mutex, "ERR_REENTRY");
+        require(!_mutex|| msg.sender == address(verifier));
         _mutex = true;
         _;
         _mutex = false;
@@ -164,7 +164,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
         uint256 _fee,
         uint256 _refund,
         bool _lp //should we deposit as an LP or if false, place as a market order
-    ) external payable _lock_  _finalized_{
+    ) external payable{//add finalized and lock?
       require(_fee <= denomination, "Fee exceeds transfer value");
       require(!nullifierHashes[_nullifierHash], "The note has been already spent");
       require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one

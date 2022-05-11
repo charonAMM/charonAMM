@@ -15,6 +15,9 @@ const circomlib = require('circomlib')
 const MerkleTree = require('fixed-merkle-tree')
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
 const h = require("usingtellor/test/helpers/helpers.js");
+circuit = require('../build/circuits/withdraw.json')
+proving_key = fs.readFileSync('build/circuits/withdraw_proving_key.bin').buffer
+
 const rbigint = (nbytes) => snarkjs.bigInt.leBuff2int(crypto.randomBytes(nbytes))
 const pedersenHash = (data) => circomlib.babyJub.unpackPoint(circomlib.pedersenHash.hash(data))[0]
 const toFixedHex = (number, length = 32) =>
@@ -47,9 +50,12 @@ describe("Charon Funciton Tests", function() {
   let run = 0;
   let fee = 0;//what range should this be in?
   let mainnetBlock = 0;
+  let groth16
+  let abiCoder = new ethers.utils.AbiCoder();
 
   beforeEach("deploy and setup mixer", async function() {
     tree = new MerkleTree(merkleTreeHeight)
+    groth16 = await buildGroth16()
     if(run == 0){
       const directors = await fetch('https://api.blockcypher.com/v1/eth/main').then(response => response.json());
       mainnetBlock = directors.height - 15;
@@ -103,22 +109,22 @@ describe("Charon Funciton Tests", function() {
     await token.approve(charon.address,web3.utils.toWei("100"))//100k
     await token2.approve(charon.address,web3.utils.toWei("100"))//100k
     let deposit;
-    let root;
+    let _root = 0;
     let queryData, queryId,depositId,nonce;
     for(var i=0;i<1;i++){
-      deposit = generateDeposit()
+      deposit = await generateDeposit()
       tree.insert(deposit.commitment)
       await charon.depositToOtherChain(toFixedHex(deposit.commitment));
-      const { pathElements, pathIndices } = tree.path(root)
-      root++
+      const { pathElements, pathIndices } = tree.path(_root)
+      _root++
       // Circuit input
       const input = stringifyBigInts({
         root: tree.root(),
         nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
-        relayer,
-        recipient,
-        fee,
-        refund,
+        relayer: accounts[0].address,
+        recipient: accounts[1].address,
+        fee: 0,
+        refund: 0,
         nullifier: deposit.nullifier,
         secret: deposit.secret,
         pathElements: pathElements,
@@ -133,24 +139,27 @@ describe("Charon Funciton Tests", function() {
         toFixedHex(input.relayer, 20),
         toFixedHex(input.fee),
         toFixedHex(input.refund),
+        true
       ]
       //pass value w/tellor
-      depositId = await charon.getDepositIdByCommitment(commitment)
-      queryData = web3.eth.abi.encodeParameters(
+      depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
+      queryData = abiCoder.encode(
         ['string', 'bytes'],
-        ['Charon', web3.eth.abi.encodeParameters(
+        ['Charon', abiCoder.encode(
           ['uint256','uint256'],
           [1,depositId]
-        );]
+        )]
       );
       queryId = h.hash(queryData)
       nonce = await tellor2.getNewValueCountbyQueryId(queryId)
       await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
+      console.log(toFixedHex(deposit.commitment))
       await h.advanceTime(43200)//12 hours
-    
       //withdraw on other chain
       await charon2.oracleDeposit(1,depositId)
-      await charon2.withdraw(proof, ...args, { value: refund, from: relayer, gasPrice: '0' })
+      await charon2.secretWithdraw(proof, ...args)
+
+      //now do the same thing on the other chain
       deposit = generateDeposit()
       tree.insert(deposit.commitment)
       await charon2.depositToOtherChain(toFixedHex(deposit.commitment));

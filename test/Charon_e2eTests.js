@@ -35,50 +35,64 @@ function generateDeposit() {
 }
 
 describe("Charon e2e Tests", function() {
-  let mixer,mfac,ivfac,ihfac,verifier,tellor;
-  let hasher= 0x83584f83f26af4edda9cbe8c730bc87c364b28fe;
+  let charon,cfac,ivfac,ihfac,verifier,tellor,accounts,token;
+  let charon2,verifier2,tellor2, token2;
+  let hasher= "0x83584f83f26af4edda9cbe8c730bc87c364b28fe";
   let denomination = web3.utils.toWei("10")
   let tree
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
   let run = 0;
-  let mainnetBlock = 0;
   let fee = 0;//what range should this be in?
-  
-    beforeEach("deploy and setup mixer", async function() {
-      tree = new MerkleTree(merkleTreeHeight)
-      if(run == 0){
-        const directors = await fetch('https://api.blockcypher.com/v1/eth/main').then(response => response.json());
-        mainnetBlock = directors.height - 15;
-        console.log("     Forking from block: ",mainnetBlock)
-        run = 1;
-      }
-      accounts = await ethers.getSigners();
-      await hre.network.provider.request({
-        method: "hardhat_reset",
-        params: [{forking: {
-              jsonRpcUrl: hre.config.networks.hardhat.forking.url,
-              blockNumber: mainnetBlock
-            },},],
-        });
-      //deploy verifier
-      ivfac = await ethers.getContractFactory("contracts/helpers/Verifier.sol:Verifier");
-      verifier = await ivfac.deploy()
-      await verifier.deployed();
-      //deploy mock token
-      tfac = await ethers.getContractFactory("contracts/mocks/MockERC20.sol:MockERC20");
-      token = await tfac.deploy("Dissapearing Space Monkey","DSM");
-      await token.deployed();
-      await token.mint(accounts[0].address,web3.utils.toWei("1000000"))
-      //deploy tellor
-      let TellorOracle = await ethers.getContractFactory(abi, bytecode);
-      tellor = await TellorOracle.deploy();
-      await tellor.deployed();
-      //deploy charon
-      cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
-      charon= await cfac.deploy(verifier.address,hasher,token.address,fee,tellor.address,denomination,merkleTreeHeight);
-      await charon.deployed();
-      //deploy everything again on the next chain
-      //can we assume it will work with two chains if just testing one?
+  let mainnetBlock = 0;
+  let groth16
+  let abiCoder = new ethers.utils.AbiCoder();
+
+  beforeEach("deploy and setup mixer", async function() {
+    tree = new MerkleTree(merkleTreeHeight)
+    groth16 = await buildGroth16()
+    if(run == 0){
+      const directors = await fetch('https://api.blockcypher.com/v1/eth/main').then(response => response.json());
+      mainnetBlock = directors.height - 15;
+      console.log("     Forking from block: ",mainnetBlock)
+      run = 1;
+    }
+    accounts = await ethers.getSigners();
+    await hre.network.provider.request({
+      method: "hardhat_reset",
+      params: [{forking: {
+            jsonRpcUrl: hre.config.networks.hardhat.forking.url,
+            blockNumber: mainnetBlock
+          },},],
+      });
+    //deploy verifier
+    ivfac = await ethers.getContractFactory("contracts/helpers/Verifier.sol:Verifier");
+    verifier = await ivfac.deploy()
+    await verifier.deployed();
+    //deploy mock token
+    tfac = await ethers.getContractFactory("contracts/mocks/MockERC20.sol:MockERC20");
+    token = await tfac.deploy("Dissapearing Space Monkey","DSM");
+    await token.deployed();
+    await token.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
+    //deploy tellor
+    let TellorOracle = await ethers.getContractFactory(abi, bytecode);
+    tellor = await TellorOracle.deploy();
+    await tellor.deployed();
+    //deploy charon
+    cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
+    charon= await cfac.deploy(verifier.address,hasher,token.address,fee,tellor.address,denomination,merkleTreeHeight);
+    await charon.deployed();
+
+    //now deploy on other chain (same chain, but we pretend w/ oracles)
+        //deploy mock token
+        verifier2 = await ivfac.deploy()
+        await verifier2.deployed();
+        token2 = await tfac.deploy("Dissapearing Space Monkey2","DSM2");
+        await token2.deployed();
+        await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
+        tellor2 = await TellorOracle.deploy();
+        await tellor2.deployed();
+        charon2= await cfac.deploy(verifier2.address,hasher,token2.address,fee,tellor2.address,denomination,merkleTreeHeight);
+        await charon2.deployed();
 
   });
   

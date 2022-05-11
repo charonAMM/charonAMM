@@ -1,4 +1,19 @@
 {
+  "scripts": {
+    "build:circuit:compile": "npx circom circuits/withdraw.circom -o build/circuits/withdraw.json && npx snarkjs info -c build/circuits/withdraw.json",
+    "build:circuit:setup": "npx snarkjs setup --protocol groth -c build/circuits/withdraw.json --pk build/circuits/withdraw_proving_key.json --vk build/circuits/withdraw_verification_key.json",
+    "build:circuit:bin": "node node_modules/websnark/tools/buildpkey.js -i build/circuits/withdraw_proving_key.json -o build/circuits/withdraw_proving_key.bin",
+    "build:circuit:contract": "npx snarkjs generateverifier -v build/circuits/Verifier.sol --vk build/circuits/withdraw_verification_key.json",
+    "build:circuit": "mkdir -p build/circuits && npm run build:circuit:compile && npm run build:circuit:setup && npm run build:circuit:bin && npm run build:circuit:contract",
+    "build:contract": "npx truffle compile",
+    "build:browserify": "npx browserify src/cli.js -o index.js --exclude worker_threads",
+    "build": "npm run build:circuit",
+    "browserify": "npm run build:browserify",
+    "test": "npx hardhat test",
+    "migrate": "npm run migrate:kovan",
+    "flat": "npx truffle-flattener contracts/ETHTornado.sol > ETHTornado_flat.sol && npx truffle-flattener contracts/ERC20Tornado.sol > ERC20Tornado_flat.sol",
+    "download": "node scripts/downloadKeys.js"
+  },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.5",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
@@ -8,7 +23,9 @@
     "hardhat": "^2.9.3"
   },
   "dependencies": {
-    "circomlib": "git+https://github.com/tornadocash/circomlib.git#c372f14d324d57339c88451834bf2824e73bbdbc",
+    "axios": "^0.19.0",
+    "circom": "^0.0.35",
+    "circomlib": "github:tornadocash/circomlib#c372f14d324d57339c88451834bf2824e73bbdbc",
     "commander": "^4.1.1",
     "dotenv": "^8.2.0",
     "fixed-merkle-tree": "^0.6.0",

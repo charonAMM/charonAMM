@@ -13,6 +13,10 @@ const crypto = require('crypto')
 const circomlib = require('circomlib')
 const MerkleTree = require('fixed-merkle-tree')
 const fetch = require('node-fetch')
+const ETH_AMOUNT=100000000000000000
+require("@nomiclabs/hardhat-ethers");
+circuit = require('../build/circuits/withdraw.json')
+proving_key = fs.readFileSync('build/circuits/withdraw_proving_key.bin').buffer
 
 const rbigint = (nbytes) => snarkjs.bigInt.leBuff2int(crypto.randomBytes(nbytes))
 const pedersenHash = (data) => circomlib.babyJub.unpackPoint(circomlib.pedersenHash.hash(data))[0]
@@ -40,9 +44,12 @@ describe("Mixer Tests", function() {
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
   let run = 0;
   let mainnetBlock = 0;
+  let groth16
+  let relayer, recipient
 
   beforeEach("deploy and setup mixer", async function() {
     tree = new MerkleTree(merkleTreeHeight)
+    groth16 = await buildGroth16()
     if(run == 0){
       const directors = await fetch('https://api.blockcypher.com/v1/eth/main').then(response => response.json());
       mainnetBlock = directors.height - 15;
@@ -86,6 +93,11 @@ describe("Mixer Tests", function() {
   it("Test Withdraw", async function() {
       const deposit = generateDeposit()
       const user = accounts[4].address
+      relayer = accounts[1].address
+      recipient = getRandomRecipient()
+      let operator = accounts[0].address
+      const fee = bigInt(ETH_AMOUNT).shr(1) || bigInt(1e17)
+      const refund = ETH_AMOUNT || '1000000000000000000' // 1 ether
       tree.insert(deposit.commitment)
       await token.mint(user, denomination)
       const balanceUserBefore = await token.balanceOf(user)
@@ -114,12 +126,12 @@ describe("Mixer Tests", function() {
       const balanceMixerBefore = await token.balanceOf(mixer.address)
       const balanceRelayerBefore = await token.balanceOf(relayer)
       const balanceReceiverBefore = await token.balanceOf(toFixedHex(recipient, 20))
-      const ethBalanceOperatorBefore = await web3.eth.getBalance(operator)
-      const ethBalanceReceiverBefore = await web3.eth.getBalance(toFixedHex(recipient, 20))
-      const ethBalanceRelayerBefore = await web3.eth.getBalance(relayer)
+      const ethBalanceOperatorBefore = await ethers.provider.getBalance(accounts[0].address)
+      const ethBalanceReceiverBefore = await ethers.provider.getBalance(toFixedHex(recipient, 20))
+      const ethBalanceRelayerBefore = await ethers.provider.getBalance(relayer)
       let isSpent = await mixer.isSpent(toFixedHex(input.nullifierHash))
-      isSpent.should.be.equal(false)
-      const args = [
+      assert(!isSpent, "should not be spent")
+      const args = [ 
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
         toFixedHex(input.recipient, 20),
@@ -127,13 +139,15 @@ describe("Mixer Tests", function() {
         toFixedHex(input.fee),
         toFixedHex(input.refund),
       ]
-      const { logs } = await mixer.withdraw(proof, ...args, { value: refund, from: relayer, gasPrice: '0' })
+      console.log("here")
+      const { logs } = await mixer.connect(relayer).withdraw(proof, ...args, { value: refund,gasPrice: '0' })
+      console.log("wdraw")
       const balanceMixerAfter = await token.balanceOf(mixer.address)
       const balanceRelayerAfter = await token.balanceOf(relayer)
-      const ethBalanceOperatorAfter = await web3.eth.getBalance(operator)
+      const ethBalanceOperatorAfter = await ethers.provider.getBalance(operator)
       const balanceReceiverAfter = await token.balanceOf(toFixedHex(recipient, 20))
-      const ethBalanceReceiverAfter = await web3.eth.getBalance(toFixedHex(recipient, 20))
-      const ethBalanceRelayerAfter = await web3.eth.getBalance(relayer)
+      const ethBalanceReceiverAfter = await ethers.provider.getBalance(toFixedHex(recipient, 20))
+      const ethBalanceRelayerAfter = await ethers.provider.getBalance(relayer)
       const feeBN = toBN(fee.toString())
       balanceMixerAfter.should.be.eq.BN(toBN(balanceMixerBefore).sub(toBN(denomination)))
       balanceRelayerAfter.should.be.eq.BN(toBN(balanceRelayerBefore).add(feeBN))

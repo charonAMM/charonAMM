@@ -3,6 +3,7 @@ pragma solidity 0.8.4;
 
 import "./Token.sol";
 import "./interfaces/IERC20.sol";
+import "hardhat/console.sol";
 
 contract AMM is Token{
 
@@ -288,7 +289,7 @@ contract AMM is Token{
         }
     }
 
-    function swapExactAmountIn(
+   function swapExactAmountIn(
         address tokenIn,
         uint tokenAmountIn,
         address tokenOut,
@@ -304,7 +305,7 @@ contract AMM is Token{
         require(_records[tokenOut].bound, "ERR_NOT_BOUND");
         Record storage inRecord = _records[address(tokenIn)];
         Record storage outRecord = _records[address(tokenOut)];
-        require(tokenAmountIn <= inRecord.balance * MAX_IN_RATIO, "ERR_MAX_IN_RATIO");
+        require(tokenAmountIn <= bmul(inRecord.balance, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
         uint spotPriceBefore = calcSpotPrice(
                                     inRecord.balance,
                                     inRecord.denorm,
@@ -322,8 +323,8 @@ contract AMM is Token{
                             swapFee
                         );
         require(tokenAmountOut >= minAmountOut, "ERR_LIMIT_OUT");
-        inRecord.balance = inRecord.balance + tokenAmountIn;
-        outRecord.balance = outRecord.balance - tokenAmountOut;
+        inRecord.balance = badd(inRecord.balance, tokenAmountIn);
+        outRecord.balance = bsub(outRecord.balance, tokenAmountOut);
         spotPriceAfter = calcSpotPrice(
                                 inRecord.balance,
                                 inRecord.denorm,
@@ -331,10 +332,10 @@ contract AMM is Token{
                                 outRecord.denorm,
                                 swapFee
                             );
-        require(spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
+        require(spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");  
+        console.log(spotPriceAfter);   
         require(spotPriceAfter <= maxPrice, "ERR_LIMIT_PRICE");
-        require(spotPriceBefore <=  tokenAmountIn / tokenAmountOut, "ERR_MATH_APPROX");
-        emit LOG_SWAP(msg.sender, tokenIn, tokenOut, tokenAmountIn, tokenAmountOut);
+        require(spotPriceBefore <= bdiv(tokenAmountIn, tokenAmountOut), "ERR_MATH_APPROX");
         _pullUnderlying(tokenIn, msg.sender, tokenAmountIn);
         _pushUnderlying(tokenOut, msg.sender, tokenAmountOut);
         return (tokenAmountOut, spotPriceAfter);

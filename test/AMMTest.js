@@ -38,17 +38,22 @@ describe("Test AMM", function() {
       await token2.transfer(accounts[2].address,web3.utils.toWei("100000"))
       //user approves tokens
       await token1.connect(accounts[1]).approve(amm.address,web3.utils.toWei("100"))
-      console.log("here")
       //current balance is init 100000 , each weight is 1, init poolSupply is 100e18, totalWeight is 2, put 10e18 in, fee is min 10e16
       let amountOut = await (await amm.calcPoolOutGivenSingleIn(web3.utils.toWei("100000"),1,web3.utils.toWei("100"),2,web3.utils.toWei("10"),swapFee))
-      console.log("amount out", amountOut)
       //user joinPool
       await amm.connect(accounts[1]).joinswapExternAmountIn(token1.address,web3.utils.toWei("10"),amountOut)//pool amount out, maxIn
       //user runs swapExactAmountIn (trades with a specific input)
-      await amm.connect(accounts[2].swapExactAmountIn(token2.address,web3.utils.toWei("10"),token2.addreess,web3.utils.toWei("5"),2))
-      //test other functions?  What are they all and which one do we want? 
-      //Test AMM pool token interactions
-      await amm.connect(accounts[1]).transfer(accounts[3].address,web3.utils.toWei("5"));
-      assert(await amm.balanceOf(accounts[3]) == web3.utils.toWei["5"], "transfer should work")
+
+      let spotPrice = await amm.calcSpotPrice(web3.utils.toWei("200010"),web3.utils.toWei("1"),web3.utils.toWei("100004"),web3.utils.toWei("1"),swapFee)
+      let out = await amm.calcOutGivenIn(web3.utils.toWei("200000"),web3.utils.toWei("1"),web3.utils.toWei("100010"),web3.utils.toWei("1"),web3.utils.toWei("10"),swapFee)
+      console.log(out)
+      console.log(spotPrice)
+      await token2.connect(accounts[2]).approve(amm.address,web3.utils.toWei("100"))
+      await amm.connect(accounts[2]).swapExactAmountIn(token2.address,web3.utils.toWei("10"),token1.address,out,spotPrice)
+
+      let myPoolBalance = await amm.balanceOf(accounts[1].address)
+      console.log(ethers.utils.formatEther(myPoolBalance))
+      await amm.connect(accounts[1]).transfer(accounts[3].address,myPoolBalance);
+      assert(await amm.balanceOf(accounts[3].address) - myPoolBalance == 0, "transfer should work")
   });
 });

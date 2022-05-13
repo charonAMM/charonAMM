@@ -121,7 +121,7 @@ contract Math{
         uint tokenAmountIn,
         uint swapFee
     )
-        public
+        public pure
         returns (uint poolAmountOut)
     {
         // Charge the trading fee for the proportion of tokenAi

@@ -17,6 +17,7 @@ const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlaygro
 const h = require("usingtellor/test/helpers/helpers.js");
 circuit = require('../build/circuits/withdraw.json')
 proving_key = fs.readFileSync('build/circuits/withdraw_proving_key.bin').buffer
+hasherArtifact = require('../build/Hasher.json')
 
 const rbigint = (nbytes) => snarkjs.bigInt.leBuff2int(crypto.randomBytes(nbytes))
 const pedersenHash = (data) => circomlib.babyJub.unpackPoint(circomlib.pedersenHash.hash(data))[0]
@@ -40,10 +41,18 @@ function generateDeposit() {
 //to do - figure out how to deploy hasher on different chain
 //figure out how to have different curves for multiple chains
 
+//instructions
+//npm run build
+//move Verifier.sol from build/circuits to contracts/helpers
+//npm run hasher (generates hasher artifact)
+//npx hardhat compile
+//npx hardhat test
+
 describe("Charon Funciton Tests", function() {
   let charon,cfac,ivfac,ihfac,verifier,tellor,accounts,token;
   let charon2,verifier2,tellor2, token2;
-  let hasher= "0x83584f83f26af4edda9cbe8c730bc87c364b28fe";
+  //let hasher= "0x83584f83f26af4edda9cbe8c730bc87c364b28fe";
+  let hasher,hasher2;
   let denomination = web3.utils.toWei("10")
   let tree
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
@@ -74,6 +83,11 @@ describe("Charon Funciton Tests", function() {
     ivfac = await ethers.getContractFactory("contracts/helpers/Verifier.sol:Verifier");
     verifier = await ivfac.deploy()
     await verifier.deployed();
+
+      console.log(hasherArtifact.abi)
+    let hvfac = await ethers.getContractFactory(hasherArtifact.abi,hasherArtifact.bytecode);
+    hasher = await hvfac.deploy();
+    await hasher.deployed();
     //deploy mock token
     tfac = await ethers.getContractFactory("contracts/mocks/MockERC20.sol:MockERC20");
     token = await tfac.deploy("Dissapearing Space Monkey","DSM");
@@ -85,7 +99,7 @@ describe("Charon Funciton Tests", function() {
     await tellor.deployed();
     //deploy charon
     cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
-    charon= await cfac.deploy(verifier.address,hasher,token.address,fee,tellor.address,denomination,merkleTreeHeight);
+    charon= await cfac.deploy(verifier.address,hasher.address,token.address,fee,tellor.address,denomination,merkleTreeHeight);
     await charon.deployed();
 
     //now deploy on other chain (same chain, but we pretend w/ oracles)
@@ -97,7 +111,9 @@ describe("Charon Funciton Tests", function() {
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
         tellor2 = await TellorOracle.deploy();
         await tellor2.deployed();
-        charon2= await cfac.deploy(verifier2.address,hasher,token2.address,fee,tellor2.address,denomination,merkleTreeHeight);
+        hasher2 = await hvfac.deploy();
+        await hasher2.deployed();
+        charon2= await cfac.deploy(verifier2.address,hasher2.address,token2.address,fee,tellor2.address,denomination,merkleTreeHeight);
         await charon2.deployed();
 
 
@@ -138,9 +154,7 @@ describe("Charon Funciton Tests", function() {
         toFixedHex(input.recipient, 20),
         toFixedHex(input.relayer, 20),
         toFixedHex(input.fee),
-        toFixedHex(input.refund),
-        true
-      ]
+        toFixedHex(input.refund)]
       //pass value w/tellor
       depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
       queryData = abiCoder.encode(
@@ -157,7 +171,25 @@ describe("Charon Funciton Tests", function() {
       await h.advanceTime(43200)//12 hours
       //withdraw on other chain
       await charon2.oracleDeposit(1,depositId)
-      await charon2.secretWithdraw(proof, ...args)
+      console.log("trying to withdraw")
+      console.log(proof);
+      var myBuffer = [];
+      var str = 'Stack Overflow';
+      var buffer = new Buffer(str, 'utf16le');
+      for (var i = 0; i < buffer.length; i++) {
+          myBuffer.push(buffer[i]);
+      }
+      console.log(myBuffer)
+      let p = await verifier.verifyProof(myBuffer,[0,1,2,3,4,5])
+      console.log("verified?", p)
+
+      await charon2.secretWithdraw(proof,
+        toFixedHex(input.root),
+        toFixedHex(input.nullifierHash),
+        toFixedHex(input.recipient, 20),
+        toFixedHex(input.relayer, 20),
+        toFixedHex(input.fee),
+        toFixedHex(input.refund),true)
 
       //now do the same thing on the other chain
       deposit = generateDeposit()

@@ -8,6 +8,7 @@
     "build:contract": "npx truffle compile",
     "build:browserify": "npx browserify src/cli.js -o index.js --exclude worker_threads",
     "build": "npm run build:circuit",
+    "hasher":"npm run scripts/generateHasher.js",
     "browserify": "npm run build:browserify",
     "test": "npx hardhat test",
     "migrate": "npm run migrate:kovan",

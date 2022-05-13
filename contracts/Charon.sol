@@ -6,6 +6,7 @@ import "./helpers/MerkleTree.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 import "./Token.sol";
+import "hardhat/console.sol";
 
 contract Charon is Token, UsingTellor, MerkleTree{
 
@@ -236,6 +237,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
         }
       }
     }
+
 
     //GETTERS
 

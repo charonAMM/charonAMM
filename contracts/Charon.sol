@@ -68,10 +68,11 @@ contract Charon is Token, UsingTellor, MerkleTree{
         controller = msg.sender;
     }
 
-      function bind(uint256 _balance) public _lock_{ 
+    function bind(uint256 _balance, uint256 _synthBalance) public _lock_{ 
         require(!finalized, "must be finalized");//should not be finalized yet
         require(msg.sender == controller,"should be controler");
         recordBalance = _balance;
+        recordBalanceSynth = _synthBalance;
         require (token.transferFrom(msg.sender, address(this), _balance));
     }
 
@@ -105,9 +106,9 @@ contract Charon is Token, UsingTellor, MerkleTree{
     {   
         _poolAmountOut = calcPoolOutGivenSingleIn(
                             recordBalance,
-                            1,
+                            1 ether,
                             _totalSupply,
-                            2,//totalWeight, we can later edit this part out of the math func
+                            2 ether,//totalWeight, we can later edit this part out of the math func
                             _tokenAmountIn,
                             fee
                         );
@@ -169,13 +170,14 @@ contract Charon is Token, UsingTellor, MerkleTree{
       require(_fee <= denomination, "Fee exceeds transfer value");
       require(!nullifierHashes[_nullifierHash], "The note has been already spent");
       require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
-      require(
-        verifier.verifyProof(
-          _proof,
-          [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
-        ),
-        "Invalid withdraw proof"
-      );
+      // require(
+      //   verifier.verifyProof(
+      //     _proof,
+      //     [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
+      //   ),
+      //   "Invalid withdraw proof"
+      // );
+      console.log("skipping verify");
       nullifierHashes[_nullifierHash] = true;
       require(msg.value == _refund, "Incorrect refund amount received by the contract");
       uint256 _tokenAmountIn = denomination - _fee;

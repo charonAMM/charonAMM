@@ -140,7 +140,9 @@ describe("Mixer Tests", function() {
         toFixedHex(input.refund),
       ]
       console.log("here")
-      const { logs } = await mixer.connect(relayer).withdraw(proof, ...args, { value: refund,gasPrice: '0' })
+      console.log
+      const options = {value: ethers.utils.parseEther("1.0")}
+      const { logs } = await mixer.connect(accounts[1]).withdraw(proof, ...args,options)
       console.log("wdraw")
       const balanceMixerAfter = await token.balanceOf(mixer.address)
       const balanceRelayerAfter = await token.balanceOf(relayer)

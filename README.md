@@ -63,4 +63,11 @@ Flow
 
 
 
+TODO
+    - add fee going to LPs
+    - fix all tests (verify withdraw)
+    - write scripts for deploying on multiple chains with different verifiers
+    - document how to handle different tokens.  Should input have tellor oracle give price?  Does it need a price if the same amount of tokens?  would this kill anonymity? 
+
+
 

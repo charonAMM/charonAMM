@@ -26,7 +26,7 @@
   "dependencies": {
     "axios": "^0.19.0",
     "circom": "^0.0.35",
-    "circomlib": "github:tornadocash/circomlib#c372f14d324d57339c88451834bf2824e73bbdbc",
+    "circomlib": "git+https://github.com/tornadocash/circomlib.git#3b492f9801573eebcfe1b6c584afe8a3beecf2b4",
     "commander": "^4.1.1",
     "dotenv": "^8.2.0",
     "fixed-merkle-tree": "^0.6.0",

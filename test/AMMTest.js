@@ -46,13 +46,10 @@ describe("Test AMM", function() {
 
       let spotPrice = await amm.calcSpotPrice(web3.utils.toWei("200010"),web3.utils.toWei("1"),web3.utils.toWei("100004"),web3.utils.toWei("1"),swapFee)
       let out = await amm.calcOutGivenIn(web3.utils.toWei("200000"),web3.utils.toWei("1"),web3.utils.toWei("100010"),web3.utils.toWei("1"),web3.utils.toWei("10"),swapFee)
-      console.log(out)
-      console.log(spotPrice)
       await token2.connect(accounts[2]).approve(amm.address,web3.utils.toWei("100"))
       await amm.connect(accounts[2]).swapExactAmountIn(token2.address,web3.utils.toWei("10"),token1.address,out,spotPrice)
 
       let myPoolBalance = await amm.balanceOf(accounts[1].address)
-      console.log(ethers.utils.formatEther(myPoolBalance))
       await amm.connect(accounts[1]).transfer(accounts[3].address,myPoolBalance);
       assert(await amm.balanceOf(accounts[3].address) - myPoolBalance == 0, "transfer should work")
   });

@@ -18,7 +18,6 @@ const h = require("usingtellor/test/helpers/helpers.js");
 circuit = require('../build/circuits/withdraw.json')
 proving_key = fs.readFileSync('build/circuits/withdraw_proving_key.bin').buffer
 hasherArtifact = require('../build/Hasher.json')
-const ERC20Addy = "0xf1b63f6fa5492936812af7d1fb2671079af05459"
 
 
 const rbigint = (nbytes) => snarkjs.bigInt.leBuff2int(crypto.randomBytes(nbytes))
@@ -67,20 +66,20 @@ describe("Charon Funciton Tests", function() {
   beforeEach("deploy and setup mixer", async function() {
     tree = new MerkleTree(merkleTreeHeight)
     groth16 = await buildGroth16()
-    if(run == 0){
-      const directors = await fetch('https://api.blockcypher.com/v1/eth/main').then(response => response.json());
-      mainnetBlock = directors.height - 15;
-      console.log("     Forking from block: ",mainnetBlock)
-      run = 1;
-    }
+    // if(run == 0){
+    //   const directors = await fetch('https://api.blockcypher.com/v1/eth/main').then(response => response.json());
+    //   mainnetBlock = directors.height - 15;
+    //   console.log("     Forking from block: ",mainnetBlock)
+    //   run = 1;
+    // }
     accounts = await ethers.getSigners();
-    await hre.network.provider.request({
-      method: "hardhat_reset",
-      params: [{forking: {
-            jsonRpcUrl: hre.config.networks.hardhat.forking.url,
-            blockNumber: mainnetBlock
-          },},],
-      });
+    // await hre.network.provider.request({
+    //   method: "hardhat_reset",
+    //   params: [{forking: {
+    //         jsonRpcUrl: hre.config.networks.hardhat.forking.url,
+    //         blockNumber: mainnetBlock
+    //       },},],
+    //   });
     //deploy verifier
     ivfac = await ethers.getContractFactory("contracts/helpers/Verifier.sol:Verifier");
     verifier = await ivfac.deploy()
@@ -90,9 +89,9 @@ describe("Charon Funciton Tests", function() {
     await hasher.deployed();
     //deploy mock token
     tfac = await ethers.getContractFactory("contracts/mocks/MockERC20.sol:MockERC20");
-    // token = await tfac.deploy("Dissapearing Space Monkey","DSM");
-    //await token.deployed();
-    token = await ethers.getContractAt("contracts/mocks/MockERC20.sol:MockERC20", ERC20Addy);
+    token = await tfac.deploy("Dissapearing Space Monkey","DSM");
+    await token.deployed();
+    //token = await ethers.getContractAt("contracts/mocks/MockERC20.sol:MockERC20", ERC20Addy);
     await token.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
     //deploy tellor
     let TellorOracle = await ethers.getContractFactory(abi, bytecode);
@@ -118,8 +117,8 @@ describe("Charon Funciton Tests", function() {
         await charon2.deployed();
 
     //now set both of them. 
-    await token.approve(charon.address,web3.utils.toWei("100"))//100k
-    await token2.approve(charon2.address,web3.utils.toWei("100"))//100k
+    await token.approve(charon.address,web3.utils.toWei("100"))//100
+    await token2.approve(charon2.address,web3.utils.toWei("100"))//100
     await charon.bind(web3.utils.toWei("100"),web3.utils.toWei("100"));
     await charon2.bind(web3.utils.toWei("100"),web3.utils.toWei("100"))
     await charon.finalize();
@@ -161,30 +160,84 @@ describe("Charon Funciton Tests", function() {
     assert(await testCharon.balanceOf(accounts[0].address) - await testCharon.INIT_POOL_SUPPLY() == 0, "should have full balance")
   });
   it("Test lpDeposit", async function() {
-    //mint and approve tokens
-    //calcPoolOutGivenSingleIn(for min out)
-    //lpDeposit
-    //assert tokens taken, correct pool tokens issued
-    assert(0==1)
+    await token.mint(accounts[1].address,web3.utils.toWei("100"))
+    await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
+    let minOut = await charon.calcPoolOutGivenSingleIn(web3.utils.toWei("100"),//tokenBalanceIn
+                                          web3.utils.toWei("1"),//tokenWeightIn
+                                          web3.utils.toWei("100"),//poolSupply
+                                          web3.utils.toWei("2"),//totalWeight
+                                          web3.utils.toWei("10"),//tokenamountIn
+                                          0//swapfee
+                                          )
+    assert(minOut >= web3.utils.toWei("4.88"), "should be greater than this")
+    await charon.connect(accounts[1]).lpDeposit(web3.utils.toWei("10"),minOut)
+    assert(await charon.recordBalance() == web3.utils.toWei("110"), "record balance should be correct")
+    assert(await charon.balanceOf(accounts[1].address) - minOut == 0, "mint of tokens should be correct")
+    assert(await token.balanceOf(accounts[1].address) == web3.utils.toWei("90"), "contract should take tokens")
   });
   it("Test lpWithdraw", async function() {
-    assert(0==1)
-  });
+    await token.mint(accounts[1].address,web3.utils.toWei("100"))
+    await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
+    let minOut = await charon.calcPoolOutGivenSingleIn(web3.utils.toWei("100"),//tokenBalanceIn
+                                          web3.utils.toWei("1"),//tokenWeightIn
+                                          web3.utils.toWei("100"),//poolSupply
+                                          web3.utils.toWei("2"),//totalWeight
+                                          web3.utils.toWei("10"),//tokenamountIn
+                                          0//swapfee
+                                          )
+    await charon.connect(accounts[1]).lpDeposit(web3.utils.toWei("10"),minOut)
+    let poolSupply = await charon.totalSupply()
+    let recordBalance = await charon.recordBalance() 
+    let poolOut = await charon.calcSingleOutGivenPoolIn(recordBalance,//tokenBalanceOut
+                                  web3.utils.toWei("1"),//tokenWeightOut
+                                  poolSupply,
+                                  web3.utils.toWei("2"),//totalWeight
+                                  minOut,//poolAmountIn
+                                  0//swapfee
+    )
+    assert(poolOut >= web3.utils.toWei("10"), "should spit out correct amount of tokens")
+    await charon.connect(accounts[1]).lpWithdraw(minOut, poolOut)
+    assert(await charon.recordBalance() > web3.utils.toWei("99"), "record balance should be back to correct" )
+    assert(web3.utils.toWei("101") - await charon.recordBalance() > 0, "record balance should be back to correct" )
+    //test fee later
+    assert(await charon.balanceOf(accounts[1].address) == 0, "all pool tokens should be gone")
+    assert(await token.balanceOf(accounts[1].address) - web3.utils.toWei("99") > 0, "token balance should be back to correct" )
+    assert(web3.utils.toWei("101") - await token.balanceOf(accounts[1].address) > 0, "token balance should be back to correct" )
+    });
   it("Test oracleDeposit", async function() {
     deposit = await generateDeposit()
     tree.insert(deposit.commitment)
+    await token.approve(charon.address,denomination)
     await charon.depositToOtherChain(toFixedHex(deposit.commitment));
-    assert(await charon.commitments(deposit.commitment), "should store commitment")
-    let depositID = await getDepositCommitmentsById(deposit.commitment);
-    assert(await charon.getDepositCommitmentsById(depositID) == deposit.commitment, "should be right commitment")
-  });
+    let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
+    queryData = abiCoder.encode(
+      ['string', 'bytes'],
+      ['Charon', abiCoder.encode(
+        ['uint256','uint256'],
+        [1,depositId]
+      )]
+    );
+    queryId = h.hash(queryData)
+    let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+    await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
+    await h.advanceTime(43200)//12 hours
+    await charon2.oracleDeposit(1,depositId);
+    console.log("actual",toFixedHex(deposit.commitment))
+    console.log(await charon2.roots(1))
+    console.log(await charon2.roots(2))
+    console.log(await charon2.commitments["0x15b720a3a0d8e45b81cec236359855a5f506cac4499883439d4d7d1fb1d33ceb"])
+    assert(await charon2.commitments[toFixedHex(deposit.commitment)], "should be a commitment")
+    assert(await charon2.isSpent(pedersenHash(deposit.nullifier.leInt2Buff(31))) == false, "nullifierHash should be false")
+    });
   it("Test secretWithdraw - no LP", async function() {
+    await token.mint(accounts[2].address,denomination);
+    await token.connect(accounts[2]).approve(charon.address,denomination)
     let deposit;
     let _root = 0;
     let queryData, queryId,depositId,nonce;
       deposit = await generateDeposit()
       tree.insert(deposit.commitment)
-      await charon.depositToOtherChain(toFixedHex(deposit.commitment));
+      await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
       const { pathElements, pathIndices } = tree.path(_root)
       _root++
       // Circuit input
@@ -229,9 +282,12 @@ describe("Charon Funciton Tests", function() {
         input.recipient,
         input.relayer,0,0])
       console.log("verified?", p)
-      assert(await isSpent(input.nullifierHash == false), "nullifierHash should be false"
-      let isA = await charon2.isSpentArray([input.nullifierHash]);
+      assert(await charon2.isSpent(toFixedHex(input.nullifierHash)) == false, "nullifierHash should be false")
+      let isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
+      console.log("h")
       assert(isA[0] == false, "value in array should be false")
+      let initSynth = await charon2.recordBalanceSynth()
+      let initRecord = await charon2.recordBalance()
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
@@ -239,17 +295,31 @@ describe("Charon Funciton Tests", function() {
         toFixedHex(input.relayer, 20),
         toFixedHex(input.fee),
         toFixedHex(input.refund),true)
-      assert(await isSpent(input.nullifierHash), "nullifierHash should be true"
-      let isA = await charon2.isSpentArray([input.nullifierHash]);
-      assert(0 ==1, "trade should happen, recordBalance reduced")
+      assert(await charon2.isSpent(toFixedHex(input.nullifierHash)), "nullifierHash should be true")
+      console.log("here")
+      isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
+      assert(isA[0],"should be spent")
+      let tokenOut = await charon2.calcOutGivenIn(
+            web3.utils.toWei("100"),
+            web3.utils.toWei("1"),
+            web3.utils.toWei("100"), 
+            web3.utils.toWei("1"),
+            denomination,
+            0
+      )
+      assert(await charon.recordBalanceSynth() == initSynth, "synth balance should be the same")
+      assert(await charon.recordBalance() == initRecord - tokenOut, "recordBalance should change")
+      assert(await token2.balanceOf(accounts[1].address) == tokenOut, "should be paid")
   });
   it("Test secretWithdraw - to LP", async function() {
+    await token.mint(accounts[2].address,denomination);
+    await token.connect(accounts[2]).approve(charon.address,denomination)
     let deposit;
     let _root = 0;
     let queryData, queryId,depositId,nonce;
       deposit = await generateDeposit()
       tree.insert(deposit.commitment)
-      await charon.depositToOtherChain(toFixedHex(deposit.commitment));
+      await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
       const { pathElements, pathIndices } = tree.path(_root)
       _root++
       // Circuit input
@@ -294,9 +364,11 @@ describe("Charon Funciton Tests", function() {
         input.recipient,
         input.relayer,0,0])
       console.log("verified?", p)
-      assert(await isSpent(input.nullifierHash == false), "nullifierHash should be false"
-      let isA = await charon2.isSpentArray([input.nullifierHash]);
+      assert(await charon2.isSpent(toFixedHex(input.nullifierHash)) == false, "nullifierHash should be false")
+      let isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
       assert(isA[0] == false, "value in array should be false")
+      let initSynth = await charon2.recordBalanceSynth()
+      let initRecord = await charon2.recordBalance()
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
@@ -304,15 +376,19 @@ describe("Charon Funciton Tests", function() {
         toFixedHex(input.relayer, 20),
         toFixedHex(input.fee),
         toFixedHex(input.refund),true)
-
-      assert(await isSpent(input.nullifierHash), "nullifierHash should be true"
-      let isA = await charon2.isSpentArray([input.nullifierHash]);
-      assert(0 ==1, "lp should happen, new balance, recordBalanceSynth")
-  });
-  it("Test isSpent", async function() {
-    assert(0==1)
-  });
-  it("Test isSpentArray", async function() {
-    assert(0==1)
+      assert(await charon2.isSpent(toFixedHex(input.nullifierHash)), "nullifierHash should be true")
+      isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
+      assert(isA[0] == true, "should be spent")
+      let poolOut = await charon.calcPoolOutGivenSingleIn(web3.utils.toWei("100"),//tokenBalanceIn
+      web3.utils.toWei("1"),//tokenWeightIn
+      web3.utils.toWei("100"),//poolSupply
+      web3.utils.toWei("2"),//totalWeight
+      denomination,
+      0//swapfee
+      )
+  assert(await charon.recordBalanceSynth() == initSynth + poolOut, "synth balance should go up")
+  assert(await charon.recordBalance() == initRecord, "recordBalance should go up")
+  assert(await token2.balanceOf(accounts[1].address) == 0, "no tokens should be paid")
+  assert(await charon.balanceOf(accounts[1].address) == poolOut, "pool tokens paid")
   });
 });

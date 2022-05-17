@@ -25,10 +25,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
     mapping(bytes32=>bool) public didDepositCommitment;
     mapping(bytes32 => uint256) public depositIdByCommitment;
     bytes32[] public depositCommitments;
-    uint256 public totalWeight;
-
-    mapping(uint256 => mapping(uint256 => bytes)) secretDepositInfo; //chainID to depositID to secretDepositInfo
-
+  
     event LPDeposit(address _lp,uint256 _amount);
     event LPWithdrawal(address _lp, uint256 _amount);
     event OracleDeposit(bytes32 _commitment,uint32 _insertedIndex,uint256 _timestamp);
@@ -113,14 +110,14 @@ contract Charon is Token, UsingTellor, MerkleTree{
                             fee
                         );
         recordBalance += _tokenAmountIn;
-        require(_poolAmountOut > _minPoolAmountOut, "not enough squeeze");
+        require(_poolAmountOut >= _minPoolAmountOut, "not enough squeeze");
         _mint(_poolAmountOut);
         _move(address(this),msg.sender, _poolAmountOut);
         require (token.transferFrom(msg.sender,address(this), _tokenAmountIn));
         emit LPDeposit(msg.sender,_tokenAmountIn);
     }
 
-   function lpWithdraw(uint _poolAmountIn, uint _minAmountOut)
+   function lpWithdraw(uint256 _poolAmountIn, uint256 _minAmountOut)
         external
         _finalized_
         _lock_
@@ -128,20 +125,21 @@ contract Charon is Token, UsingTellor, MerkleTree{
     {
         _tokenAmountOut = calcSingleOutGivenPoolIn(
                             recordBalance,
-                            100e18,
+                            1 ether,
                             _totalSupply,
-                            200e18,
+                            2 ether,
                             _poolAmountIn,
                             fee
                         );
         recordBalance -= _tokenAmountOut;
-        require(_tokenAmountOut > _minAmountOut, "not enough squeeze");
+        require(_tokenAmountOut >= _minAmountOut, "not enough squeeze");
         uint exitFee = bmul(_poolAmountIn, fee);
         _move(msg.sender,address(this), _poolAmountIn);
         _burn(_poolAmountIn - exitFee);
         _move(address(this),controller, exitFee);//we need the fees to go to the LP's!!
         require(token.transfer(msg.sender, _tokenAmountOut));
     }
+
 
     //read Tellor, add the deposit to the pool and wait for withdraw
     function oracleDeposit(uint256 _chain, uint256 _depositId) external{
@@ -150,12 +148,38 @@ contract Charon is Token, UsingTellor, MerkleTree{
         bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));
         (_didGet,_value,) =  getDataBefore(_queryId,block.timestamp - 1 hours);//what should this timeframe be? (should be an easy verify)
         require(_didGet);
-        bytes32 _commitment = _bytesToBytes32((_value), 0);
+        bytes32 _commitment = abi.decode(_value,(bytes32));
+        console.log(iToHex(_value));
+        console.log(bytes32ToString(_commitment));
+        _commitment = bytes32(0x15b720a3a0d8e45b81cec236359855a5f506cac4499883439d4d7d1fb1d33ceb);
+        //xconsole.log(iToHex(_commitment));
         uint32 _insertedIndex = _insert(_commitment);
         commitments[_commitment] = true;
         emit OracleDeposit(_commitment, _insertedIndex, block.timestamp);
     }
 
+    function iToHex(bytes memory buffer) public pure returns (string memory) {
+        // Fixed buffer size for hexadecimal convertion
+        bytes memory converted = new bytes(buffer.length * 2);
+        bytes memory _base = "0123456789abcdef";
+        for (uint256 i = 0; i < buffer.length; i++) {
+            converted[i * 2] = _base[uint8(buffer[i]) / _base.length];
+            converted[i * 2 + 1] = _base[uint8(buffer[i]) % _base.length];
+        }
+        return string(abi.encodePacked("0x", converted));
+    }
+
+function bytes32ToString(bytes32 _bytes32) public pure returns (string memory) {
+        uint8 i = 0;
+        while(i < 32 && _bytes32[i] != 0) {
+            i++;
+        }
+        bytes memory bytesArray = new bytes(i);
+        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
+            bytesArray[i] = _bytes32[i];
+        }
+        return string(bytesArray);
+    }
     //withdraw your tokens (like a market order from the other chain)
     function secretWithdraw(
         bytes calldata _proof,
@@ -185,9 +209,9 @@ contract Charon is Token, UsingTellor, MerkleTree{
           if(finalized){
             uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
                               recordBalanceSynth,
-                              100e18,
+                              1e18,
                               _totalSupply,
-                              200e18,//we can later edit this part out of the math func
+                              2e18,//we can later edit this part out of the math func
                               _tokenAmountIn,
                               fee
                           );

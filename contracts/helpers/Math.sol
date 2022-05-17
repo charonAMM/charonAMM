@@ -124,18 +124,11 @@ contract Math{
         public pure
         returns (uint poolAmountOut)
     {
-        // Charge the trading fee for the proportion of tokenAi
-        ///  which is implicitly traded to the other pool tokens.
-        // That proportion is (1- weightTokenIn)
-        // tokenAiAfterFee = tAi * (1 - (1-weightTi) * poolFee);
         uint normalizedWeight = bdiv(tokenWeightIn, totalWeight);
         uint zaz = bmul(bsub(BONE, normalizedWeight), swapFee); 
         uint tokenAmountInAfterFee = bmul(tokenAmountIn, bsub(BONE, zaz));
-
         uint newTokenBalanceIn = badd(tokenBalanceIn, tokenAmountInAfterFee);
         uint tokenInRatio = bdiv(newTokenBalanceIn, tokenBalanceIn);
-
-        // uint newPoolSupply = (ratioTi ^ weightTi) * poolSupply;
         uint poolRatio = bpow(tokenInRatio, normalizedWeight);
         uint newPoolSupply = bmul(poolRatio, poolSupply);
         poolAmountOut = bsub(newPoolSupply, poolSupply);

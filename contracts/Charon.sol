@@ -21,7 +21,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
     uint256 public recordBalance;
     uint256 public recordBalanceSynth;
     mapping(bytes32 => bool) public nullifierHashes;
-    mapping(bytes32=>bool) public commitments;
+    mapping(bytes32=>bool) commitments;
     mapping(bytes32=>bool) public didDepositCommitment;
     mapping(bytes32 => uint256) public depositIdByCommitment;
     bytes32[] public depositCommitments;
@@ -149,37 +149,11 @@ contract Charon is Token, UsingTellor, MerkleTree{
         (_didGet,_value,) =  getDataBefore(_queryId,block.timestamp - 1 hours);//what should this timeframe be? (should be an easy verify)
         require(_didGet);
         bytes32 _commitment = abi.decode(_value,(bytes32));
-        console.log(iToHex(_value));
-        console.log(bytes32ToString(_commitment));
-        _commitment = bytes32(0x15b720a3a0d8e45b81cec236359855a5f506cac4499883439d4d7d1fb1d33ceb);
-        //xconsole.log(iToHex(_commitment));
         uint32 _insertedIndex = _insert(_commitment);
         commitments[_commitment] = true;
         emit OracleDeposit(_commitment, _insertedIndex, block.timestamp);
     }
 
-    function iToHex(bytes memory buffer) public pure returns (string memory) {
-        // Fixed buffer size for hexadecimal convertion
-        bytes memory converted = new bytes(buffer.length * 2);
-        bytes memory _base = "0123456789abcdef";
-        for (uint256 i = 0; i < buffer.length; i++) {
-            converted[i * 2] = _base[uint8(buffer[i]) / _base.length];
-            converted[i * 2 + 1] = _base[uint8(buffer[i]) % _base.length];
-        }
-        return string(abi.encodePacked("0x", converted));
-    }
-
-function bytes32ToString(bytes32 _bytes32) public pure returns (string memory) {
-        uint8 i = 0;
-        while(i < 32 && _bytes32[i] != 0) {
-            i++;
-        }
-        bytes memory bytesArray = new bytes(i);
-        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
-            bytesArray[i] = _bytes32[i];
-        }
-        return string(bytesArray);
-    }
     //withdraw your tokens (like a market order from the other chain)
     function secretWithdraw(
         bytes calldata _proof,
@@ -289,9 +263,7 @@ function bytes32ToString(bytes32 _bytes32) public pure returns (string memory) {
     }
   }
 
-  function _bytesToBytes32(bytes memory _b, uint8 _offset) internal pure returns (bytes32 _out) {
-    for (uint8 _i = 0; _i < 32; _i++) {
-      _out |= bytes32(_b[_offset + _i] & 0xFF) >> (_i * 8);
-    }
+  function isCommitment(bytes32 _commitment) external view returns(bool){
+    return commitments[_commitment];
   }
 }

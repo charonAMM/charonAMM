@@ -2,7 +2,6 @@ const { expect } = require("chai");
 var assert = require('assert');
 const web3 = require('web3');
 const fs = require('fs')
-const { toBN } = require('web3-utils')
 const { takeSnapshot, revertSnapshot } = require('./helpers/ganacheHelper')
 const websnarkUtils = require('websnark/src/utils')
 const buildGroth16 = require('websnark/src/groth16')
@@ -10,7 +9,6 @@ const stringifyBigInts = require('websnark/tools/stringifybigint').stringifyBigI
 const snarkjs = require('snarkjs')
 const bigInt = snarkjs.bigInt
 const crypto = require('crypto')
-const fetch = require('node-fetch')
 const circomlib = require('circomlib')
 const MerkleTree = require('fixed-merkle-tree')
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
@@ -45,14 +43,13 @@ function generateDeposit() {
 //instructions
 //npm run build
 //move Verifier.sol from build/circuits to contracts/helpers
-//npm run hasher (generates hasher artifact)
+//npx run scripts/generateHasher.js (generates hasher artifact)
 //npx hardhat compile
 //npx hardhat test
 
 describe("Charon Funciton Tests", function() {
   let charon,cfac,ivfac,ihfac,verifier,tellor,accounts,token;
   let charon2,verifier2,tellor2, token2;
-  //let hasher= "0x83584f83f26af4edda9cbe8c730bc87c364b28fe";
   let hasher,hasher2;
   let denomination = web3.utils.toWei("10")
   let tree
@@ -66,21 +63,7 @@ describe("Charon Funciton Tests", function() {
   beforeEach("deploy and setup mixer", async function() {
     tree = new MerkleTree(merkleTreeHeight)
     groth16 = await buildGroth16()
-    // if(run == 0){
-    //   const directors = await fetch('https://api.blockcypher.com/v1/eth/main').then(response => response.json());
-    //   mainnetBlock = directors.height - 15;
-    //   console.log("     Forking from block: ",mainnetBlock)
-    //   run = 1;
-    // }
     accounts = await ethers.getSigners();
-    // await hre.network.provider.request({
-    //   method: "hardhat_reset",
-    //   params: [{forking: {
-    //         jsonRpcUrl: hre.config.networks.hardhat.forking.url,
-    //         blockNumber: mainnetBlock
-    //       },},],
-    //   });
-    //deploy verifier
     ivfac = await ethers.getContractFactory("contracts/helpers/Verifier.sol:Verifier");
     verifier = await ivfac.deploy()
     await verifier.deployed();
@@ -101,7 +84,6 @@ describe("Charon Funciton Tests", function() {
     cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
     charon= await cfac.deploy(verifier.address,hasher.address,token.address,fee,tellor.address,denomination,merkleTreeHeight);
     await charon.deployed();
-
     //now deploy on other chain (same chain, but we pretend w/ oracles)
         //deploy mock token
         verifier2 = await ivfac.deploy()
@@ -115,7 +97,6 @@ describe("Charon Funciton Tests", function() {
         await hasher2.deployed();
         charon2= await cfac.deploy(verifier2.address,hasher2.address,token2.address,fee,tellor2.address,denomination,merkleTreeHeight);
         await charon2.deployed();
-
     //now set both of them. 
     await token.approve(charon.address,web3.utils.toWei("100"))//100
     await token2.approve(charon2.address,web3.utils.toWei("100"))//100
@@ -166,8 +147,7 @@ describe("Charon Funciton Tests", function() {
                                           web3.utils.toWei("1"),//tokenWeightIn
                                           web3.utils.toWei("100"),//poolSupply
                                           web3.utils.toWei("2"),//totalWeight
-                                          web3.utils.toWei("10"),//tokenamountIn
-                                          0//swapfee
+                                          web3.utils.toWei("10")//tokenamountIn
                                           )
     assert(minOut >= web3.utils.toWei("4.88"), "should be greater than this")
     await charon.connect(accounts[1]).lpDeposit(web3.utils.toWei("10"),minOut)
@@ -182,8 +162,7 @@ describe("Charon Funciton Tests", function() {
                                           web3.utils.toWei("1"),//tokenWeightIn
                                           web3.utils.toWei("100"),//poolSupply
                                           web3.utils.toWei("2"),//totalWeight
-                                          web3.utils.toWei("10"),//tokenamountIn
-                                          0//swapfee
+                                          web3.utils.toWei("10")//tokenamountIn
                                           )
     await charon.connect(accounts[1]).lpDeposit(web3.utils.toWei("10"),minOut)
     let poolSupply = await charon.totalSupply()
@@ -234,30 +213,25 @@ describe("Charon Funciton Tests", function() {
       deposit = await generateDeposit()
       tree.insert(deposit.commitment)
       await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
-      const { pathElements, pathIndices } = tree.path(_root)
-      _root++
+      const { pathElements, pathIndices } = tree.path(0)
       // Circuit input
+      let myR = await charon.getLastRoot();
+      console.log(myR)
+      console.log(tree.root())
       const input = stringifyBigInts({
         root: tree.root(),
         nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
         relayer: accounts[0].address,
-        recipient: accounts[1].address,
+        receiver: accounts[1].address,
         fee: 0,
         refund: 0,
         nullifier: deposit.nullifier,
         secret: deposit.secret,
         pathElements: pathElements,
-        pathIndices: pathIndices,
+        pathIndex: pathIndices,
       })
       const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
       const { proof } = websnarkUtils.toSolidityInput(proofData)
-      const args = [
-        toFixedHex(input.root),
-        toFixedHex(input.nullifierHash),
-        toFixedHex(input.recipient, 20),
-        toFixedHex(input.relayer, 20),
-        toFixedHex(input.fee),
-        toFixedHex(input.refund)]
       //pass value w/tellor
       depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
       queryData = abiCoder.encode(
@@ -274,9 +248,9 @@ describe("Charon Funciton Tests", function() {
       //withdraw on other chain
       await charon2.oracleDeposit(1,depositId)
       let p = await verifier["verifyProof(bytes,uint256[6])"](proof,[0,
-        input.nullifierHash,
-        input.recipient,
-        input.relayer,0,0])
+        toFixedHex(input.nullifierHash),
+        toFixedHex(input.receiver),
+        toFixedHex(input.relayer),0,0])
       console.log("verified?", p)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)) == false, "nullifierHash should be false")
       let isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
@@ -286,9 +260,8 @@ describe("Charon Funciton Tests", function() {
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
-        toFixedHex(input.recipient, 20),
+        toFixedHex(input.receiver, 20),
         toFixedHex(input.relayer, 20),
-        toFixedHex(input.fee),
         toFixedHex(input.refund),false)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)), "nullifierHash should be true")
       isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
@@ -320,24 +293,17 @@ describe("Charon Funciton Tests", function() {
       const input = stringifyBigInts({
         root: tree.root(),
         nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
-        relayer: accounts[0].address,
-        recipient: accounts[1].address,
+        relayer: toFixedHex(accounts[0].address),
+        receiver: toFixedHex(accounts[1].address),
         fee: 0,
         refund: 0,
         nullifier: deposit.nullifier,
         secret: deposit.secret,
         pathElements: pathElements,
-        pathIndices: pathIndices,
+        pathIndex: pathIndices,
       })
       const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
       const { proof } = websnarkUtils.toSolidityInput(proofData)
-      const args = [
-        toFixedHex(input.root),
-        toFixedHex(input.nullifierHash),
-        toFixedHex(input.recipient, 20),
-        toFixedHex(input.relayer, 20),
-        toFixedHex(input.fee),
-        toFixedHex(input.refund)]
       //pass value w/tellor
       depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
       queryData = abiCoder.encode(
@@ -354,9 +320,9 @@ describe("Charon Funciton Tests", function() {
       //withdraw on other chain
       await charon2.oracleDeposit(1,depositId)
       let p = await verifier["verifyProof(bytes,uint256[6])"](proof,[0,
-        input.nullifierHash,
-        input.recipient,
-        input.relayer,0,0])
+        toFixedHex(input.nullifierHash),
+        toFixedHex(input.receiver),
+        toFixedHex(input.relayer),0,0])
       console.log("verified?", p)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)) == false, "nullifierHash should be false")
       let isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
@@ -366,9 +332,8 @@ describe("Charon Funciton Tests", function() {
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
-        toFixedHex(input.recipient, 20),
+        toFixedHex(input.receiver, 20),
         toFixedHex(input.relayer, 20),
-        toFixedHex(input.fee),
         toFixedHex(input.refund),true)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)), "nullifierHash should be true")
       isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
@@ -377,8 +342,7 @@ describe("Charon Funciton Tests", function() {
       web3.utils.toWei("1"),//tokenWeightIn
       web3.utils.toWei("100"),//poolSupply
       web3.utils.toWei("2"),//totalWeight
-      denomination,
-      0//swapfee
+      denomination
       )
   assert(await charon2.recordBalanceSynth() - initSynth - denomination == 0, "synth balance should go up")
   assert(await charon2.recordBalance() - initRecord == 0, "recordBalance should be the same")

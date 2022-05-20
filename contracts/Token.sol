@@ -16,7 +16,6 @@ contract Token is Math{
     string  private _symbol   = "C";
     uint8   private _decimals = 18;
 
-
     function name() public view returns (string memory) {
         return _name;
     }

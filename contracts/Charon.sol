@@ -8,24 +8,34 @@ import "./interfaces/IVerifier.sol";
 import "./Token.sol";
 import "hardhat/console.sol";
 
+/**
+ @author themandalore
+ @title charon
+ @dev charon is a decentralized protocol for a Privacy Enabled Cross-Chain AMM (PECCAMM). 
+ * it achieves privacy by breaking the link between deposits on one chain and withdrawals on another. 
+ * it creates AMM's on multiple chains, but LP deposits in one of the assets and all orders are 
+ * only achieved via depositing in alternate chains and then withdrawing as either an LP or market order.
+ * to acheive cross-chain functionality, Charon utilizes tellor to pass commitments between chains.
+*/
 contract Charon is Token, UsingTellor, MerkleTree{
 
-    IERC20 public token;
+    IERC20 public token;//token deposited at this address
     IVerifier public verifier;
-    uint256 public fee;//fee when liquidity is withdrawn
-    uint256 public denomination;
+    uint256 public fee;//fee when liquidity is withdrawn or trade happens
+    uint256 public denomination;//trade size (fixed for privacy)
     uint32 public merkleTreeHeight;
-    address public controller;
+    address public controller;//finalizes contracts, generates fees
     bool public finalized;
-    bool private _mutex;
-    uint256 public recordBalance;
-    uint256 public recordBalanceSynth;
-    mapping(bytes32 => bool) public nullifierHashes;
-    mapping(bytes32=>bool) commitments;
-    mapping(bytes32=>bool) public didDepositCommitment;
-    mapping(bytes32 => uint256) public depositIdByCommitment;
-    bytes32[] public depositCommitments;
+    bool private _mutex;//used for reentrancy protection
+    uint256 public recordBalance;//balance of asset stored in this contract
+    uint256 public recordBalanceSynth;//balance of asset bridged from other chain
+    mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
+    mapping(bytes32=>bool) commitments;//commitments ready for withdrawal (or withdrawn)
+    mapping(bytes32=>bool) public didDepositCommitment;//tells you whether tellor deposited a commitment
+    mapping(bytes32 => uint256) public depositIdByCommitment;//gives you a deposit ID (used by tellor) given a commitment
+    bytes32[] public depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
   
+    //events
     event LPDeposit(address _lp,uint256 _amount);
     event LPWithdrawal(address _lp, uint256 _amount);
     event OracleDeposit(bytes32 _commitment,uint32 _insertedIndex,uint256 _timestamp);
@@ -33,22 +43,31 @@ contract Charon is Token, UsingTellor, MerkleTree{
     event SecretLP(address _recipient,uint256 _poolAmountOut);
     event SecretMarketOrder(address _recipient, uint256 _tokenAmountOut);
 
+    //modifiers
+    /**
+     * @dev prevents reentrancy in function
+    */
     modifier _lock_() {
         require(!_mutex|| msg.sender == address(verifier));
-        _mutex = true;
-        _;
-        _mutex = false;
-    }
-
-    modifier _finalized_() {
-      if(!finalized){
-        require(msg.sender == controller);
-      }
-      _;
+        _mutex = true;_;_mutex = false;
     }
 
     /**
-     * @dev constructor to start
+     * @dev requires a function to be finalized or the caller to be the controlller
+    */
+    modifier _finalized_() {
+      if(!finalized){require(msg.sender == controller);}_;
+    }
+
+    /**
+     * @dev constructor to launch charon
+     * @param _verifier address of the verifier contract (circom generated sol)
+     * @param _hasher address of the hasher contract (mimC precompile)
+     * @param _token address of token on this chain of the system
+     * @param _fee fee when withdrawing liquidity or trading (pct of tokens)
+     * @param _tellor tellor oracle address
+     * @param _denomination size of deposit/withdraw in _token
+     * @param _merkleTreeHeight merkleTreeHeight (should match that of circom compile)
      */
     constructor(address _verifier,
                 IHasher _hasher,
@@ -58,6 +77,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
                 uint256 _denomination,
                 uint32 _merkleTreeHeight) 
               UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher){
+        require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
         token = IERC20(_token);
         fee = _fee;
@@ -65,18 +85,33 @@ contract Charon is Token, UsingTellor, MerkleTree{
         controller = msg.sender;
     }
 
+    /**
+     * @dev bind sets the initial balance in the contract for AMM pool
+     * @param _balance balance of _token to initialize AMM pool
+     * @param _synthBalance balance of token on other side of pool initializing pool (sets initial price)
+     */
     function bind(uint256 _balance, uint256 _synthBalance) public _lock_{ 
-        require(!finalized, "must be finalized");//should not be finalized yet
+        require(!finalized, "must be finalized");
         require(msg.sender == controller,"should be controler");
         recordBalance = _balance;
         recordBalanceSynth = _synthBalance;
         require (token.transferFrom(msg.sender, address(this), _balance));
     }
 
+    /**
+     * @dev Allows the controller to change their address
+     * @param _newController new controller.  Should be DAO for recieving fees once finalized
+     */
     function changeController(address _newController) external{
+      require(msg.sender == controller,"should be controler");
       controller = _newController;
     }
 
+    /**
+     * @dev function for user to lock tokens for lp/trade on other chain
+     * @param _commitment deposit commitment generated by zkproof
+     * @return _depositId returns the depositId (position in commitment array)
+     */
     function depositToOtherChain(bytes32 _commitment) external _finalized_ returns(uint256 _depositId){
         didDepositCommitment[_commitment] = true;
         depositCommitments.push(_commitment);
@@ -87,14 +122,23 @@ contract Charon is Token, UsingTellor, MerkleTree{
         emit DepositToOtherChain(_commitment, block.timestamp);
     }
 
+    /**
+     * @dev Allows the controller to start the system
+     */
     function finalize() external _lock_ {
-        require(msg.sender == controller, "ERR_NOT_CONTROLLER");
-        require(!finalized, "ERR_IS_FINALIZED");
+        require(msg.sender == controller, "should be controller");
+        require(!finalized, "should be finalized");
         finalized = true;
         _mint(INIT_POOL_SUPPLY);
         _move(address(this),msg.sender, INIT_POOL_SUPPLY);
     }
 
+    /**
+     * @dev Allows a user to deposit as an LP on this side of the AMM
+     * @param _tokenAmountIn amount of token to LP
+     * @param _minPoolAmountOut minimum pool tokens you will take out (prevents front running)
+     * @return _poolAmountOut returns a uint amount of tokens out
+     */
     function lpDeposit(uint _tokenAmountIn, uint _minPoolAmountOut)
         external
         _lock_
@@ -102,12 +146,11 @@ contract Charon is Token, UsingTellor, MerkleTree{
         returns (uint256 _poolAmountOut)
     {   
         _poolAmountOut = calcPoolOutGivenSingleIn(
-                            recordBalance,
-                            1 ether,
+                            recordBalance,//pool tokenIn balance
+                            1 ether,//weight of one side
                             _totalSupply,
                             2 ether,//totalWeight, we can later edit this part out of the math func
-                            _tokenAmountIn,
-                            fee
+                            _tokenAmountIn//amount of token In
                         );
         recordBalance += _tokenAmountIn;
         require(_poolAmountOut >= _minPoolAmountOut, "not enough squeeze");
@@ -117,7 +160,12 @@ contract Charon is Token, UsingTellor, MerkleTree{
         emit LPDeposit(msg.sender,_tokenAmountIn);
     }
 
-   function lpWithdraw(uint256 _poolAmountIn, uint256 _minAmountOut)
+    /**
+     * @dev Allows an lp to withdraw funds
+     * @param _poolAmountIn amount of pool tokens to transfer in
+     * @param _minAmountOut amount of base token you need out
+     */
+    function lpWithdraw(uint256 _poolAmountIn, uint256 _minAmountOut)
         external
         _finalized_
         _lock_
@@ -133,15 +181,19 @@ contract Charon is Token, UsingTellor, MerkleTree{
                         );
         recordBalance -= _tokenAmountOut;
         require(_tokenAmountOut >= _minAmountOut, "not enough squeeze");
-        uint exitFee = bmul(_poolAmountIn, fee);
+        uint256 _exitFee = bmul(_poolAmountIn, fee);
         _move(msg.sender,address(this), _poolAmountIn);
-        _burn(_poolAmountIn - exitFee);
-        _move(address(this),controller, exitFee);//we need the fees to go to the LP's!!
+        _burn(_poolAmountIn - _exitFee);
+        _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
         require(token.transfer(msg.sender, _tokenAmountOut));
     }
 
 
-    //read Tellor, add the deposit to the pool and wait for withdraw
+    /**
+     * @dev reads tellor commitments to allow you to withdraw on this chain
+     * @param _chain chain you're requesting your commitment from
+     * @param _depositId depositId of deposit on that chain
+     */
     function oracleDeposit(uint256 _chain, uint256 _depositId) external{
         bytes memory _value;
         bool _didGet;
@@ -154,31 +206,37 @@ contract Charon is Token, UsingTellor, MerkleTree{
         emit OracleDeposit(_commitment, _insertedIndex, block.timestamp);
     }
 
-    //withdraw your tokens (like a market order from the other chain)
+    /**
+     * @dev withdraw your tokens from deposit on alternate chain
+     * @param _proof proof information from zkproof corresponding to commitment
+     * @param _root root in merkle tree where you're commitment was deposited
+     * @param _nullifierHash secret hash of your nullifier corresponding to deposit
+     * @param _recipient address funds (pool tokens or base token) will be be sent
+     * @param _relayer address of relayer pushing txn on chain (for anonymity)
+     * @param _refund amount to pay relayer
+     * @param _lp bool of whether or not to LP into contract or trade out if false
+     */
     function secretWithdraw(
         bytes calldata _proof,
         bytes32 _root,
         bytes32 _nullifierHash,
         address payable _recipient,
         address payable _relayer,
-        uint256 _fee,
         uint256 _refund,
         bool _lp //should we deposit as an LP or if false, place as a market order
-    ) external payable{//add finalized and lock?
-      require(_fee <= denomination, "Fee exceeds transfer value");
+    ) external payable _finalized_ _lock_{
       require(!nullifierHashes[_nullifierHash], "The note has been already spent");
       require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
-      // require(
-      //   verifier.verifyProof(
-      //     _proof,
-      //     [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))), _fee, _refund]
-      //   ),
-      //   "Invalid withdraw proof"
-      // );
-      console.log("skipping verify");
+      require(
+        verifier.verifyProof(
+          _proof,
+          [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))),fee, _refund]
+        ),
+        "Invalid withdraw proof"
+      );
+      //console.log("skipping verify");
       nullifierHashes[_nullifierHash] = true;
       require(msg.value == _refund, "Incorrect refund amount received by the contract");
-      uint256 _tokenAmountIn = denomination - _fee;
       if(_lp){
           if(finalized){
             uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
@@ -186,18 +244,16 @@ contract Charon is Token, UsingTellor, MerkleTree{
                               1e18,
                               _totalSupply,
                               2e18,//we can later edit this part out of the math func
-                              _tokenAmountIn,
-                              fee
+                              denomination
                           );
-            emit LPDeposit(_recipient,_tokenAmountIn);
+            emit LPDeposit(_recipient,denomination);
             _mint(_poolAmountOut);
             _move(address(this),_recipient, _poolAmountOut);
             emit SecretLP(_recipient,_poolAmountOut);
           }
-          recordBalanceSynth += _tokenAmountIn;
+          recordBalanceSynth += denomination;
       }
-      else{
-        //market order
+      else{//market order
           uint256 _spotPriceBefore = calcSpotPrice(
                                       recordBalanceSynth,
                                       100e18,
@@ -210,7 +266,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
                                       100e18,
                                       recordBalance,
                                       100e18,
-                                      _tokenAmountIn,
+                                      denomination,
                                       fee
                                   );
           recordBalance -= _tokenAmountOut;
@@ -221,49 +277,62 @@ contract Charon is Token, UsingTellor, MerkleTree{
                                   100e18,
                                   fee
                               );
+          uint256 _exitFee = bmul(_tokenAmountOut, fee);
           require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
-          require(_spotPriceBefore <=  bdiv(_tokenAmountIn,_tokenAmountOut), "ERR_MATH_APPROX");
+          require(_spotPriceBefore <=  bdiv(denomination,_tokenAmountOut), "ERR_MATH_APPROX");
           require(token.transfer(_recipient,_tokenAmountOut));
           emit SecretMarketOrder(_recipient,_tokenAmountOut);
-      }
-      if (_fee > 0) {
-        token.transfer(_relayer, _fee);
+          if (_exitFee > 0) {
+            token.transfer(controller,_exitFee);
+          }
       }
       if (_refund > 0) {
         (bool success, ) = _recipient.call{ value: _refund }("");
         if (!success) {
-          // let's return _refund back to the relayer
           _relayer.transfer(_refund);
         }
       }
     }
 
-
-    //GETTERS
-
+    //getters
+    /**
+     * @dev allows you to find a commitment for a given depositId
+     * @param _id deposidId of your commitment
+     */
     function getDepositCommitmentsById(uint256 _id) external view returns(bytes32){
       return depositCommitments[_id - 1];
     }
 
+    /**
+     * @dev allows you to find a depositId for a given commitment
+     * @param _commitment the commitment of your deposit
+     */
     function getDepositIdByCommitment(bytes32 _commitment) external view returns(uint){
       return depositIdByCommitment[_commitment];
     }
-/** @dev whether a note is already spent */
-  function isSpent(bytes32 _nullifierHash) public view returns (bool) {
-    return nullifierHashes[_nullifierHash];
-  }
+    
+    /**
+     * @dev allows a user to see if their deposit has been withdrawn
+     * @param _nullifierHash hash of nullifier identifying withdrawal
+     */
+    function isSpent(bytes32 _nullifierHash) public view returns (bool) {
+      return nullifierHashes[_nullifierHash];
+    }
 
-  /** @dev whether an array of notes is already spent */
-  function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory spent) {
-    spent = new bool[](_nullifierHashes.length);
-    for (uint256 i = 0; i < _nullifierHashes.length; i++) {
-      if (isSpent(_nullifierHashes[i])) {
-        spent[i] = true;
+    /**
+     * @dev allows you to see whether an array of notes has been spent
+     * @param _nullifierHashes array of notes identifying withdrawals
+     */
+    function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory spent) {
+      spent = new bool[](_nullifierHashes.length);
+      for (uint256 i = 0; i < _nullifierHashes.length; i++) {
+        if (isSpent(_nullifierHashes[i])) {
+          spent[i] = true;
+        }
       }
     }
-  }
 
-  function isCommitment(bytes32 _commitment) external view returns(bool){
-    return commitments[_commitment];
-  }
+    function isCommitment(bytes32 _commitment) external view returns(bool){
+      return commitments[_commitment];
+    }
 }

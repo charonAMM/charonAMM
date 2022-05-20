@@ -42,24 +42,17 @@ Flow
     Setup done by controller:
      - Launch contract on Ethereum
      - Launch contract on Polygon
-      
-    Deposit 100k LUSD in Ethereum contract as deposit to other chain using commitment (public zk proof info)
-    Tellor passes commitment from Ethereum to Polygon contract
-    Withdraw 100k LUSD to LP on Polygon (using zk proof)  (note it's not actual LUSD, just a non-existent token on the other side of the AMM)
-
-    Now do the same thing in the other direction
-
-    There is now 100k on each side (in each contract), and the contract can be finalized (started)
+     - Deposit 100k LUSD in Ethereum contract and 100k USDC on Polygon to initialize pools
 
     Functions for users 
 
     (on Ethereum as example)
     - LP deposit (deposit LUSD as an LP on the ETH contract, earn fees).  
     - LP withdraw
-    - depositToOtherChain (deposit LUSD to the other chain)
-    - oracleDeposit (oracle puts your information into the contract)
+    - depositToOtherChain (deposit LUSD with zk commitment)
+    - oracleDeposit (oracle puts your information into the other chains contract)
     - secretWithdraw( withdraw your deposit from Polygon)
-        - can either withdraw as LP or as market order (sells your synthetic USDC for LUSD on the AMM)
+        - can either withdraw as LP or as market order 
 
 
 

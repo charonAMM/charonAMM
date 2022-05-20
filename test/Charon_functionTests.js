@@ -61,7 +61,7 @@ describe("Charon Funciton Tests", function() {
   let abiCoder = new ethers.utils.AbiCoder();
 
   beforeEach("deploy and setup mixer", async function() {
-    tree = new MerkleTree(merkleTreeHeight)
+    tree = await new MerkleTree(merkleTreeHeight)
     groth16 = await buildGroth16()
     accounts = await ethers.getSigners();
     ivfac = await ethers.getContractFactory("contracts/helpers/Verifier.sol:Verifier");
@@ -208,16 +208,31 @@ describe("Charon Funciton Tests", function() {
     await token.mint(accounts[2].address,denomination);
     await token.connect(accounts[2]).approve(charon.address,denomination)
     let deposit;
-    let _root = 0;
+    //tree.insert(rbigint(31))
     let queryData, queryId,depositId,nonce;
       deposit = await generateDeposit()
       tree.insert(deposit.commitment)
       await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
+      depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
+      queryData = abiCoder.encode(
+        ['string', 'bytes'],
+        ['Charon', abiCoder.encode(
+          ['uint256','uint256'],
+          [1,depositId]
+        )]
+      );
+      queryId = h.hash(queryData)
+      nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+      await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
+      await h.advanceTime(43200)//12 hours
+      //withdraw on other chain
+      await charon2.oracleDeposit(1,depositId)
       const { pathElements, pathIndices } = tree.path(0)
       // Circuit input
-      let myR = await charon.getLastRoot();
-      console.log(myR)
-      console.log(tree.root())
+      let myR = await charon2.getLastRoot();
+      console.log("myR",myR)
+      console.log("T",toFixedHex(tree.root()))
+      console.log(pathElements, pathIndices)
       const input = stringifyBigInts({
         root: tree.root(),
         nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
@@ -233,20 +248,6 @@ describe("Charon Funciton Tests", function() {
       const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
       const { proof } = websnarkUtils.toSolidityInput(proofData)
       //pass value w/tellor
-      depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
-      queryData = abiCoder.encode(
-        ['string', 'bytes'],
-        ['Charon', abiCoder.encode(
-          ['uint256','uint256'],
-          [1,depositId]
-        )]
-      );
-      queryId = h.hash(queryData)
-      nonce = await tellor2.getNewValueCountbyQueryId(queryId)
-      await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
-      await h.advanceTime(43200)//12 hours
-      //withdraw on other chain
-      await charon2.oracleDeposit(1,depositId)
       let p = await verifier["verifyProof(bytes,uint256[6])"](proof,[0,
         toFixedHex(input.nullifierHash),
         toFixedHex(input.receiver),
@@ -257,6 +258,7 @@ describe("Charon Funciton Tests", function() {
       assert(isA[0] == false, "value in array should be false")
       let initSynth = await charon2.recordBalanceSynth()
       let initRecord = await charon2.recordBalance()
+      assert(await charon2.isKnownRoot(toFixedHex(input.root)),"should be known root")
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
@@ -282,13 +284,26 @@ describe("Charon Funciton Tests", function() {
     await token.mint(accounts[2].address,denomination);
     await token.connect(accounts[2]).approve(charon.address,denomination)
     let deposit;
-    let _root = 0;
     let queryData, queryId,depositId,nonce;
+    //tree.insert(rbigint(31))//in constructor, they push a zero value
       deposit = await generateDeposit()
       tree.insert(deposit.commitment)
       await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
-      const { pathElements, pathIndices } = tree.path(_root)
-      _root++
+      depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
+      queryData = abiCoder.encode(
+        ['string', 'bytes'],
+        ['Charon', abiCoder.encode(
+          ['uint256','uint256'],
+          [1,depositId]
+        )]
+      );
+      queryId = h.hash(queryData)
+      nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+      await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
+      await h.advanceTime(43200)//12 hours
+      //withdraw on other chain
+      await charon2.oracleDeposit(1,depositId)
+      const { pathElements, pathIndices } = tree.path(0)
       // Circuit input
       const input = stringifyBigInts({
         root: tree.root(),
@@ -304,21 +319,6 @@ describe("Charon Funciton Tests", function() {
       })
       const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
       const { proof } = websnarkUtils.toSolidityInput(proofData)
-      //pass value w/tellor
-      depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
-      queryData = abiCoder.encode(
-        ['string', 'bytes'],
-        ['Charon', abiCoder.encode(
-          ['uint256','uint256'],
-          [1,depositId]
-        )]
-      );
-      queryId = h.hash(queryData)
-      nonce = await tellor2.getNewValueCountbyQueryId(queryId)
-      await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
-      await h.advanceTime(43200)//12 hours
-      //withdraw on other chain
-      await charon2.oracleDeposit(1,depositId)
       let p = await verifier["verifyProof(bytes,uint256[6])"](proof,[0,
         toFixedHex(input.nullifierHash),
         toFixedHex(input.receiver),
@@ -329,6 +329,7 @@ describe("Charon Funciton Tests", function() {
       assert(isA[0] == false, "value in array should be false")
       let initSynth = await charon2.recordBalanceSynth()
       let initRecord = await charon2.recordBalance()
+      assert(await charon2.isKnownRoot(toFixedHex(input.root)),"should be known root")
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),

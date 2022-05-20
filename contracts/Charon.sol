@@ -1,12 +1,11 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.0;
 
 import "usingtellor/contracts/UsingTellor.sol";
 import "./helpers/MerkleTree.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 import "./Token.sol";
-import "hardhat/console.sol";
 
 /**
  @author themandalore

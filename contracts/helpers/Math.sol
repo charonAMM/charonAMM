@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.8.4;
-import "hardhat/console.sol";
+
 contract Math{
     uint256 public constant BONE              = 10**18;
     uint256 public constant MIN_WEIGHT        = BONE;

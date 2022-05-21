@@ -6,6 +6,7 @@ const { takeSnapshot, revertSnapshot } = require('./helpers/ganacheHelper')
 const websnarkUtils = require('websnark/src/utils')
 const buildGroth16 = require('websnark/src/groth16')
 const stringifyBigInts = require('websnark/tools/stringifybigint').stringifyBigInts
+const { toHex, createDeposit, pedersenHash, rbigInt } = require('libcream')
 const snarkjs = require('snarkjs')
 const bigInt = snarkjs.bigInt
 const crypto = require('crypto')
@@ -19,7 +20,7 @@ hasherArtifact = require('../build/Hasher.json')
 
 
 const rbigint = (nbytes) => snarkjs.bigInt.leBuff2int(crypto.randomBytes(nbytes))
-const pedersenHash = (data) => circomlib.babyJub.unpackPoint(circomlib.pedersenHash.hash(data))[0]
+const pedersenHashA = (data) => circomlib.babyJub.unpackPoint(circomlib.pedersenHash.hash(data))[0]
 const toFixedHex = (number, length = 32) =>
   '0x' +
   bigInt(number)
@@ -33,7 +34,7 @@ function generateDeposit() {
     nullifier: rbigint(31),
   }
   const preimage = Buffer.concat([deposit.nullifier.leInt2Buff(31), deposit.secret.leInt2Buff(31)])
-  deposit.commitment = pedersenHash(preimage)
+  deposit.commitment = pedersenHashA(preimage)
   return deposit
 }
 
@@ -54,9 +55,7 @@ describe("Charon Funciton Tests", function() {
   let denomination = web3.utils.toWei("10")
   let tree
   let merkleTreeHeight = 20 //no idea (range is 0 to 32, they use 20 and 16 in tests)
-  let run = 0;
   let fee = 0;//what range should this be in?
-  let mainnetBlock = 0;
   let groth16
   let abiCoder = new ethers.utils.AbiCoder();
 
@@ -202,7 +201,7 @@ describe("Charon Funciton Tests", function() {
     await h.advanceTime(43200)//12 hours
     await charon2.oracleDeposit(1,depositId);
     assert(await charon2.isCommitment(toFixedHex(deposit.commitment)), "should be a commitment")
-    assert(await charon2.isSpent(toFixedHex(pedersenHash(deposit.nullifier.leInt2Buff(31)))) == false, "nullifierHash should be false")
+    assert(await charon2.isSpent(toFixedHex(pedersenHashA(deposit.nullifier. leInt2Buff(31)))) == false, "nullifierHash should be false")
     });
   it("Test secretWithdraw - no LP", async function() {
     await token.mint(accounts[2].address,denomination);
@@ -210,7 +209,7 @@ describe("Charon Funciton Tests", function() {
     let deposit;
     //tree.insert(rbigint(31))
     let queryData, queryId,depositId,nonce;
-      deposit = await generateDeposit()
+      deposit = await createDeposit(rbigInt(31), rbigInt(31))
       tree.insert(deposit.commitment)
       await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
       depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
@@ -230,16 +229,9 @@ describe("Charon Funciton Tests", function() {
       const { pathElements, pathIndices } = tree.path(0)
       // Circuit input
       let myR = await charon2.getLastRoot();
-      console.log("myR",myR)
-      console.log("T",toFixedHex(tree.root()))
-      console.log(pathElements, pathIndices)
       const input = stringifyBigInts({
         root: tree.root(),
-        nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
-        relayer: accounts[0].address,
-        receiver: accounts[1].address,
-        fee: 0,
-        refund: 0,
+        nullifierHash: pedersenHashA(deposit.nullifier. leInt2Buff(31)),
         nullifier: deposit.nullifier,
         secret: deposit.secret,
         pathElements: pathElements,
@@ -248,10 +240,8 @@ describe("Charon Funciton Tests", function() {
       const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
       const { proof } = websnarkUtils.toSolidityInput(proofData)
       //pass value w/tellor
-      let p = await verifier["verifyProof(bytes,uint256[6])"](proof,[0,
-        toFixedHex(input.nullifierHash),
-        toFixedHex(input.receiver),
-        toFixedHex(input.relayer),0,0])
+      let p = await verifier["verifyProof(bytes,uint256[2])"](proof,[toFixedHex(tree.root()),
+        toFixedHex(input.nullifierHash)])
       console.log("verified?", p)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)) == false, "nullifierHash should be false")
       let isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
@@ -262,9 +252,9 @@ describe("Charon Funciton Tests", function() {
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
-        toFixedHex(input.receiver, 20),
-        toFixedHex(input.relayer, 20),
-        toFixedHex(input.refund),false)
+        accounts[1].address,
+        accounts[0].address,
+        0,false)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)), "nullifierHash should be true")
       isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
       assert(isA[0],"should be spent")
@@ -286,7 +276,7 @@ describe("Charon Funciton Tests", function() {
     let deposit;
     let queryData, queryId,depositId,nonce;
     //tree.insert(rbigint(31))//in constructor, they push a zero value
-      deposit = await generateDeposit()
+      deposit = await createDeposit(rbigInt(31), rbigInt(31))
       tree.insert(deposit.commitment)
       await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
       depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
@@ -307,11 +297,7 @@ describe("Charon Funciton Tests", function() {
       // Circuit input
       const input = stringifyBigInts({
         root: tree.root(),
-        nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)),
-        relayer: toFixedHex(accounts[0].address),
-        receiver: toFixedHex(accounts[1].address),
-        fee: 0,
-        refund: 0,
+        nullifierHash: pedersenHash(deposit.nullifier.leInt2Buff(31)).babyJubX,
         nullifier: deposit.nullifier,
         secret: deposit.secret,
         pathElements: pathElements,
@@ -319,10 +305,8 @@ describe("Charon Funciton Tests", function() {
       })
       const proofData = await websnarkUtils.genWitnessAndProve(groth16, input, circuit, proving_key)
       const { proof } = websnarkUtils.toSolidityInput(proofData)
-      let p = await verifier["verifyProof(bytes,uint256[6])"](proof,[0,
-        toFixedHex(input.nullifierHash),
-        toFixedHex(input.receiver),
-        toFixedHex(input.relayer),0,0])
+      let p = await verifier["verifyProof(bytes,uint256[2])"](proof,[toFixedHex(tree.root()),
+        toFixedHex(input.nullifierHash)])
       console.log("verified?", p)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)) == false, "nullifierHash should be false")
       let isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
@@ -333,9 +317,9 @@ describe("Charon Funciton Tests", function() {
       await charon2.secretWithdraw(proof,
         toFixedHex(input.root),
         toFixedHex(input.nullifierHash),
-        toFixedHex(input.receiver, 20),
-        toFixedHex(input.relayer, 20),
-        toFixedHex(input.refund),true)
+        accounts[1].address,
+        accounts[0].address,
+        0,true)
       assert(await charon2.isSpent(toFixedHex(input.nullifierHash)), "nullifierHash should be true")
       isA = await charon2.isSpentArray([toFixedHex(input.nullifierHash)]);
       assert(isA[0] == true, "should be spent")

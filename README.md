@@ -56,16 +56,16 @@ Flow
 
 
 
-TODO/ Thoughts
-    - add fee going to LPs
-    - fix all tests (verify withdraw)
+## TODO/ Thoughts
+
+    - whitepaper
+    - add fee going to LPs (now just owner)
     - write scripts for deploying on multiple chains with different verifiers
     - document how to handle different tokens.  Should input have tellor oracle give price?  Does it need a price if the same amount of tokens?  would this kill anonymity? 
     - can we allow minting outside of AMM structure?  pros/cons?  
     - add multiple chains (how to list which chains are approved?  How to add?  Is it handled on tellor side? Do we need a governance token!!?!)
     - add more tests, e2e tests and outline oracle attacks
     - get audit
-
     - should we even allow passive LP's?  Should we make you fund by trade? 
     - if just two chains, then you can LP everyone as soon as the oracle deposits....better or worse?
     - how long until the merkle tree fills up? Is this even an issue?

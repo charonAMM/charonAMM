@@ -5,16 +5,16 @@ import "./helpers/Math.sol";
 
 contract Token is Math{
 
-    mapping(address => uint)                   internal _balance;
-    mapping(address => mapping(address=>uint)) internal _allowance;
-    uint internal _totalSupply;
-
-    event Approval(address indexed src, address indexed dst, uint amt);
-    event Transfer(address indexed src, address indexed dst, uint amt);
-
     string  private _name     = "Charon Token";
     string  private _symbol   = "C";
     uint8   private _decimals = 18;
+    uint256 internal _totalSupply;
+    mapping(address => uint) internal _balance;
+    mapping(address => mapping(address=>uint)) internal _allowance;
+
+
+    event Approval(address indexed _src, address indexed _dst, uint _amt);
+    event Transfer(address indexed _src, address indexed _dst, uint _amt);
 
     function name() public view returns (string memory) {
         return _name;

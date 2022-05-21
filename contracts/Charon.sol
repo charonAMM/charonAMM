@@ -229,7 +229,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
       require(
         verifier.verifyProof(
           _proof,
-          [uint256(_root), uint256(_nullifierHash),uint256(uint160(address(_recipient))), uint256(uint160(address(_relayer))),fee, _refund]
+          [uint256(_root), uint256(_nullifierHash)]
         ),
         "Invalid withdraw proof"
       );

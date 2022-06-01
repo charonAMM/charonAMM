@@ -227,7 +227,6 @@ contract Verifier {
         // solidity does not support decoding uint[2][2] yet
         (uint[2] memory a, uint[2] memory b1, uint[2] memory b2, uint[2] memory c) = abi.decode(proof, (uint[2], uint[2], uint[2], uint[2]));
         bool _a = verifyProof(a, [b1, b2], c, inputs);
-        _a = true;
         return _a;
     }
 }

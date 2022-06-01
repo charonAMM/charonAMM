@@ -16,8 +16,30 @@ npm i
 ```
 Create Verifier.sol and circuits
 ```
-npm run build
-```
+circom withdraw.circom --r1cs --wasm --sym
+
+snarkjs r1cs export json withdraw.r1cs withdraw.r1cs.json
+cat withdraw.r1cs.json
+cd withdraw_js
+$withdraw_js node generate_witness.js withdraw.wasm ../input.json ../witness.wtns
+snarkjs groth16 setup withdraw.r1cs powersOfTau28_hez_final_24.ptau withdraw_0000.zkey
+snarkjs zkey contribute withdraw_0000.zkey withdraw_0001.zkey --name="1st Contributor Name" -v
+snarkjs zkey contribute withdraw_0001.zkey withdraw_0002.zkey --name="Second contribution Name" -v -e="Another random entropy"
+
+snarkjs zkey export bellman withdraw_0002.zkey  challenge_phase2_0003
+snarkjs zkey bellman contribute bn128 challenge_phase2_0003 response_phase2_0003 -e="some random text"
+snarkjs zkey import bellman withdraw_0002.zkey response_phase2_0003 withdraw_0003.zkey -n="Third contribution name"
+snarkjs zkey beacon withdraw_0003.zkey withdraw_final.zkey 0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 10 -n="Final Beacon phase2"
+snarkjs zkey export verificationkey withdraw_final.zkey verification_key.json
+snarkjs groth16 prove withdraw_final.zkey witness.wtns proof.json public.json 
+
+//verify
+snarkjs groth16 verify verification_key.json public.json proof.json
+snarkjs zkey export solidityverifier circuit_final.zkey verifier.sol
+//simulate smart contract call
+snarkjs zkey export soliditycalldata public.json proof.json
+
+``
 Create hasher
 ```
 npx run scripts/generateHasher.js

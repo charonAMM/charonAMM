@@ -4,14 +4,13 @@ pragma solidity 0.8.4;
 import "./helpers/Math.sol";
 
 contract Token is Math{
-
+    
     string  private _name     = "Charon Token";
     string  private _symbol   = "C";
     uint8   private _decimals = 18;
     uint256 internal _totalSupply;
     mapping(address => uint) internal _balance;
     mapping(address => mapping(address=>uint)) internal _allowance;
-
 
     event Approval(address indexed _src, address indexed _dst, uint _amt);
     event Transfer(address indexed _src, address indexed _dst, uint _amt);

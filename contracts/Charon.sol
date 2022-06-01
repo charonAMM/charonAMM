@@ -69,7 +69,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
      * @param _merkleTreeHeight merkleTreeHeight (should match that of circom compile)
      */
     constructor(address _verifier,
-                IHasher _hasher,
+                address _hasher,
                 address _token,
                 uint256 _fee,
                 address payable _tellor,

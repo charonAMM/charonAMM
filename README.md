@@ -54,3 +54,7 @@ Flow
 ```sh
 npm run info
 ```
+
+## Donations
+
+ETH - 0x92683a09B64148369b09f96350B6323D37Af6AE3

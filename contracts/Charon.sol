@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "usingtellor/contracts/UsingTellor.sol";
-import "./helpers/MerkleTree.sol";
+import "./MerkleTreeWithHistory.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 import "./Token.sol";
@@ -16,7 +16,13 @@ import "./Token.sol";
  * only achieved via depositing in alternate chains and then withdrawing as either an LP or market order.
  * to acheive cross-chain functionality, Charon utilizes tellor to pass commitments between chains.
 */
-contract Charon is Token, UsingTellor, MerkleTree{
+contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
+
+    struct Proof {
+        uint256[2] a;
+        uint256[2][2] b;
+        uint256[2] c;
+    }
 
     IERC20 public token;//token deposited at this address
     IVerifier public verifier;
@@ -75,7 +81,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
                 address payable _tellor,
                 uint256 _denomination,
                 uint32 _merkleTreeHeight) 
-              UsingTellor(_tellor) MerkleTree(_merkleTreeHeight, _hasher){
+              UsingTellor(_tellor) MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
         token = IERC20(_token);
@@ -216,7 +222,7 @@ contract Charon is Token, UsingTellor, MerkleTree{
      * @param _lp bool of whether or not to LP into contract or trade out if false
      */
     function secretWithdraw(
-        bytes calldata _proof,
+        Proof calldata _proof,
         bytes32 _root,
         bytes32 _nullifierHash,
         address payable _recipient,
@@ -226,13 +232,23 @@ contract Charon is Token, UsingTellor, MerkleTree{
     ) external payable _finalized_ _lock_{
       require(!nullifierHashes[_nullifierHash], "The note has been already spent");
       require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
-      require(
-        verifier.verifyProof(
-          _proof,
-          [uint256(_root), uint256(_nullifierHash)]
-        ),
-        "Invalid withdraw proof"
-      );
+        require(
+            verifier.verifyProof(
+                _proof.a,
+                _proof.b,
+                _proof.c,
+                [
+                    uint256(_root),
+                    uint256(_nullifierHash),
+                    uint256(uint160(address(_recipient))),
+                    uint256(uint160(address(_relayer))),
+                    _refund
+                ]
+            ),
+            "Invalid withdraw proof"
+        );
+
+
       //console.log("skipping verify");
       nullifierHashes[_nullifierHash] = true;
       require(msg.value == _refund, "Incorrect refund amount received by the contract");

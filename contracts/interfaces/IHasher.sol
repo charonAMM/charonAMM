@@ -2,6 +2,7 @@
 // heavily inspired by https://github.com/tornadocash/tornado-core/blob/master/contracts/MerkleTreeWithHistory.sol
 pragma solidity ^0.8.0;
 
-interface IPoseidon {
-  function poseidon(uint256[2] memory inputs) external pure returns (uint256);
+
+interface Hasher {
+    function poseidon(bytes32[2] calldata leftRight) external pure returns (bytes32);
 }

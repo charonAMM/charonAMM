@@ -29,6 +29,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
     uint256 public denomination;//trade size (fixed for privacy)
     uint32 public merkleTreeHeight;
+    uint256 public chainID;
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
     bool private _mutex;//used for reentrancy protection
@@ -80,7 +81,8 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
                 uint256 _fee,
                 address payable _tellor,
                 uint256 _denomination,
-                uint32 _merkleTreeHeight) 
+                uint32 _merkleTreeHeight,
+                uint256 _chainID) 
               UsingTellor(_tellor) MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
@@ -88,6 +90,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
         fee = _fee;
         denomination = _denomination;
         controller = msg.sender;
+        chainID = _chainID;
     }
 
     /**
@@ -238,6 +241,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
                 _proof.b,
                 _proof.c,
                 [
+                    chainID,
                     uint256(_root),
                     uint256(_nullifierHash),
                     uint256(uint160(address(_recipient))),

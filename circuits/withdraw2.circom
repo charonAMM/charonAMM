@@ -25,7 +25,7 @@ template Withdraw(levels) {
     nullifierHasher.inputs[1] <== 1;
     nullifierHasher.inputs[2] <== leafIndexNum.out;
     nullifierHasher.out === nullifierHash;
-    chainID == 1;
+    chainID == 2;
 
     component commitmentHasher = Poseidon(2);
     commitmentHasher.inputs[0] <== nullifier;

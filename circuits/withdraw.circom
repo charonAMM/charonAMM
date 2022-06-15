@@ -11,6 +11,7 @@ template Withdraw(levels) {
     signal input recipient; // not taking part in any computations
     signal input relayer;  // not taking part in any computations
     signal input fee;      // not taking part in any computations
+    signal input privateChainID;
     signal input nullifier;
     signal input pathElements[levels];
     signal input pathIndices[levels];
@@ -25,7 +26,7 @@ template Withdraw(levels) {
     nullifierHasher.inputs[1] <== 1;
     nullifierHasher.inputs[2] <== leafIndexNum.out;
     nullifierHasher.out === nullifierHash;
-    chainID == 1;
+    chainID === privateChainID;
 
     component commitmentHasher = Poseidon(2);
     commitmentHasher.inputs[0] <== nullifier;
@@ -50,4 +51,4 @@ template Withdraw(levels) {
     relayerSquare <== relayer * relayer;
 }
 
-component main {public [root,nullifierHash,recipient,relayer,fee]} = Withdraw(20);
+component main {public [chainID,root,nullifierHash,recipient,relayer,fee]} = Withdraw(20);

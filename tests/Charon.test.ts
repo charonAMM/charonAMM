@@ -1,5 +1,5 @@
 import { assert, expect } from "chai";
-import { ETHTornado__factory, Verifier__factory, Hasher__factory } from "../types";
+import { Verifier__factory, Hasher__factory } from "../types";
 const { ethers } = require("hardhat");
 import { Contract, ContractFactory, BigNumber, BigNumberish } from "ethers";
 // @ts-ignore
@@ -154,6 +154,7 @@ describe("Charon tests", function () {
         assert(await charon.fee() == fee, "fee should be set")
         assert(await charon.denomination() == denomination, "denomination should be set")
         assert(await charon.controller() == accounts[0].address, "controller should be set")
+        assert(await charon.chainID() == 1, "chainID should be correct")
       });
       it("Test changeController", async function() {
         await charon.changeController(accounts[1].address)
@@ -171,7 +172,7 @@ describe("Charon tests", function () {
         assert(await token.balanceOf(accounts[1].address) == web3.utils.toWei("90"), "balance should change properly")
       });
       it("Test finalize", async function() {
-        let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT);
+        let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2);
         await testCharon.deployed();
         await h.expectThrow(testCharon.connect(accounts[1]).finalize())//must be controller
         await testCharon.finalize();
@@ -294,7 +295,7 @@ describe("Charon tests", function () {
         const { root, path_elements, path_index } = await tree.path(deposit.leafIndex);
         const witness = {
             // Public
-            2,
+            chainID: 2,
             root,
             nullifierHash,
             recipient,
@@ -302,7 +303,7 @@ describe("Charon tests", function () {
             fee,
             // Private
             privateChainID: 2,
-            nullifier: BigNumber.from(depositAttacker.nullifier).toBigInt(),
+            nullifier: BigNumber.from(deposit.nullifier).toBigInt(),
             pathElements: path_elements,
             pathIndices: path_index,
         };
@@ -348,7 +349,7 @@ describe("Charon tests", function () {
         const { root, path_elements, path_index } = await tree.path(deposit.leafIndex);
         const witness = {
             // Public
-            2,
+            chainID: 2,
             root,
             nullifierHash,
             recipient,
@@ -356,7 +357,7 @@ describe("Charon tests", function () {
             fee,
             // Private
             privateChainID: 2,
-            nullifier: BigNumber.from(depositAttacker.nullifier).toBigInt(),
+            nullifier: BigNumber.from(deposit.nullifier).toBigInt(),
             pathElements: path_elements,
             pathIndices: path_index,
         };
@@ -417,7 +418,7 @@ describe("Charon tests", function () {
         const { root, path_elements, path_index } = await tree.path(depositAttacker.leafIndex);
         const witness = {
             // Public
-            2,
+            chainID: 2,
             root,
             nullifierHash,
             recipient,
@@ -484,7 +485,7 @@ describe("Charon tests", function () {
           const { root, path_elements, path_index } = await tree.path(deposit.leafIndex);
           const witness = {
             // Public
-            2,
+            chainID: 2,
             root,
             nullifierHash,
             recipient,
@@ -492,7 +493,7 @@ describe("Charon tests", function () {
             fee,
             // Private
             privateChainID: 2,
-            nullifier: BigNumber.from(depositAttacker.nullifier).toBigInt(),
+            nullifier: BigNumber.from(deposit.nullifier).toBigInt(),
             pathElements: path_elements,
             pathIndices: path_index,
           };
@@ -564,7 +565,7 @@ describe("Charon tests", function () {
           const { root, path_elements, path_index } = await tree.path(deposit.leafIndex);
           const witness = {
             // Public
-            2,
+            chainID: 2,
             root,
             nullifierHash,
             recipient,
@@ -572,7 +573,7 @@ describe("Charon tests", function () {
             fee,
             // Private
             privateChainID: 2,
-            nullifier: BigNumber.from(depositAttacker.nullifier).toBigInt(),
+            nullifier: BigNumber.from(deposit.nullifier).toBigInt(),
             pathElements: path_elements,
             pathIndices: path_index,
           };

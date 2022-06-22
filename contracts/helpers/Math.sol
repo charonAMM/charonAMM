@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.8.4;
 
+import "hardhat/console.sol";
 contract Math{
     uint256 public constant BONE              = 10**18;
     uint256 public constant MIN_WEIGHT        = BONE;
@@ -8,21 +9,12 @@ contract Math{
     uint256 public constant MAX_TOTAL_WEIGHT  = BONE * 50;
     uint256 public constant MIN_BALANCE       = BONE / 10**12;
     uint256 public constant INIT_POOL_SUPPLY  = BONE * 100;
-    uint256 public constant MIN_BPOW_BASE     = 1 wei;
-    uint256 public constant MAX_BPOW_BASE     = (2 * BONE) - 1 wei;
+    uint256 public constant MIN_POW_BASE      = 1 wei;
+    uint256 public constant MAX_POW_BASE      = (2 * BONE) - 1 wei;
     uint256 public constant BPOW_PRECISION    = BONE / 10**10;
     uint256 public constant MAX_IN_RATIO      = BONE / 2;
     uint256 public constant MAX_OUT_RATIO     = (BONE / 3) + 1 wei;
 
-    /**********************************************************************************************
-    // calcSpotPrice                                                                             //
-    // sP = spotPrice                                                                            //
-    // bI = tokenBalanceIn                ( bI / wI )         1                                  //
-    // bO = tokenBalanceOut         sP =  -----------  *  ----------                             //
-    // wI = tokenWeightIn                 ( bO / wO )     ( 1 - sF )                             //
-    // wO = tokenWeightOut                                                                       //
-    // sF = swapFee                                                                              //
-    **********************************************************************************************/
     function calcSpotPrice(
         uint256 tokenBalanceIn,
         uint256 tokenWeightIn,
@@ -40,16 +32,6 @@ contract Math{
         return (spotPrice = bmul(ratio ,scale));
     }
 
-    /**********************************************************************************************
-    // calcOutGivenIn                                                                            //
-    // aO = tokenAmountOut                                                                       //
-    // bO = tokenBalanceOut                                                                      //
-    // bI = tokenBalanceIn              /      /            bI             \    (wI / wO) \      //
-    // aI = tokenAmountIn    aO = bO * |  1 - | --------------------------  | ^            |     //
-    // wI = tokenWeightIn               \      \ ( bI + ( aI * ( 1 - sF )) /              /      //
-    // wO = tokenWeightOut                                                                       //
-    // sF = swapFee                                                                              //
-    **********************************************************************************************/
     function calcOutGivenIn(
         uint256 tokenBalanceIn,
         uint256 tokenWeightIn,
@@ -71,16 +53,6 @@ contract Math{
         return tokenAmountOut;
     }
 
-    /**********************************************************************************************
-    // calcInGivenOut                                                                            //
-    // aI = tokenAmountIn                                                                        //
-    // bO = tokenBalanceOut               /  /     bO      \    (wO / wI)      \                 //
-    // bI = tokenBalanceIn          bI * |  | ------------  | ^            - 1  |                //
-    // aO = tokenAmountOut    aI =        \  \ ( bO - aO ) /                   /                 //
-    // wI = tokenWeightIn           --------------------------------------------                 //
-    // wO = tokenWeightOut                          ( 1 - sF )                                   //
-    // sF = swapFee                                                                              //
-    **********************************************************************************************/
     function calcInGivenOut(
         uint256 tokenBalanceIn,
         uint256 tokenWeightIn,
@@ -102,15 +74,6 @@ contract Math{
         return tokenAmountIn;
     }
 
-    /**********************************************************************************************
-    // calcPoolOutGivenSingleIn                                                                  //
-    // pAo = poolAmountOut         /                                              \              //
-    // tAi = tokenAmountIn        ///      /     //    wI \      \\       \     wI \             //
-    // wI = tokenWeightIn        //| tAi *| 1 - || 1 - --  | * sF || + tBi \    --  \            //
-    // tW = totalWeight     pAo=||  \      \     \\    tW /      //         | ^ tW   | * pS - pS //
-    // tBi = tokenBalanceIn      \\  ------------------------------------- /        /            //
-    // pS = poolSupply            \\                    tBi               /        /             //            \                                              /              //
-    **********************************************************************************************/
     function calcPoolOutGivenSingleIn(
         uint256 tokenBalanceIn,
         uint256 tokenWeightIn,
@@ -121,26 +84,15 @@ contract Math{
         public pure
         returns (uint256 poolAmountOut)
     {
-        uint256 normalizedWeight = bdiv(tokenWeightIn, totalWeight);
-        uint256 tokenAmountInAfterFee = bmul(tokenAmountIn,BONE);
-        uint256 newTokenBalanceIn = badd(tokenBalanceIn, tokenAmountInAfterFee);
-        uint256 tokenInRatio = bdiv(newTokenBalanceIn, tokenBalanceIn);
-        uint256 poolRatio = bpow(tokenInRatio, normalizedWeight);
-        uint256 newPoolSupply = bmul(poolRatio, poolSupply);
+        uint normalizedWeight = bdiv(tokenWeightIn, totalWeight);
+        uint tokenAmountInAfterFee = bmul(tokenAmountIn,BONE);
+        uint newTokenBalanceIn = badd(tokenBalanceIn, tokenAmountInAfterFee);
+        uint tokenInRatio = bdiv(newTokenBalanceIn, tokenBalanceIn);
+        uint poolRatio = bpow(tokenInRatio, normalizedWeight);
+        uint newPoolSupply = bmul(poolRatio, poolSupply);
         poolAmountOut = bsub(newPoolSupply, poolSupply);
-        return poolAmountOut;
     }
 
-    /**********************************************************************************************
-    // calcSingleInGivenPoolOut                                                                  //
-    // tAi = tokenAmountIn              //(pS + pAo)\     /    1    \\                           //
-    // pS = poolSupply                 || ---------  | ^ | --------- || * bI - bI                //
-    // pAo = poolAmountOut              \\    pS    /     \(wI / tW)//                           //
-    // bI = balanceIn          tAi =  --------------------------------------------               //
-    // wI = weightIn                              /      wI  \                                   //
-    // tW = totalWeight                          |  1 - ----  |  * sF                            //
-    // sF = swapFee                               \      tW  /                                   //
-    **********************************************************************************************/
     function calcSingleInGivenPoolOut(
         uint256 tokenBalanceIn,
         uint256 tokenWeightIn,
@@ -165,17 +117,6 @@ contract Math{
         return tokenAmountIn;
     }
 
-    /**********************************************************************************************
-    // calcSingleOutGivenPoolIn                                                                  //
-    // tAo = tokenAmountOut            /      /                                             \\   //
-    // bO = tokenBalanceOut           /      // pS - (pAi * (1 - eF)) \     /    1    \      \\  //
-    // pAi = poolAmountIn            | bO - || ----------------------- | ^ | --------- | * b0 || //
-    // ps = poolSupply                \      \\          pS           /     \(wO / tW)/      //  //
-    // wI = tokenWeightIn      tAo =   \      \                                             //   //
-    // tW = totalWeight                    /     /      wO \       \                             //
-    // sF = swapFee                    *  | 1 - |  1 - ---- | * sF  |                            //
-    // eF = exitFee                        \     \      tW /       /                             //
-    **********************************************************************************************/
     function calcSingleOutGivenPoolIn(
         uint256 tokenBalanceOut,
         uint256 tokenWeightOut,
@@ -199,17 +140,6 @@ contract Math{
         return tokenAmountOut;
     }
 
-    /**********************************************************************************************
-    // calcPoolInGivenSingleOut                                                                  //
-    // pAi = poolAmountIn               // /               tAo             \\     / wO \     \   //
-    // bO = tokenBalanceOut            // | bO - -------------------------- |\   | ---- |     \  //
-    // tAo = tokenAmountOut      pS - ||   \     1 - ((1 - (tO / tW)) * sF)/  | ^ \ tW /  * pS | //
-    // ps = poolSupply                 \\ -----------------------------------/                /  //
-    // wO = tokenWeightOut  pAi =       \\               bO                 /                /   //
-    // tW = totalWeight           -------------------------------------------------------------  //
-    // sF = swapFee                                        ( 1 - eF )                            //
-    // eF = exitFee                                                                              //
-    **********************************************************************************************/
     function calcPoolInGivenSingleOut(
         uint256 tokenBalanceOut,
         uint256 tokenWeightOut,
@@ -253,12 +183,10 @@ contract Math{
         }
         return z;
     }
-    // Compute b^(e.w) by splitting it into (b^e)*(b^0.w).
-    // Use `bpowi` for `b^e` and `bpowK` for k iterations
-    // of approximation of b^0.w
+
     function bpow(uint256 base, uint256 exp) internal pure returns (uint256){
-        require(base >= MIN_BPOW_BASE, "ERR_BPOW_BASE_TOO_LOW");
-        require(base <= MAX_BPOW_BASE, "ERR_BPOW_BASE_TOO_HIGH");
+        require(base >= MIN_POW_BASE, "ERR_POW_BASE_TOO_LOW");
+        require(base <= MAX_POW_BASE, "ERR_POW_BASE_TOO_HIGH");
         uint256 whole  = bfloor(exp);   
         uint256 remain = bsub(exp, whole);
         uint256 wholePow = bpowi(base, btoi(whole));
@@ -279,10 +207,6 @@ contract Math{
         uint256 term = BONE;
         uint256 sum   = term;
         bool negative = false;
-        // term(k) = numer / denom 
-        //         = (product(a - i - 1, i=1-->k) * x^k) / (k!)
-        // each iteration, multiply previous term by (a-(k-1)) * x / k
-        // continue until term is less than precision
         for (uint256 i = 1; term >= precision; i++) {
             uint256 bigK = i * BONE;
             (uint256 c, bool cneg) = bsubSign(a, bsub(bigK, BONE));

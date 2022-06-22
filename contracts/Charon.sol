@@ -6,6 +6,7 @@ import "./MerkleTreeWithHistory.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 import "./Token.sol";
+import "hardhat/console.sol";
 
 /**
  @author themandalore
@@ -60,13 +61,14 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
 
     IERC20 public token;//token deposited at this address
     IVerifier public verifier;
-    uint256 public fee;//fee when liquidity is withdrawn or trade happens
-    uint256 public denomination;//trade size (fixed for privacy)
-    uint32 public merkleTreeHeight;
-    uint256 public chainID;
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
     bool private _mutex;//used for reentrancy protection
+    bytes32 public oracleID;
+    uint32 public merkleTreeHeight;
+    uint256 public fee;//fee when liquidity is withdrawn or trade happens
+    uint256 public denomination;//trade size in USD (1e18 decimals)
+    uint256 public chainID;
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
@@ -79,7 +81,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
     event LPDeposit(address _lp,uint256 _amount);
     event LPWithdrawal(address _lp, uint256 _amount);
     event OracleDeposit(bytes32 _commitment,uint32 _insertedIndex,uint256 _timestamp);
-    event DepositToOtherChain(bytes32 _commitment, uint256 _timestamp);
+    event DepositToOtherChain(bytes32 _commitment, uint256 _timestamp, uint256 _tokenAmount);
     event SecretLP(address _recipient,uint256 _poolAmountOut);
     event SecretMarketOrder(address _recipient, uint256 _tokenAmountOut);
 
@@ -116,7 +118,8 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
                 address payable _tellor,
                 uint256 _denomination,
                 uint32 _merkleTreeHeight,
-                uint256 _chainID) 
+                uint256 _chainID,
+                bytes32 _oracleID) 
               UsingTellor(_tellor) MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
@@ -125,6 +128,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
         denomination = _denomination;
         controller = msg.sender;
         chainID = _chainID;
+        oracleID = _oracleID;
     }
 
     /**
@@ -159,9 +163,16 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
         depositCommitments.push(_commitment);
         _depositId = depositCommitments.length;
         depositIdByCommitment[_commitment] = _depositId;
-        token.transferFrom(msg.sender, address(this), denomination);
-        recordBalance += denomination;
-        emit DepositToOtherChain(_commitment, block.timestamp);
+        bytes memory _value;
+        uint256 _timestamp;
+        (,_value,_timestamp) =  getDataBefore(oracleID,block.timestamp - 1 hours);//what should this timeframe be? (should be an easy verify)
+        require(block.timestamp - _timestamp <= 1 days, "must be within 1 day old");
+        require(_timestamp > 0, "value must exist for timestamp");
+        uint256 _tokenPrice = abi.decode(_value,(uint256));
+        uint256 _tokenAmount= (denomination * 1 ether) / _tokenPrice ;
+        require(token.transferFrom(msg.sender, address(this), _tokenAmount));
+        recordBalance += _tokenAmount;
+        emit DepositToOtherChain(_commitment, block.timestamp, _tokenAmount);
     }
 
     /**
@@ -294,9 +305,9 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
           if(finalized){
             uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
                               recordBalanceSynth,
-                              1e18,
+                              1 ether,
                               _totalSupply,
-                              2e18,//we can later edit this part out of the math func
+                              2 ether,//we can later edit this part out of the math func
                               denomination
                           );
             emit LPDeposit(_recipient,denomination);

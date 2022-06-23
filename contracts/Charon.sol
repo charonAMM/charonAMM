@@ -1,11 +1,11 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "usingtellor/contracts/UsingTellor.sol";
 import "./MerkleTreeWithHistory.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 import "./Token.sol";
+import "./interfaces/IOracle.sol";
 import "hardhat/console.sol";
 
 /**
@@ -51,7 +51,7 @@ import "hardhat/console.sol";
 //                             ./%%%#%%%%%%%%%%%%%%%%%%%(((####%###((((#(*,,*(*    
 //                                                   ,*#%%###(##########(((,    
 */
-contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
+contract Charon is Token, MerkleTreeWithHistory{
 
     struct Proof {
         uint256[2] a;
@@ -61,6 +61,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
 
     IERC20 public token;//token deposited at this address
     IVerifier public verifier;
+    IOracle public oracle;
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
     bool private _mutex;//used for reentrancy protection
@@ -110,6 +111,8 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
      * @param _tellor tellor oracle address
      * @param _denomination size of deposit/withdraw in _token
      * @param _merkleTreeHeight merkleTreeHeight (should match that of circom compile)
+     * @param _oracleID ID for the pricing of the base asset
+     * @param _oracle address of oracle contract
      */
     constructor(address _verifier,
                 address _hasher,
@@ -119,8 +122,9 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
                 uint256 _denomination,
                 uint32 _merkleTreeHeight,
                 uint256 _chainID,
-                bytes32 _oracleID) 
-              UsingTellor(_tellor) MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
+                bytes32 _oracleID,
+                address _oracle) 
+              MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
         token = IERC20(_token);
@@ -129,6 +133,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
         controller = msg.sender;
         chainID = _chainID;
         oracleID = _oracleID;
+        oracle = IOracle(_oracle);
     }
 
     /**
@@ -163,12 +168,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
         depositCommitments.push(_commitment);
         _depositId = depositCommitments.length;
         depositIdByCommitment[_commitment] = _depositId;
-        bytes memory _value;
-        uint256 _timestamp;
-        (,_value,_timestamp) =  getDataBefore(oracleID,block.timestamp - 1 hours);//what should this timeframe be? (should be an easy verify)
-        require(block.timestamp - _timestamp <= 1 days, "must be within 1 day old");
-        require(_timestamp > 0, "value must exist for timestamp");
-        uint256 _tokenPrice = abi.decode(_value,(uint256));
+        uint256 _tokenPrice =  oracle.getPriceData(oracleID);//what should this timeframe be? (should be an easy verify)
         uint256 _tokenAmount= (denomination * 1 ether) / _tokenPrice ;
         require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         recordBalance += _tokenAmount;
@@ -248,12 +248,7 @@ contract Charon is Token, UsingTellor, MerkleTreeWithHistory{
      * @param _depositId depositId of deposit on that chain
      */
     function oracleDeposit(uint256 _chain, uint256 _depositId) external{
-        bytes memory _value;
-        bool _didGet;
-        bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));
-        (_didGet,_value,) =  getDataBefore(_queryId,block.timestamp - 1 hours);//what should this timeframe be? (should be an easy verify)
-        require(_didGet);
-        bytes32 _commitment = abi.decode(_value,(bytes32));
+        bytes32 _commitment = oracle.getCommitment(_chain, _depositId);
         uint32 _insertedIndex = _insert(_commitment);
         commitments[_commitment] = true;
         emit OracleDeposit(_commitment, _insertedIndex, block.timestamp);

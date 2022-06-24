@@ -64,14 +64,13 @@ contract Math{
         public pure
         returns (uint256 tokenAmountIn)
     {
-        uint256 weightRatio = bdiv(tokenWeightOut, tokenWeightIn);
-        uint256 diff = tokenBalanceOut - tokenAmountOut;
-        uint256 y = bdiv(tokenBalanceOut, diff);
-        uint256 foo = bpow(y, weightRatio);
-        foo = foo - BONE;
-        tokenAmountIn =BONE -swapFee;
+        uint weightRatio = bdiv(tokenWeightOut, tokenWeightIn);
+        uint diff = bsub(tokenBalanceOut, tokenAmountOut);
+        uint y = bdiv(tokenBalanceOut, diff);
+        uint foo = bpow(y, weightRatio);
+        foo = bsub(foo, BONE);
+        tokenAmountIn = bsub(BONE, swapFee);
         tokenAmountIn = bdiv(bmul(tokenBalanceIn, foo), tokenAmountIn);
-        return tokenAmountIn;
     }
 
     function calcPoolOutGivenSingleIn(

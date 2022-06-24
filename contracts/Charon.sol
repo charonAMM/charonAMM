@@ -65,7 +65,6 @@ contract Charon is Token, MerkleTreeWithHistory{
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
     bool private _mutex;//used for reentrancy protection
-    bytes32 public oracleID;
     uint32 public merkleTreeHeight;
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
     uint256 public denomination;//trade size in USD (1e18 decimals)
@@ -108,22 +107,20 @@ contract Charon is Token, MerkleTreeWithHistory{
      * @param _hasher address of the hasher contract (mimC precompile)
      * @param _token address of token on this chain of the system
      * @param _fee fee when withdrawing liquidity or trading (pct of tokens)
-     * @param _tellor tellor oracle address
+     * @param _oracle address of oracle contract
      * @param _denomination size of deposit/withdraw in _token
      * @param _merkleTreeHeight merkleTreeHeight (should match that of circom compile)
-     * @param _oracleID ID for the pricing of the base asset
-     * @param _oracle address of oracle contract
+     * @param _chainID chainID of this chain
      */
     constructor(address _verifier,
                 address _hasher,
                 address _token,
                 uint256 _fee,
-                address payable _tellor,
+                address _oracle,
                 uint256 _denomination,
                 uint32 _merkleTreeHeight,
-                uint256 _chainID,
-                bytes32 _oracleID,
-                address _oracle) 
+                uint256 _chainID
+                ) 
               MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
@@ -132,7 +129,6 @@ contract Charon is Token, MerkleTreeWithHistory{
         denomination = _denomination;
         controller = msg.sender;
         chainID = _chainID;
-        oracleID = _oracleID;
         oracle = IOracle(_oracle);
     }
 
@@ -168,8 +164,7 @@ contract Charon is Token, MerkleTreeWithHistory{
         depositCommitments.push(_commitment);
         _depositId = depositCommitments.length;
         depositIdByCommitment[_commitment] = _depositId;
-        uint256 _tokenPrice =  oracle.getPriceData(oracleID);//what should this timeframe be? (should be an easy verify)
-        uint256 _tokenAmount= (denomination * 1 ether) / _tokenPrice ;
+        uint256 _tokenAmount = calcInGivenOut(recordBalance,1 ether,recordBalanceSynth,1 ether,denomination,0);
         require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         recordBalance += _tokenAmount;
         emit DepositToOtherChain(_commitment, block.timestamp, _tokenAmount);

@@ -92,6 +92,8 @@ describe("Charon tests", function () {
     let tellor: Contract;
     let tellor2: Contract;
     let verifier: Contract;
+    let oracle: Contract;
+    let oracle2: Contract;
     let accounts: any;
     let cfac: any;
     let token: Contract;
@@ -121,18 +123,11 @@ describe("Charon tests", function () {
         let TellorOracle = await ethers.getContractFactory(abi, bytecode);
         tellor = await TellorOracle.deploy();
         await tellor.deployed();
-        //deploy charon
-        let queryData = abiCoder.encode(
-            ['string', 'bytes'],
-            ['SpotPrice', abiCoder.encode(
-              ['string','string'],
-              ["ETH","USD"]
-            )]
-          );
-          queryId = h.hash(queryData)
-          await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),0,queryData)
+        let ofac = await ethers.getContractFactory("contracts/helpers/Oracle.sol:Oracle");
+        oracle = await ofac.deploy(tellor.address);
+        await oracle.deployed();
         cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
-        charon= await cfac.deploy(verifier.address,hasher.address,token.address,fee,tellor.address,denomination,HEIGHT,1,queryId);
+        charon= await cfac.deploy(verifier.address,hasher.address,token.address,fee,oracle.address,denomination,HEIGHT,1);
         await charon.deployed();
         //now deploy on other chain (same chain, but we pretend w/ oracles)
         token2 = await tfac.deploy("Dissapearing Space Monkey2","DSM2");
@@ -140,10 +135,9 @@ describe("Charon tests", function () {
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
         tellor2 = await TellorOracle.deploy();
         await tellor2.deployed();
-        queryData = abiCoder.encode(['string', 'bytes'],['SpotPrice', abiCoder.encode(['string','string'],["MATIC","USD"])]);
-        queryId = h.hash(queryData)
-        await tellor2.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),0,queryData)
-        charon2 = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2,queryId);
+        oracle2 = await ofac.deploy(tellor2.address);
+        await oracle2.deployed();
+        charon2 = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,oracle2.address,denomination,HEIGHT,2);
         await charon2.deployed();
         //now set both of them. 
         await token.approve(charon.address,web3.utils.toWei("100"))//100
@@ -159,7 +153,7 @@ describe("Charon tests", function () {
         assert.equal(res.toString(), poseidon.F.toString(res2));
     }).timeout(500000);
     it("Test Constructor", async function() {
-        assert(await charon.tellor() == tellor.address, "tellor address should be set")
+        assert(await charon.oracle() == oracle.address, "oracle  address should be set")
         assert(await charon.levels() == HEIGHT, "merkle Tree height should be set")
         assert(await charon.hasher() == hasher.address, "hasher should be set")
         assert(await charon.verifier() == verifier.address, "verifier should be set")
@@ -176,23 +170,21 @@ describe("Charon tests", function () {
       it("Test depositToOtherChain", async function() {
         const commitment = h.hash("test")
         await token.mint(accounts[1].address,web3.utils.toWei("100"))
-        let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-        queryId = h.hash(queryData)
-        let nonce = await tellor.getNewValueCountbyQueryId(queryId)
-        await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),nonce,queryData)
-        await h.advanceTime(43200)//12 hours
-        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
+        let amount = await charon.calcInGivenOut(web3.utils.toWei("100"),web3.utils.toWei("1"),
+                                                  web3.utils.toWei("1000"),
+                                                  web3.utils.toWei("1"),
+                                                  web3.utils.toWei("100"),
+                                                  0)
+        await token.connect(accounts[1]).approve(charon.address,amount)
         await charon.connect(accounts[1]).depositToOtherChain(commitment);
         assert(await charon.getDepositCommitmentsById(1) == commitment, "commitment should be stored")
         assert(await charon.getDepositIdByCommitment(commitment) == 1, "reverse commitment mapping should work")
         assert(await charon.didDepositCommitment(commitment), "didDeposit should be true")
-        assert(await charon.recordBalance() == web3.utils.toWei("110"), "recordBalance should go up")
-        assert(await token.balanceOf(accounts[1].address) == web3.utils.toWei("90"), "balance should change properly")
+        assert(await charon.recordBalance() * 1 -(1* web3.utils.toWei("100") + 1 * amount) == 0, "recordBalance should go up")
+        assert(await token.balanceOf(accounts[1].address) == web3.utils.toWei("100") - amount, "balance should change properly")
       });
       it("Test finalize", async function() {
-        let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-        queryId = h.hash(queryData)
-        let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2,queryId);
+        let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2);
         await testCharon.deployed();
         await h.expectThrow(testCharon.connect(accounts[1]).finalize())//must be controller
         await testCharon.finalize();
@@ -248,22 +240,17 @@ describe("Charon tests", function () {
         let deposit = Deposit.new(poseidon);
         tree.insert(deposit.commitment)
         await token.approve(charon.address,denomination)
-        let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-        queryId = h.hash(queryData)
-        let nonce = await tellor.getNewValueCountbyQueryId(queryId)
-        await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),nonce,queryData)
-        await h.advanceTime(43200)//12 hours
         await charon.depositToOtherChain(toFixedHex(deposit.commitment));
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
-        queryData = abiCoder.encode(
+        let queryData = abiCoder.encode(
           ['string', 'bytes'],
           ['Charon', abiCoder.encode(
             ['uint256','uint256'],
             [1,depositId]
           )]
         );
-        queryId = h.hash(queryData)
-        nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+        let queryId = h.hash(queryData)
+        let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
         await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
         await h.advanceTime(43200)//12 hours
         let tx = await charon2.oracleDeposit(1,depositId);
@@ -282,22 +269,17 @@ describe("Charon tests", function () {
         let tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
         let deposit = Deposit.new(poseidon);
         await token.approve(charon.address,denomination)
-        let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-        queryId = h.hash(queryData)
-        let nonce = await tellor.getNewValueCountbyQueryId(queryId)
-        await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),nonce,queryData)
-        await h.advanceTime(43200)//12 hours
         await charon.depositToOtherChain(toFixedHex(deposit.commitment));
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
-        queryData = abiCoder.encode(
+        let queryData = abiCoder.encode(
           ['string', 'bytes'],
           ['Charon', abiCoder.encode(
             ['uint256','uint256'],
             [1,depositId]
           )]
         );
-        queryId = h.hash(queryData)
-        nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+        let queryId = h.hash(queryData)
+        let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
         await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
         await h.advanceTime(43200)//12 hours
         let tx = await charon2.oracleDeposit(1,depositId);
@@ -349,22 +331,17 @@ describe("Charon tests", function () {
             const tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
         const deposit = Deposit.new(poseidon);
         await token.approve(charon.address,denomination)
-        let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-        queryId = h.hash(queryData)
-        let nonce = await tellor.getNewValueCountbyQueryId(queryId)
-        await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),nonce,queryData)
-        await h.advanceTime(43200)//12 hours
         await charon.depositToOtherChain(toFixedHex(deposit.commitment));
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
-        queryData = abiCoder.encode(
+        let queryData = abiCoder.encode(
           ['string', 'bytes'],
           ['Charon', abiCoder.encode(
             ['uint256','uint256'],
             [1,depositId]
           )]
         );
-        queryId = h.hash(queryData)
-        nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+        let queryId = h.hash(queryData)
+        let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
         await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
         await h.advanceTime(43200)//12 hours
         let tx = await charon2.oracleDeposit(1,depositId);
@@ -417,22 +394,17 @@ describe("Charon tests", function () {
         // An honest user makes a deposit
         const depositHonest = Deposit.new(poseidon);
         await token.approve(charon.address,denomination)
-        let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-        queryId = h.hash(queryData)
-        let nonce = await tellor.getNewValueCountbyQueryId(queryId)
-        await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),nonce,queryData)
-        await h.advanceTime(43200)//12 hours
         await charon.depositToOtherChain(toFixedHex(depositHonest.commitment));
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(depositHonest.commitment))
-        queryData = abiCoder.encode(
+        let queryData = abiCoder.encode(
           ['string', 'bytes'],
           ['Charon', abiCoder.encode(
             ['uint256','uint256'],
             [1,depositId]
           )]
         );
-        queryId = h.hash(queryData)
-        nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+        let queryId = h.hash(queryData)
+        let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
         await tellor2.submitValue(queryId,toFixedHex(depositHonest.commitment),nonce,queryData)
         await h.advanceTime(43200)//12 hours
         let tx = await charon2.oracleDeposit(1,depositId);
@@ -490,22 +462,17 @@ describe("Charon tests", function () {
         await token.connect(userOldSigner).approve(charon.address,denomination)
           const deposit = Deposit.new(poseidon);
           await tree.insert(deposit.commitment);
-          let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-          queryId = h.hash(queryData)
-          let nonce = await tellor.getNewValueCountbyQueryId(queryId)
-          await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),nonce,queryData)
-          await h.advanceTime(43200)//12 hours
           await charon.connect(userOldSigner).depositToOtherChain(deposit.commitment);
           let depositId = await charon.getDepositIdByCommitment(deposit.commitment)
-          queryData = abiCoder.encode(
+          let queryData = abiCoder.encode(
             ['string', 'bytes'],
             ['Charon', abiCoder.encode(
               ['uint256','uint256'],
               [1,depositId]
             )]
           );
-          queryId = h.hash(queryData)
-          nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+          let queryId = h.hash(queryData)
+          let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
           await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
           await h.advanceTime(43200)//12 hours
           //withdraw on other chain
@@ -573,22 +540,17 @@ describe("Charon tests", function () {
         const deposit = Deposit.new(poseidon);
         assert.equal(await tree.root(), await charon2.roots(0));
         await tree.insert(deposit.commitment);
-        let queryData = abiCoder.encode(['string','bytes'],['SpotPrice',abiCoder.encode(['string','string'],["ETH","USD"])]);
-        queryId = h.hash(queryData)
-        let nonce = await tellor.getNewValueCountbyQueryId(queryId)
-        await tellor.submitValue(queryId,ethers.utils.hexZeroPad(ethers.utils.hexlify(ethers.utils.parseEther("10")), 32),nonce,queryData)
-        await h.advanceTime(43200)//12 hours
-          await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
+        await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
-          queryData = abiCoder.encode(
+        let queryData = abiCoder.encode(
             ['string', 'bytes'],
             ['Charon', abiCoder.encode(
               ['uint256','uint256'],
               [1,depositId]
             )]
           );
-          queryId = h.hash(queryData)
-          nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+         let queryId = h.hash(queryData)
+          let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
           await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
           await h.advanceTime(43200)//12 hours
           //withdraw on other chain

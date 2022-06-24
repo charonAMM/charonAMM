@@ -59,6 +59,11 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         uint256[2] c;
     }
 
+    struct PartnerContract{
+      uint256 chainID;
+      address contractAddress;
+    }
+
     IERC20 public token;//token deposited at this address
     IVerifier public verifier;
     address public controller;//finalizes contracts, generates fees
@@ -70,6 +75,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     uint256 public chainID;
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
+    PartnerContract[] partnerContracts;
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
     mapping(bytes32=>bool) commitments;//commitments ready for withdrawal (or withdrawn)
     mapping(bytes32=>bool) public didDepositCommitment;//tells you whether tellor deposited a commitment
@@ -172,12 +178,16 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     /**
      * @dev Allows the controller to start the system
      */
-    function finalize() external _lock_ {
+    function finalize(uint256[] memory _partnerChains,address[] memory _partnerAddys) external _lock_ {
         require(msg.sender == controller, "should be controller");
         require(!finalized, "should be finalized");
         finalized = true;
         _mint(INIT_POOL_SUPPLY);
         _move(address(this),msg.sender, INIT_POOL_SUPPLY);
+        require(_partnerAddys.length == _partnerChains.length, "length should be the same");
+        for(uint256 _i; _i < _partnerAddys.length; _i++){
+          partnerContracts.push(PartnerContract(_partnerChains[_i],_partnerAddys[_i]));
+        } 
     }
 
     /**
@@ -387,5 +397,9 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
 
     function isCommitment(bytes32 _commitment) external view returns(bool){
       return commitments[_commitment];
+    }
+
+    function getPartnerContracts() external view returns(PartnerContract[] memory){
+      return partnerContracts;
     }
 }

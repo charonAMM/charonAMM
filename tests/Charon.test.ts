@@ -137,8 +137,8 @@ describe("Charon tests", function () {
         await token2.approve(charon2.address,web3.utils.toWei("100"))//100
         await charon.bind(web3.utils.toWei("100"),web3.utils.toWei("1000"));
         await charon2.bind(web3.utils.toWei("100"),web3.utils.toWei("1000"))
-        await charon.finalize();
-        await charon2.finalize();
+        await charon.finalize([2],[charon2.address]);
+        await charon2.finalize([1],[charon.address]);
     });
     it("generates same poseidon hash", async function () {
         const res = await hasher["poseidon(uint256[2])"]([1, 2]);
@@ -179,11 +179,15 @@ describe("Charon tests", function () {
       it("Test finalize", async function() {
         let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2);
         await testCharon.deployed();
-        await h.expectThrow(testCharon.connect(accounts[1]).finalize())//must be controller
-        await testCharon.finalize();
-        await h.expectThrow(testCharon.finalize())//already finalized
+        await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address]))//must be controller
+        await testCharon.finalize([1],[charon.address]);
+        await h.expectThrow(testCharon.finalize([1],[charon.address]))//already finalized
         assert(await testCharon.finalized(), "should be finalized")
         assert(await testCharon.balanceOf(accounts[0].address) - await testCharon.INIT_POOL_SUPPLY() == 0, "should have full balance")
+        let pC = await testCharon.getPartnerContracts();
+        assert(pC[0][0] == 1, "partner chain should be correct")
+        assert(pC[0][1] == charon.address, "partner address should be correct")
+      
       });
       it("Test lpDeposit", async function() {
         await token.mint(accounts[1].address,web3.utils.toWei("100"))

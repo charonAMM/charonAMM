@@ -7,7 +7,7 @@ contract Oracle is UsingTellor{
 
     constructor(address payable _tellor) UsingTellor(_tellor){}
 
-    function getCommitment(uint256 _chain, uint256 _depositId) external view returns(bytes32 _commitment){
+    function getCommitment(uint256 _chain, uint256 _depositId) public view returns(bytes32 _commitment){
         bytes memory _value;
         bool _didGet;
         bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));

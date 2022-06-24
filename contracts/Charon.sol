@@ -5,7 +5,7 @@ import "./MerkleTreeWithHistory.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 import "./Token.sol";
-import "./interfaces/IOracle.sol";
+import "./helpers/Oracle.sol";
 import "hardhat/console.sol";
 
 /**
@@ -51,7 +51,7 @@ import "hardhat/console.sol";
 //                             ./%%%#%%%%%%%%%%%%%%%%%%%(((####%###((((#(*,,*(*    
 //                                                   ,*#%%###(##########(((,    
 */
-contract Charon is Token, MerkleTreeWithHistory{
+contract Charon is Token,Oracle, MerkleTreeWithHistory{
 
     struct Proof {
         uint256[2] a;
@@ -61,7 +61,6 @@ contract Charon is Token, MerkleTreeWithHistory{
 
     IERC20 public token;//token deposited at this address
     IVerifier public verifier;
-    IOracle public oracle;
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
     bool private _mutex;//used for reentrancy protection
@@ -116,11 +115,12 @@ contract Charon is Token, MerkleTreeWithHistory{
                 address _hasher,
                 address _token,
                 uint256 _fee,
-                address _oracle,
+                address payable _oracle,
                 uint256 _denomination,
                 uint32 _merkleTreeHeight,
                 uint256 _chainID
-                ) 
+                )
+              Oracle(_oracle)
               MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
@@ -129,7 +129,6 @@ contract Charon is Token, MerkleTreeWithHistory{
         denomination = _denomination;
         controller = msg.sender;
         chainID = _chainID;
-        oracle = IOracle(_oracle);
     }
 
     /**
@@ -243,7 +242,7 @@ contract Charon is Token, MerkleTreeWithHistory{
      * @param _depositId depositId of deposit on that chain
      */
     function oracleDeposit(uint256 _chain, uint256 _depositId) external{
-        bytes32 _commitment = oracle.getCommitment(_chain, _depositId);
+        bytes32 _commitment = getCommitment(_chain, _depositId);
         uint32 _insertedIndex = _insert(_commitment);
         commitments[_commitment] = true;
         emit OracleDeposit(_commitment, _insertedIndex, block.timestamp);

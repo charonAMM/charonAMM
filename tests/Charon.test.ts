@@ -92,8 +92,6 @@ describe("Charon tests", function () {
     let tellor: Contract;
     let tellor2: Contract;
     let verifier: Contract;
-    let oracle: Contract;
-    let oracle2: Contract;
     let accounts: any;
     let cfac: any;
     let token: Contract;
@@ -123,11 +121,8 @@ describe("Charon tests", function () {
         let TellorOracle = await ethers.getContractFactory(abi, bytecode);
         tellor = await TellorOracle.deploy();
         await tellor.deployed();
-        let ofac = await ethers.getContractFactory("contracts/helpers/Oracle.sol:Oracle");
-        oracle = await ofac.deploy(tellor.address);
-        await oracle.deployed();
         cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
-        charon= await cfac.deploy(verifier.address,hasher.address,token.address,fee,oracle.address,denomination,HEIGHT,1);
+        charon= await cfac.deploy(verifier.address,hasher.address,token.address,fee,tellor.address,denomination,HEIGHT,1);
         await charon.deployed();
         //now deploy on other chain (same chain, but we pretend w/ oracles)
         token2 = await tfac.deploy("Dissapearing Space Monkey2","DSM2");
@@ -135,9 +130,7 @@ describe("Charon tests", function () {
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
         tellor2 = await TellorOracle.deploy();
         await tellor2.deployed();
-        oracle2 = await ofac.deploy(tellor2.address);
-        await oracle2.deployed();
-        charon2 = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,oracle2.address,denomination,HEIGHT,2);
+        charon2 = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2);
         await charon2.deployed();
         //now set both of them. 
         await token.approve(charon.address,web3.utils.toWei("100"))//100
@@ -153,7 +146,7 @@ describe("Charon tests", function () {
         assert.equal(res.toString(), poseidon.F.toString(res2));
     }).timeout(500000);
     it("Test Constructor", async function() {
-        assert(await charon.oracle() == oracle.address, "oracle  address should be set")
+        assert(await charon.tellor() == tellor.address, "oracle  address should be set")
         assert(await charon.levels() == HEIGHT, "merkle Tree height should be set")
         assert(await charon.hasher() == hasher.address, "hasher should be set")
         assert(await charon.verifier() == verifier.address, "verifier should be set")

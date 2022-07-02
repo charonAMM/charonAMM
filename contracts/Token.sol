@@ -5,8 +5,8 @@ import "./helpers/Math.sol";
 
 contract Token is Math{
     
-    string  private _name     = "Charon Token";
-    string  private _symbol   = "C";
+    string  private _name;
+    string  private _symbol;
     uint8   private _decimals = 18;
     uint256 internal _totalSupply;
     mapping(address => uint) internal _balance;
@@ -14,6 +14,11 @@ contract Token is Math{
 
     event Approval(address indexed _src, address indexed _dst, uint _amt);
     event Transfer(address indexed _src, address indexed _dst, uint _amt);
+
+    constructor(string __name, string __symbol){
+        _name = __name;
+        _symbol = __symbol;
+    }
 
     function name() public view returns (string memory) {
         return _name;
@@ -60,17 +65,17 @@ contract Token is Math{
         return true;
     }
 
-    function _mint(uint amt) internal {
-        _balance[address(this)] = _balance[address(this)] + amt;
+    function _mint(address _to,uint amt) internal {
+        _balance[_to] = _balance[_to] + amt;
         _totalSupply = _totalSupply + amt;
-        emit Transfer(address(0), address(this), amt);
+        emit Transfer(address(0), _to, amt);
     }
 
-    function _burn(uint amt) internal {
-        require(_balance[address(this)] >= amt, "ERR_INSUFFICIENT_BAL");
-        _balance[address(this)] = _balance[address(this)] - amt;
+    function _burn(address _to, uint amt) internal {
+        require(_balance[_to] >= amt, "ERR_INSUFFICIENT_BAL");
+        _balance[_to] = _balance[_to] - amt;
         _totalSupply = _totalSupply - amt;
-        emit Transfer(address(this), address(0), amt);
+        emit Transfer(_to, address(0), amt);
     }
 
     function _move(address _src, address _dst, uint _amt) internal {

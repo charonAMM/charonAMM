@@ -187,7 +187,6 @@ describe("Charon tests", function () {
         let pC = await testCharon.getPartnerContracts();
         assert(pC[0][0] == 1, "partner chain should be correct")
         assert(pC[0][1] == charon.address, "partner address should be correct")
-      
       });
       it("Test lpDeposit", async function() {
         await token.mint(accounts[1].address,web3.utils.toWei("100"))
@@ -606,5 +605,21 @@ describe("Charon tests", function () {
         assert(await charon2.recordBalance() - initRecord == 0, "recordBalance should be the same")
         assert(await token2.balanceOf(userNewSigner.address) == 0, "no tokens should be paid")
         assert(await charon2.balanceOf(userNewSigner.address) - poolOut == 0, "pool tokens paid")
+      });
+
+      it("CHUSD tests (mint/burn)", async function () {
+        assert(0==1)
+      });
+      it("test getSpotPrice", async function () {
+        assert(0==1)
+      });
+      it("test swap", async function () {
+        assert(0==1)
+      });
+      it("test lpSingleCHUSD", async function () {
+        assert(0==1)
+      });
+      it("test lpWithdrawSingleCHUSD", async function () {
+        assert(0==1)
       });
 });

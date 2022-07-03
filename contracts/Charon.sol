@@ -87,7 +87,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     event LPDeposit(address _lp,uint256 _poolAmountOut);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
     event OracleDeposit(bytes32 _commitment,uint32 _insertedIndex,uint256 _timestamp);
-    event DepositToOtherChain(bytes32 _commitment, uint256 _timestamp, uint256 _tokenAmount);
+    event DepositToOtherChain(bool _isCHUSD, bytes32 _commitment, uint256 _timestamp, uint256 _tokenAmount);
 
     //modifiers
     /**
@@ -123,10 +123,13 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
                 address payable _oracle,
                 uint256 _denomination,
                 uint32 _merkleTreeHeight,
-                uint256 _chainID
+                uint256 _chainID,
+                string memory _name,
+                string memory _symbol
                 )
               Oracle(_oracle)
-              MerkleTreeWithHistory(_merkleTreeHeight, _hasher){
+              MerkleTreeWithHistory(_merkleTreeHeight, _hasher)
+              Token(_name,_symbol){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
         token = IERC20(_token);
@@ -170,15 +173,17 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         depositCommitments.push(_commitment);
         _depositId = depositCommitments.length;
         depositIdByCommitment[_commitment] = _depositId;
+        uint256 _tokenAmount;
         if (_isCHUSD){
-          CHUSD.burn(msg.sender,denomination);
+          chusd.burnCHUSD(msg.sender,denomination);
+          _tokenAmount = denomination;
         }
         else{
-          uint256 _tokenAmount = calcInGivenOut(recordBalance,1 ether,recordBalanceSynth,1 ether,denomination,0);
+          _tokenAmount = calcInGivenOut(recordBalance,1 ether,recordBalanceSynth,1 ether,denomination,0);
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         }
         recordBalance += _tokenAmount;
-        emit DepositToOtherChain(_commitment, block.timestamp, _tokenAmount);
+        emit DepositToOtherChain(_isCHUSD, _commitment, block.timestamp, _tokenAmount);
     }
 
     /**
@@ -188,8 +193,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         require(msg.sender == controller, "should be controller");
         require(!finalized, "should be finalized");
         finalized = true;
-        _mint(INIT_POOL_SUPPLY);
-        _move(address(this),msg.sender, INIT_POOL_SUPPLY);
+        _mint(msg.sender,INIT_POOL_SUPPLY);
         require(_partnerAddys.length == _partnerChains.length, "length should be the same");
         for(uint256 _i; _i < _partnerAddys.length; _i++){
           partnerContracts.push(PartnerContract(_partnerChains[_i],_partnerAddys[_i]));
@@ -198,8 +202,6 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
 
     /**
      * @dev Allows a user to deposit as an LP on this side of the AMM
-     * @param _tokenAmountIn amount of token to LP
-     * @param _minPoolAmountOut minimum pool tokens you will take out (prevents front running)
      * @return _poolAmountOut returns a uint amount of tokens out
      */
     function lpDeposit(uint poolAmountOut, uint256 _maxCHUSDIn, uint256 _maxBaseAssetIn)
@@ -208,19 +210,18 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         _finalized_
         returns (uint256 _poolAmountOut)
     {   
-        uint poolTotal = totalSupply();
-        uint ratio = bdiv(poolAmountOut, poolTotal);
+        uint256 poolTotal = totalSupply();
+        uint256 ratio = bdiv(poolAmountOut, poolTotal);
         require(ratio != 0, "ERR_MATH_APPROX");
-        uint _baseAssetIn = bmul(ratio, recordBalance);
+        uint256 _baseAssetIn = bmul(ratio, recordBalance);
         require(_baseAssetIn != 0, "ERR_MATH_APPROX");
-        require(_baseAssetIn <= maxBaseAssetIn, "ERR_LIMIT_IN");
+        require(_baseAssetIn <= _maxBaseAssetIn, "ERR_LIMIT_IN");
         recordBalance = badd(recordBalance,_baseAssetIn);
-        uint _CHUSDIn = bmul(ratio, recordBalanceSynth);
+        uint256 _CHUSDIn = bmul(ratio, recordBalanceSynth);
         require(_CHUSDIn != 0, "ERR_MATH_APPROX");
-        require(_CHUSDIn <= maxCHUSDIn, "ERR_LIMIT_IN");
-        recordBalanceSynth = badd(recordBalanceSynth,_tokenAmountIn);
-        _mint(_poolAmountOut);
-        _move(address(this),msg.sender, _poolAmountOut);
+        require(_CHUSDIn <= _maxCHUSDIn, "ERR_LIMIT_IN");
+        recordBalanceSynth = badd(recordBalanceSynth,_CHUSDIn);
+        _mint(msg.sender,_poolAmountOut);
         require (token.transferFrom(msg.sender,address(this), _baseAssetIn));
         require (chusd.transferFrom(msg.sender,address(this), _CHUSDIn));
         emit LPDeposit(msg.sender,_poolAmountOut);
@@ -229,7 +230,8 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     /**
      * @dev Allows an lp to withdraw funds
      * @param _poolAmountIn amount of pool tokens to transfer in
-     * @param _minAmountOut amount of base token you need out
+     * @param _minCHUSDOut min aount of chusd you need out
+     * @param _minBaseAssetOut min amount of base token you need out
      */
     function lpWithdraw(uint _poolAmountIn, uint256 _minCHUSDOut, uint256 _minBaseAssetOut)
         external
@@ -237,30 +239,28 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         _lock_
         returns (uint256 _tokenAmountOut)
     {
-        uint poolTotal = totalSupply();
-        uint exitFee = bmul(poolAmountIn, EXIT_FEE);
-        uint pAiAfterExitFee = bsub(poolAmountIn, exitFee);
-        uint ratio = bdiv(pAiAfterExitFee, poolTotal);
-        require(ratio != 0, "ERR_MATH_APPROX");
+        uint256 poolTotal = totalSupply();
         uint256 _exitFee = bmul(_poolAmountIn, fee);
-        _move(msg.sender,address(this), _poolAmountIn);
-        _burn(_poolAmountIn - _exitFee);
+        uint256 pAiAfterExitFee = bsub(_poolAmountIn, _exitFee);
+        uint256 ratio = bdiv(pAiAfterExitFee, poolTotal);
+        require(ratio != 0, "ERR_MATH_APPROX");
+        _burn(msg.sender,_poolAmountIn - _exitFee);
         _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
-        uint _tokenAmountOut = bmul(ratio, recordBalance);
+        _tokenAmountOut = bmul(ratio, recordBalance);
         require(_tokenAmountOut != 0, "ERR_MATH_APPROX");
-        require(_tokenAmountOut >= minBaseAmountOut, "ERR_LIMIT_OUT");
+        require(_tokenAmountOut >= _minBaseAssetOut, "ERR_LIMIT_OUT");
         recordBalance = bsub(recordBalance, _tokenAmountOut);
-        uint _CHUSDOut = bmul(ratio, recordBalanceSynth);
+        uint256 _CHUSDOut = bmul(ratio, recordBalanceSynth);
         require(_CHUSDOut != 0, "ERR_MATH_APPROX");
-        require(_CHUSDOut >= minCHUSDOut, "ERR_LIMIT_OUT");
+        require(_CHUSDOut >= _minCHUSDOut, "ERR_LIMIT_OUT");
         recordBalanceSynth = bsub(recordBalanceSynth, _CHUSDOut);
         require(token.transfer(msg.sender, _tokenAmountOut));
-        require(chusd.transfer(msg.sender, _CHUSDOut);
-        emit LPWithdraw(msg.sender, _poolAmountIn);
+        require(chusd.transfer(msg.sender, _CHUSDOut));
+        emit LPWithdrawal(msg.sender, _poolAmountIn);
     }
 
-    function lpSingleCHUSD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external{
-              _poolAmountOut = calcPoolOutGivenSingleIn(
+    function lpSingleCHUSD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external _finalized_ _lock_{
+        uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
                             recordBalanceSynth,//pool tokenIn balance
                             1 ether,//weight of one side
                             _totalSupply,
@@ -269,15 +269,13 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
                         );
         recordBalance += _tokenAmountIn;
         require(_poolAmountOut >= _minPoolAmountOut, "not enough squeeze");
-        _mint(_poolAmountOut);
-        _move(address(this),msg.sender, _poolAmountOut);
+        _mint(msg.sender,_poolAmountOut);
         require (chusd.transferFrom(msg.sender,address(this), _tokenAmountIn));
         emit LPDeposit(msg.sender,_tokenAmountIn);
-
     }
 
-    function lpWithdrawSingleCHUSD(uint256 _poolAmountIn, uint256 _minAmountOut){
-        _tokenAmountOut = calcSingleOutGivenPoolIn(
+    function lpWithdrawSingleCHUSD(uint256 _poolAmountIn, uint256 _minAmountOut) external _finalized_ _lock_{
+        uint256 _tokenAmountOut = calcSingleOutGivenPoolIn(
                             recordBalanceSynth,
                             1 ether,
                             _totalSupply,
@@ -288,8 +286,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         recordBalance -= _tokenAmountOut;
         require(_tokenAmountOut >= _minAmountOut, "not enough squeeze");
         uint256 _exitFee = bmul(_poolAmountIn, fee);
-        _move(msg.sender,address(this), _poolAmountIn);
-        _burn(_poolAmountIn - _exitFee);
+        _burn(msg.sender,_poolAmountIn - _exitFee);
         _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
         require(chusd.transfer(msg.sender, _tokenAmountOut));
     }
@@ -315,7 +312,6 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
      * @param _recipient address funds (pool tokens or base token) will be be sent
      * @param _relayer address of relayer pushing txn on chain (for anonymity)
      * @param _refund amount to pay relayer
-     * @param _lp bool of whether or not to LP into contract or trade out if false
      */
     function secretWithdraw(
         Proof calldata _proof,
@@ -343,7 +339,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
             ),
             "Invalid withdraw proof"
         );
-      CHUSD.mintCHUSD(_recipient,denomination);
+      chusd.mintCHUSD(_recipient,denomination);
       nullifierHashes[_nullifierHash] = true;
       if (_refund > 0) {
         (bool success, ) = _recipient.call{ value: _refund }("");
@@ -408,67 +404,62 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     function swap(
         bool _inIsCHUSD,
         uint256 tokenAmountIn,
-        address tokenOut,
         uint256 minAmountOut,
         uint256 maxPrice
     )
-        external
-        _logs_
-        _lock_
-        returns (uint tokenAmountOut, uint spotPriceAfter){
-          uint256 _inRecordBal;
+        external _finalized_ _lock_
+        returns (uint256 _tokenAmountOut, uint256 _spotPriceAfter){
+        uint256 _inRecordBal;
+        uint256 _outRecordBal;
         if(_inIsCHUSD){
            _inRecordBal = recordBalanceSynth;
            _outRecordBal = recordBalance;
         } 
         else{
           _inRecordBal = recordBalance;
-          _outRecordBal = recordBalanceSytnh;
+          _outRecordBal = recordBalanceSynth;
         }
         require(tokenAmountIn <= bmul(_inRecordBal, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
-
-        uint spotPriceBefore = calcSpotPrice(
-                                    inRecordBal,
+        uint256 spotPriceBefore = calcSpotPrice(
+                                    _inRecordBal,
                                     1 ether,
-                                    outRecordBal,
+                                    _outRecordBal,
                                     1 ether,
                                     fee
                                 );
         require(spotPriceBefore <= maxPrice, "ERR_BAD_LIMIT_PRICE");
-        tokenAmountOut = calcOutGivenIn(
-                            inRecordBal,
+        _tokenAmountOut = calcOutGivenIn(
+                            _inRecordBal,
                             1 ether,
-                            outRecordBal,
+                            _outRecordBal,
                             1 ether,
                             tokenAmountIn,
                             fee
                         );
-        require(tokenAmountOut >= minAmountOut, "ERR_LIMIT_OUT");
+        require(_tokenAmountOut >= minAmountOut, "ERR_LIMIT_OUT");
         if(_inIsCHUSD){
-           outRecordBal = bsub(outRecordBal, tokenAmountOut);
-           require(chusd.burn(msg.sender,tokenAmountIn);
-           require(token.transfer(msg.sender,tokenAmountOut));
-           recordBalance -= tokensAmountOut;
+           _outRecordBal = bsub(_outRecordBal, _tokenAmountOut);
+           require(chusd.burnCHUSD(msg.sender,tokenAmountIn));
+           require(token.transfer(msg.sender,_tokenAmountOut));
+           recordBalance -= _tokenAmountOut;
         } 
         else{
-        inRecordBal = badd(inRecordBal, tokenAmountIn);
-          outRecordBal = bsub(outRecordBal, tokenAmountOut);
-          require(token.transferFrom(msg.sender,address(this),tokenAmountOut));
-          require(chusd.transfer(msg.sender,tokenAmountOut));
+          _inRecordBal = badd(_inRecordBal, tokenAmountIn);
+          _outRecordBal = bsub(_outRecordBal, _tokenAmountOut);
+          require(token.transferFrom(msg.sender,address(this), _tokenAmountOut));
+          require(chusd.transfer(msg.sender,_tokenAmountOut));
           recordBalance += tokenAmountIn;
-          recordBalanceSynth -= tokenAountOut;
+          recordBalanceSynth -= _tokenAmountOut;
         }
-
-        spotPriceAfter = calcSpotPrice(
-                                inRecordBal,
-                                1 ether
-                                outRecordBal,
+        _spotPriceAfter = calcSpotPrice(
+                                _inRecordBal,
                                 1 ether,
-                                _swapFee
+                                _outRecordBal,
+                                1 ether,
+                                fee
                             );
-        require(spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
-        require(spotPriceAfter <= maxPrice, "ERR_LIMIT_PRICE");
-        require(spotPriceBefore <= bdiv(tokenAmountIn, tokenAmountOut), "ERR_MATH_APPROX");
-        return (tokenAmountOut, spotPriceAfter);
-        }
+        require(_spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
+        require(_spotPriceAfter <= maxPrice, "ERR_LIMIT_PRICE");
+        require(spotPriceBefore <= bdiv(tokenAmountIn, _tokenAmountOut), "ERR_MATH_APPROX");
+      }
 }

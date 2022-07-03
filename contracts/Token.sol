@@ -15,7 +15,7 @@ contract Token is Math{
     event Approval(address indexed _src, address indexed _dst, uint _amt);
     event Transfer(address indexed _src, address indexed _dst, uint _amt);
 
-    constructor(string __name, string __symbol){
+    constructor(string memory __name, string memory __symbol){
         _name = __name;
         _symbol = __symbol;
     }

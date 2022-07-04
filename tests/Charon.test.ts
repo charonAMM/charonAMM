@@ -170,7 +170,23 @@ describe("Charon tests", function () {
                                                   web3.utils.toWei("100"),
                                                   0)
         await token.connect(accounts[1]).approve(charon.address,amount)
-        await charon.connect(accounts[1]).depositToOtherChain(commitment);
+        await charon.connect(accounts[1]).depositToOtherChain(commitment,false);
+        assert(await charon.getDepositCommitmentsById(1) == commitment, "commitment should be stored")
+        assert(await charon.getDepositIdByCommitment(commitment) == 1, "reverse commitment mapping should work")
+        assert(await charon.didDepositCommitment(commitment), "didDeposit should be true")
+        assert(await charon.recordBalance() * 1 -(1* web3.utils.toWei("100") + 1 * amount) == 0, "recordBalance should go up")
+        assert(await token.balanceOf(accounts[1].address) == web3.utils.toWei("100") - amount, "balance should change properly")
+      });
+      it("Test depositToOtherChain - CHUSD", async function() {
+        const commitment = h.hash("test")
+        await token.mint(accounts[1].address,web3.utils.toWei("100"))
+        let amount = await charon.calcInGivenOut(web3.utils.toWei("100"),web3.utils.toWei("1"),
+                                                  web3.utils.toWei("1000"),
+                                                  web3.utils.toWei("1"),
+                                                  web3.utils.toWei("100"),
+                                                  0)
+        await token.connect(accounts[1]).approve(charon.address,amount)
+        await charon.connect(accounts[1]).depositToOtherChain(commitment,true);
         assert(await charon.getDepositCommitmentsById(1) == commitment, "commitment should be stored")
         assert(await charon.getDepositIdByCommitment(commitment) == 1, "reverse commitment mapping should work")
         assert(await charon.didDepositCommitment(commitment), "didDeposit should be true")
@@ -179,8 +195,8 @@ describe("Charon tests", function () {
       });
       it("Test finalize", async function() {
         let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2,"Charon Pool Token","CPT");
-        await testCharon.deployed();
-        await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address]))//must be controller
+        await testCharon.deployed();await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address]))//must be controller
+        
         await testCharon.finalize([1],[charon.address]);
         await h.expectThrow(testCharon.finalize([1],[charon.address]))//already finalized
         assert(await testCharon.finalized(), "should be finalized")
@@ -237,7 +253,7 @@ describe("Charon tests", function () {
         let deposit = Deposit.new(poseidon);
         tree.insert(deposit.commitment)
         await token.approve(charon.address,denomination)
-        await charon.depositToOtherChain(toFixedHex(deposit.commitment));
+        await charon.depositToOtherChain(toFixedHex(deposit.commitment),false);
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
         let queryData = abiCoder.encode(
           ['string', 'bytes'],
@@ -266,7 +282,7 @@ describe("Charon tests", function () {
         let tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
         let deposit = Deposit.new(poseidon);
         await token.approve(charon.address,denomination)
-        await charon.depositToOtherChain(toFixedHex(deposit.commitment));
+        await charon.depositToOtherChain(toFixedHex(deposit.commitment),false);
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
         let queryData = abiCoder.encode(
           ['string', 'bytes'],
@@ -318,7 +334,7 @@ describe("Charon tests", function () {
         };
         const solProof = await prove(witness);
         const txWithdraw = await charon2.connect(relayerSigner)
-            .secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee, false);
+            .secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee);
         const receiptWithdraw = await txWithdraw.wait();
         console.log("Withdraw gas cost", receiptWithdraw.gasUsed.toNumber());
     }).timeout(500000);
@@ -328,7 +344,7 @@ describe("Charon tests", function () {
             const tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
         const deposit = Deposit.new(poseidon);
         await token.approve(charon.address,denomination)
-        await charon.depositToOtherChain(toFixedHex(deposit.commitment));
+        await charon.depositToOtherChain(toFixedHex(deposit.commitment),false);
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
         let queryData = abiCoder.encode(
           ['string', 'bytes'],
@@ -372,9 +388,9 @@ describe("Charon tests", function () {
         };
         const solProof = await prove(witness);
         // First withdraw
-        await charon2.connect(relayerSigner).secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee, false);
+        await charon2.connect(relayerSigner).secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee);
         // Second withdraw
-        await charon2.connect(relayerSigner).secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee, false)
+        await charon2.connect(relayerSigner).secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee)
             .then(
                 () => {
                     assert.fail("Expect tx to fail");
@@ -391,7 +407,7 @@ describe("Charon tests", function () {
         // An honest user makes a deposit
         const depositHonest = Deposit.new(poseidon);
         await token.approve(charon.address,denomination)
-        await charon.depositToOtherChain(toFixedHex(depositHonest.commitment));
+        await charon.depositToOtherChain(toFixedHex(depositHonest.commitment),false);
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(depositHonest.commitment))
         let queryData = abiCoder.encode(
           ['string', 'bytes'],
@@ -440,7 +456,7 @@ describe("Charon tests", function () {
             pathIndices: path_index,
         };
         const solProof = await prove(witness);
-        await charon2.connect(relayerSigner).secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee,false)
+        await charon2.connect(relayerSigner).secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee)
             .then(
                 () => {
                     assert.fail("Expect tx to fail");
@@ -459,7 +475,7 @@ describe("Charon tests", function () {
         await token.connect(userOldSigner).approve(charon.address,denomination)
           const deposit = Deposit.new(poseidon);
           await tree.insert(deposit.commitment);
-          await charon.connect(userOldSigner).depositToOtherChain(deposit.commitment);
+          await charon.connect(userOldSigner).depositToOtherChain(deposit.commitment,false);
           let depositId = await charon.getDepositIdByCommitment(deposit.commitment)
           let queryData = abiCoder.encode(
             ['string', 'bytes'],
@@ -513,7 +529,7 @@ describe("Charon tests", function () {
           let initRecord = await charon2.recordBalance()
           assert(await charon2.isKnownRoot(root),"should be known root")
           const txWithdraw = await charon2.connect(relayerSigner)
-              .secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee, false);
+              .secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee);
           assert(await charon2.isSpent(nullifierHash), "nullifierHash should be true")
           isA = await charon2.isSpentArray([nullifierHash]);
           assert(isA[0],"should be spent")
@@ -537,7 +553,7 @@ describe("Charon tests", function () {
         const deposit = Deposit.new(poseidon);
         assert.equal(await tree.root(), await charon2.roots(0));
         await tree.insert(deposit.commitment);
-        await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment));
+        await charon.connect(accounts[2]).depositToOtherChain(toFixedHex(deposit.commitment),false);
         let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
         let queryData = abiCoder.encode(
             ['string', 'bytes'],
@@ -592,7 +608,7 @@ describe("Charon tests", function () {
           let initRecord = await charon2.recordBalance()
           assert(await charon2.isKnownRoot(root),"should be known root")
           const txWithdraw = await charon2.connect(accounts[1])
-              .secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee, true);
+              .secretWithdraw(solProof, root, nullifierHash, recipient, relayer, fee);
           assert(await charon2.isSpent(nullifierHash), "nullifierHash should be true")
           isA = await charon2.isSpentArray([nullifierHash]);
           assert(isA[0] == true, "should be spent")
@@ -607,9 +623,19 @@ describe("Charon tests", function () {
         assert(await token2.balanceOf(userNewSigner.address) == 0, "no tokens should be paid")
         assert(await charon2.balanceOf(userNewSigner.address) - poolOut == 0, "pool tokens paid")
       });
-
       it("CHUSD tests (mint/burn)", async function () {
-        console.log("not ready")
+        let chusdfac = await ethers.getContractFactory("contracts/CHUSD.sol:CHUSD");
+        chusd = await chusdfac.deploy(accounts[1].address,"Charon USD","chusd")
+        await h.expectThrow(chusd.connect(accounts[2]).mintCHUSD(accounts[3].address,1000))//must be charon
+        await chusd.connect(accounts[1]).mintCHUSD(accounts[4].address,1000)
+        assert(await chusd.totalSupply() == 1000, "total supply should be corrrect")
+        assert(await chusd.balanceOf(accounts[4].address) == 1000, "balance should be corrrect")
+        assert(await chusd.balanceOf(accounts[3].address) == 0, "balance 3 should be corrrect")
+        await h.expectThrow(chusd.connect(accounts[2]).burnCHUSD(accounts[4].address,500))//must be charon
+        await chusd.connect(accounts[1]).burnCHUSD(accounts[4].address,500)
+        assert(await chusd.totalSupply() == 500, "total supply 2 should be corrrect")
+        assert(await chusd.balanceOf(accounts[4].address) == 500, "balance should be corrrect 2")
+        assert(await chusd.balanceOf(accounts[3].address) == 0, "balance 3 should be corrrect 2")
       });
       it("test getSpotPrice", async function () {
         console.log("not ready")

@@ -152,6 +152,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         recordBalanceSynth = _synthBalance;
         chusd = CHUSD(_chusd);
         require (token.transferFrom(msg.sender, address(this), _balance));
+        chusd.mintCHUSD(address(this),_synthBalance);
     }
 
     /**

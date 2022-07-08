@@ -397,7 +397,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     }
 
     function getSpotPrice() external view returns(uint256 _spotPrice){
-      return calcSpotPrice(recordBalance,1 ether,recordBalanceSynth, 1 ether, 0);
+      return calcSpotPrice(recordBalanceSynth,1 ether,recordBalance, 1 ether, 0);
     }
 
 

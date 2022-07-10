@@ -190,7 +190,6 @@ describe("Charon tests", function () {
         assert(await charon.getDepositIdByCommitment(commitment) == 1, "reverse commitment mapping should work")
         assert(await charon.didDepositCommitment(commitment), "didDeposit should be true")
         assert(await charon.recordBalanceSynth() * 1 -(1* web3.utils.toWei("1000")) == 0, "recordBalance should not go up")
-        console.log(await chusd.balanceOf(accounts[1].address)) 
         assert(await chusd.balanceOf(accounts[1].address) == 0, "balance should change properly")
       });
       it("Test finalize", async function() {
@@ -545,7 +544,6 @@ describe("Charon tests", function () {
           )
           assert(await charon2.recordBalanceSynth() - initSynth == 0, "synth balance should be the same")
           assert(await charon2.recordBalance() - initRecord == 0, "recordBalance should change")
-          console.log(await chusd2.balanceOf(recipient))
           assert(await chusd2.balanceOf(recipient) - denomination == 0, "should be minted")
       });
       it("CHUSD tests (mint/burn)", async function () {
@@ -578,10 +576,8 @@ describe("Charon tests", function () {
         await h.expectThrow(charon.connect(accounts[2]).swap(false,web3.utils.toWei("1"),web3.utils.toWei("100"),web3.utils.toWei("10")))//too uch expected out
         await charon.connect(accounts[2]).swap(false,web3.utils.toWei("1"),_amountOut,web3.utils.toWei("9"))
         assert(await token.balanceOf(accounts[2].address) - (denomination - web3.utils.toWei("1")), "tokens should be taken")
-        console.log(await charon.getSpotPrice()) 
         assert(await charon.getSpotPrice() - web3.utils.toWei("9.8") > 0, "new spot price should be correct")
         assert(await charon.getSpotPrice() - web3.utils.toWei("9.8") < web3.utils.toWei(".1"), "new spot price should be correct")
-        console.log(await chusd.balanceOf(accounts[2].address))
         assert(await chusd.balanceOf(accounts[2].address) - _amountOut == 0, "amount out should be transferred")
       });
       it("test swap isCHUSD", async function () {
@@ -636,7 +632,6 @@ describe("Charon tests", function () {
         )
         assert(poolOut >= web3.utils.toWei("10"), "should spit out correct amount of tokens")
         await charon.connect(accounts[1]).lpWithdrawSingleCHUSD(minOut, poolOut)
-        console.log( await charon.recordBalanceSynth() ) 
         assert(await charon.recordBalanceSynth() - web3.utils.toWei("999") > 0, "record balance should be back to correct" )
         assert(web3.utils.toWei("1001") - await charon.recordBalanceSynth() > 0, "record balance should be back to correct" )
         //test fee later

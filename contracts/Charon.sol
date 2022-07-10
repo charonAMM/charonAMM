@@ -203,16 +203,14 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
 
     /**
      * @dev Allows a user to deposit as an LP on this side of the AMM
-     * @return _poolAmountOut returns a uint amount of tokens out
      */
-    function lpDeposit(uint poolAmountOut, uint256 _maxCHUSDIn, uint256 _maxBaseAssetIn)
+    function lpDeposit(uint _poolAmountOut, uint256 _maxCHUSDIn, uint256 _maxBaseAssetIn)
         external
         _lock_
         _finalized_
-        returns (uint256 _poolAmountOut)
     {   
         uint256 poolTotal = totalSupply();
-        uint256 ratio = bdiv(poolAmountOut, poolTotal);
+        uint256 ratio = bdiv(_poolAmountOut, poolTotal);
         require(ratio != 0, "ERR_MATH_APPROX");
         uint256 _baseAssetIn = bmul(ratio, recordBalance);
         require(_baseAssetIn != 0, "ERR_MATH_APPROX");

@@ -183,7 +183,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
           _tokenAmount = denomination;
         }
         else{
-          _tokenAmount = calcInGivenOut(recordBalance,1 ether,recordBalanceSynth,1 ether,denomination,0);
+          _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,denomination,0);
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         }
         recordBalance += _tokenAmount;
@@ -199,7 +199,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         require(msg.sender == controller, "should be controller");
         require(!finalized, "should be finalized");
         finalized = true;
-        _mint(msg.sender,INIT_POOL_SUPPLY);
+        _mint(msg.sender,100 ether);
         require(_partnerAddys.length == _partnerChains.length, "length should be the same");
         for(uint256 _i; _i < _partnerAddys.length; _i++){
           partnerContracts.push(PartnerContract(_partnerChains[_i],_partnerAddys[_i]));
@@ -268,12 +268,15 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         emit LPWithdrawal(msg.sender, _poolAmountIn);
     }
 
+    /**
+     * @dev allows a user to single-side LP CHUSD 
+     * @param _tokenAmountIn amount of CHUSD to deposit
+     * @param _minPoolAmountOut minimum number of pool tokens you need out
+     */
     function lpSingleCHUSD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external _finalized_ _lock_{
         uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
                             recordBalanceSynth,//pool tokenIn balance
-                            1 ether,//weight of one side
                             _totalSupply,
-                            2 ether,//totalWeight, we can later edit this part out of the math func
                             _tokenAmountIn//amount of token In
                         );
         recordBalance += _tokenAmountIn;
@@ -283,12 +286,15 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         emit LPDeposit(msg.sender,_tokenAmountIn);
     }
 
+    /**
+     * @dev allows a user to single-side LP withdraw CHUSD 
+     * @param _poolAmountIn amount of pool tokens to deposit
+     * @param _minAmountOut minimum amount of CHUSD you need out
+     */
     function lpWithdrawSingleCHUSD(uint256 _poolAmountIn, uint256 _minAmountOut) external _finalized_ _lock_{
         uint256 _tokenAmountOut = calcSingleOutGivenPoolIn(
                             recordBalanceSynth,
-                            1 ether,
                             _totalSupply,
-                            2 ether,
                             _poolAmountIn,
                             fee
                         );
@@ -380,17 +386,13 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         require(tokenAmountIn <= bmul(_inRecordBal, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
         uint256 spotPriceBefore = calcSpotPrice(
                                     _inRecordBal,
-                                    1 ether,
                                     _outRecordBal,
-                                    1 ether,
                                     fee
                                 );
         require(spotPriceBefore <= maxPrice, "ERR_BAD_LIMIT_PRICE");
         _tokenAmountOut = calcOutGivenIn(
                             _inRecordBal,
-                            1 ether,
                             _outRecordBal,
-                            1 ether,
                             tokenAmountIn,
                             fee
                         );
@@ -411,9 +413,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         }
         _spotPriceAfter = calcSpotPrice(
                                 _inRecordBal,
-                                1 ether,
                                 _outRecordBal,
-                                1 ether,
                                 fee
                             );
         require(_spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
@@ -468,6 +468,6 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     }
 
     function getSpotPrice() external view returns(uint256 _spotPrice){
-      return calcSpotPrice(recordBalanceSynth,1 ether,recordBalance, 1 ether, 0);
+      return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
     }
 }

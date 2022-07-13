@@ -7,7 +7,7 @@
 
 <b>Charon</b> is a decentralized protocol for a Privacy Enabled Cross-Chain AMM (PECCAMM). It achieves privacy by breaking the link between deposits on one chain and withdrawals on another.  It works by having AMM's on seperate chains, but LP deposits in one of the assets and all orders are only achieved via depositing on the opposite chain and then withdrawing it as either an LP or trade with any address. To acheive cross-chain functionality, Charon utilizes [Tellor](https://www.tellor.io) to trustlessly pass commitments(proof of deposits) between chains. 
 
-[Whitepaper](https://github.com/themandalore/charon/blob/main/public/whitepaper.pdf)
+For more information, check out the [whitepaper](https://github.com/themandalore/charon/blob/main/public/whitepaper.pdf)
 
 ## Setting up and testing
 
@@ -24,31 +24,6 @@ npm run build
 ```sh
 npm run test
 ```
-
-
-
-## How it works
-
-For this example, we'll use Ethereum and Polygon, although the system can work on any two EVM chains with Tellor support. It also works with any tokens, but for this example, we'll use LUSD on mainnet and USDC on Polygon (two stablecoins for ease of math). 
-
-Flow 
-
-    Setup done by controller:
-     - Launch contract on Ethereum
-     - Launch contract on Polygon
-     - Deposit 100k LUSD in Ethereum contract and 100k USDC on Polygon to initialize pools
-
-    Functions for users 
-
-    (on Ethereum as example)
-    - LP deposit (deposit LUSD as an LP on the ETH contract, earn fees).  
-    - LP withdraw
-    - depositToOtherChain (deposit LUSD with zk commitment)
-    - oracleDeposit (oracle puts your information into the other chains contract)
-    - secretWithdraw( withdraw your deposit from Polygon)
-        - can either withdraw as LP or as market order 
-
-
 
 ## Benchmark
 

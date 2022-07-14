@@ -19,9 +19,6 @@ The build step compiles the circuit, does untrusted setup, generates verifier co
 ```sh
 npm install
 npm run build
-```
-
-```sh
 npm run test
 ```
 

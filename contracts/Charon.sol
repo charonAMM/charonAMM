@@ -1,12 +1,12 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity 0.8.4;
 
+import "./CHUSD.sol";
 import "./MerkleTreeWithHistory.sol";
-import "./interfaces/IERC20.sol";
-import "./interfaces/IVerifier.sol";
 import "./Token.sol";
 import "./helpers/Oracle.sol";
-import "./CHUSD.sol";
+import "./interfaces/IERC20.sol";
+import "./interfaces/IVerifier.sol";
 
 /**
  @title charon

@@ -24,7 +24,7 @@ contract Oracle is UsingTellor{
         bytes memory _value;
         bool _didGet;
         bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));
-        (_didGet,_value,) = getDataBefore(_queryId,block.timestamp - 1 hours);
+        (_didGet,_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_didGet);
         _commitment = abi.decode(_value,(bytes32));
     }

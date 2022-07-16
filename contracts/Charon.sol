@@ -357,19 +357,25 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
       chusd.mintCHUSD(_recipient,denomination);
       nullifierHashes[_nullifierHash] = true;
       if (_refund > 0) {
-        (bool success, ) = _recipient.call{ value: _refund }("");
-        if (!success) {
+        (bool _success, ) = _recipient.call{ value: _refund }("");
+        if (!_success) {
           _relayer.transfer(_refund);
         }
       }
     }
 
-      //does this math still work if I'm burning?
+    /**
+     * @dev withdraw your tokens from deposit on alternate chain
+     * @param _inIsCHUSD bool if token sending in is CHUSD
+     * @param _tokenAmountIn amount of token to send in
+     * @param _minAmountOut minimum amount of out token you need
+     * @param _maxPrice max price you're willing to send the pool too
+     */
     function swap(
         bool _inIsCHUSD,
-        uint256 tokenAmountIn,
-        uint256 minAmountOut,
-        uint256 maxPrice
+        uint256 _tokenAmountIn,
+        uint256 _minAmountOut,
+        uint256 _maxPrice
     )
         external _finalized_ _lock_
         returns (uint256 _tokenAmountOut, uint256 _spotPriceAfter){
@@ -384,7 +390,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
           _outRecordBal = recordBalanceSynth;
         }
         require(tokenAmountIn <= bmul(_inRecordBal, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
-        uint256 spotPriceBefore = calcSpotPrice(
+        uint256 _spotPriceBefore = calcSpotPrice(
                                     _inRecordBal,
                                     _outRecordBal,
                                     fee
@@ -393,22 +399,23 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
         _tokenAmountOut = calcOutGivenIn(
                             _inRecordBal,
                             _outRecordBal,
-                            tokenAmountIn,
+                            _tokenAmountIn,
                             fee
                         );
-        require(_tokenAmountOut >= minAmountOut, "ERR_LIMIT_OUT");
+        require(_tokenAmountOut >= _minAmountOut, "ERR_LIMIT_OUT");
+        require(spotPriceBefore <= bdiv(_tokenAmountIn, _tokenAmountOut), "ERR_MATH_APPROX");
         if(_inIsCHUSD){
            _outRecordBal = bsub(_outRecordBal, _tokenAmountOut);
-           require(chusd.burnCHUSD(msg.sender,tokenAmountIn));
+           require(chusd.burnCHUSD(msg.sender,_tokenAmountIn));
            require(token.transfer(msg.sender,_tokenAmountOut));
            recordBalance -= _tokenAmountOut;
         } 
         else{
-          _inRecordBal = badd(_inRecordBal, tokenAmountIn);
+          _inRecordBal = badd(_inRecordBal, _tokenAmountIn);
           _outRecordBal = bsub(_outRecordBal, _tokenAmountOut);
           require(token.transferFrom(msg.sender,address(this), _tokenAmountOut));
           require(chusd.transfer(msg.sender,_tokenAmountOut));
-          recordBalance += tokenAmountIn;
+          recordBalance += _tokenAmountIn;
           recordBalanceSynth -= _tokenAmountOut;
         }
         _spotPriceAfter = calcSpotPrice(
@@ -416,9 +423,8 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
                                 _outRecordBal,
                                 fee
                             );
-        require(_spotPriceAfter >= spotPriceBefore, "ERR_MATH_APPROX");     
-        require(_spotPriceAfter <= maxPrice, "ERR_LIMIT_PRICE");
-        require(spotPriceBefore <= bdiv(tokenAmountIn, _tokenAmountOut), "ERR_MATH_APPROX");
+        require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
+        require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");
       }
 
     //getters
@@ -434,7 +440,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
      * @dev allows you to find a depositId for a given commitment
      * @param _commitment the commitment of your deposit
      */
-    function getDepositIdByCommitment(bytes32 _commitment) external view returns(uint){
+    function getDepositIdByCommitment(bytes32 _commitment) external view returns(uint256){
       return depositIdByCommitment[_commitment];
     }
     
@@ -450,23 +456,34 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
      * @dev allows you to see whether an array of notes has been spent
      * @param _nullifierHashes array of notes identifying withdrawals
      */
-    function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory spent) {
-      spent = new bool[](_nullifierHashes.length);
-      for (uint256 i = 0; i < _nullifierHashes.length; i++) {
-        if (isSpent(_nullifierHashes[i])) {
-          spent[i] = true;
+    function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory _spent) {
+      _spent = new bool[](_nullifierHashes.length);
+      for (uint256 _i = 0; _i < _nullifierHashes.length; _i++) {
+        if (isSpent(_nullifierHashes[_i])) {
+          _spent[_i] = true;
         }
       }
     }
 
+    /**
+     * @dev allows you to see check if a commitment is present
+     * @param _commitment bytes32 deposit commitment
+     */
     function isCommitment(bytes32 _commitment) external view returns(bool){
       return commitments[_commitment];
     }
 
+    /**
+     * @dev returns the partner contracts in this charon system and their chains
+     */
     function getPartnerContracts() external view returns(PartnerContract[] memory){
       return partnerContracts;
     }
 
+    /**
+     * @dev allows you to check the spot price of the token pair
+     * @return _spotPrice uint256 price of the pair
+     */
     function getSpotPrice() external view returns(uint256 _spotPrice){
       return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
     }

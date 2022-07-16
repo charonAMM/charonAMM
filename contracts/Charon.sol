@@ -4,6 +4,7 @@ pragma solidity 0.8.4;
 import "./CHUSD.sol";
 import "./MerkleTreeWithHistory.sol";
 import "./Token.sol";
+import "./helpers/Math.sol";
 import "./helpers/Oracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
@@ -50,7 +51,7 @@ import "./interfaces/IVerifier.sol";
 //                             ./%%%#%%%%%%%%%%%%%%%%%%%(((####%###((((#(*,,*(*    
 //                                                   ,*#%%###(##########(((,    
 */
-contract Charon is Token,Oracle, MerkleTreeWithHistory{
+contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
     struct Proof {
         uint256[2] a;
@@ -129,8 +130,8 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
                 string memory _name,
                 string memory _symbol
                 )
-              Oracle(_oracle)
               MerkleTreeWithHistory(_merkleTreeHeight, _hasher)
+              Oracle(_oracle)
               Token(_name,_symbol){
         require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
@@ -276,7 +277,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     function lpSingleCHUSD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external _finalized_ _lock_{
         uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
                             recordBalanceSynth,//pool tokenIn balance
-                            _totalSupply,
+                            supply,
                             _tokenAmountIn//amount of token In
                         );
         recordBalance += _tokenAmountIn;
@@ -294,7 +295,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
     function lpWithdrawSingleCHUSD(uint256 _poolAmountIn, uint256 _minAmountOut) external _finalized_ _lock_{
         uint256 _tokenAmountOut = calcSingleOutGivenPoolIn(
                             recordBalanceSynth,
-                            _totalSupply,
+                            supply,
                             _poolAmountIn,
                             fee
                         );
@@ -389,13 +390,13 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
           _inRecordBal = recordBalance;
           _outRecordBal = recordBalanceSynth;
         }
-        require(tokenAmountIn <= bmul(_inRecordBal, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
+        require(_tokenAmountIn <= bmul(_inRecordBal, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
         uint256 _spotPriceBefore = calcSpotPrice(
                                     _inRecordBal,
                                     _outRecordBal,
                                     fee
                                 );
-        require(spotPriceBefore <= maxPrice, "ERR_BAD_LIMIT_PRICE");
+        require(_spotPriceBefore <= _maxPrice, "ERR_BAD_LIMIT_PRICE");
         _tokenAmountOut = calcOutGivenIn(
                             _inRecordBal,
                             _outRecordBal,
@@ -403,7 +404,7 @@ contract Charon is Token,Oracle, MerkleTreeWithHistory{
                             fee
                         );
         require(_tokenAmountOut >= _minAmountOut, "ERR_LIMIT_OUT");
-        require(spotPriceBefore <= bdiv(_tokenAmountIn, _tokenAmountOut), "ERR_MATH_APPROX");
+        require(_spotPriceBefore <= bdiv(_tokenAmountIn, _tokenAmountOut), "ERR_MATH_APPROX");
         if(_inIsCHUSD){
            _outRecordBal = bsub(_outRecordBal, _tokenAmountOut);
            require(chusd.burnCHUSD(msg.sender,_tokenAmountIn));

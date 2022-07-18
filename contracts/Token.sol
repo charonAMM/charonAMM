@@ -1,40 +1,75 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.8.4;
 
+
+/**
+ @title Token
+ @dev base ERC20 to act as token underlying CHUSD and pool tokens
+ */
 contract Token{
-    
+
+    /*Storage*/
     string  private tokenName;
     string  private tokenSymbol;
-    uint256 internal supply;
+    uint256 internal supply;//totalSupply
     mapping(address => uint) balance;
-    mapping(address => mapping(address=>uint)) userAllowance;
+    mapping(address => mapping(address=>uint)) userAllowance;//allowance
 
+    /*Events*/
     event Approval(address indexed _src, address indexed _dst, uint _amt);
     event Transfer(address indexed _src, address indexed _dst, uint _amt);
 
+    /**
+     * @dev Constructor to initialize token
+     * @param _name of token
+     * @param _symbol of token
+     */
     constructor(string memory _name, string memory _symbol){
         tokenName = _name;
         tokenSymbol = _symbol;
     }
 
-    function name() public view returns (string memory) {
+    /**
+     * @dev retrieves name of token
+     * @return string token name
+     */
+    function name() external view returns (string memory) {
         return tokenName;
     }
 
+    /**
+     * @dev retrieves symbol of token
+     * @return string token sybmol
+     */
     function symbol() public view returns (string memory) {
         return tokenSymbol;
     }
 
+    /**
+     * @dev retrieves token number of decimals
+     * @return uint8 number of decimals (18 standard)
+     */
     function decimals() public pure returns(uint8) {
         return 18;
     }
 
+    /**
+     * @dev retrieves standard token allowance
+     * @param _src user who owns tokens
+     * @param _dst spender (destination) of these tokens
+     * @return uint256 allowance
+     */
     function allowance(address _src, address _dst) external view returns (uint256) {
         return userAllowance[_src][_dst];
     }
 
-    function balanceOf(address _whom) external view returns (uint256) {
-        return balance[_whom];
+    /**
+     * @dev retrieves balance of token holder
+     * @param _user address of token holder
+     * @return uint256 balance of tokens
+     */
+    function balanceOf(address _user) external view returns (uint256) {
+        return balance[_user];
     }
 
     function totalSupply() public view returns (uint256) {

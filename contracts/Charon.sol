@@ -88,7 +88,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     event DepositToOtherChain(bool _isCHUSD, bytes32 _commitment, uint256 _timestamp, uint256 _tokenAmount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
-    event OracleDeposit(bytes32 _commitment,uint32 _insertedIndex,uint256 _timestamp);
+    event OracleDeposit(bytes32[] _commitment,uint32[] _insertedIndices,uint256 _timestamp);
 
     //modifiers
     /**
@@ -313,11 +313,17 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @param _chain chain you're requesting your commitment from
      * @param _depositId depositId of deposit on that chain
      */
-    function oracleDeposit(uint256 _chain, uint256 _depositId) external{
-        bytes32 _commitment = getCommitment(_chain, _depositId);
-        uint32 _insertedIndex = _insert(_commitment);
-        commitments[_commitment] = true;
-        emit OracleDeposit(_commitment, _insertedIndex, block.timestamp);
+    function oracleDeposit(uint256[] memory _chain, uint256[] memory _depositId) external{
+        bytes32[] memory _commitments  = new bytes32[](_chain.length);
+        _commitments = getCommitments(_chain, _depositId);
+        uint32[] memory _insertedIndices = new uint32[](_chain.length);
+        uint32 _index;
+        for(uint8 _i; _i < _commitments.length; _i++){
+              _index = _insert(_commitments[_i]);
+              _insertedIndices[_i] = _index;
+              commitments[_commitments[_i]] = true;
+        }
+        emit OracleDeposit(_commitments, _insertedIndices, block.timestamp);
     }
 
     /**

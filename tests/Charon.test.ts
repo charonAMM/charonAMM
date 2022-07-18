@@ -245,30 +245,40 @@ describe("Charon tests", function () {
         });
       it("Test oracleDeposit", async function() {
         const tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
-        let deposit = Deposit.new(poseidon);
-        tree.insert(deposit.commitment)
-        await token.approve(charon.address,denomination)
-        await charon.depositToOtherChain(toFixedHex(deposit.commitment),false);
-        let depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
-        let queryData = abiCoder.encode(
-          ['string', 'bytes'],
-          ['Charon', abiCoder.encode(
-            ['uint256','uint256'],
-            [1,depositId]
-          )]
-        );
-        let queryId = h.hash(queryData)
-        let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
-        await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
+        let deposit: any;
+        let depositId: any;
+        let queryData: any
+        let queryId: any
+        let nonce: any
+        let dIdArray = []
+        for(var i = 0;i<2;i++){
+          deposit = Deposit.new(poseidon);
+          tree.insert(deposit.commitment)
+          await token.approve(charon.address,denomination)
+          await charon.depositToOtherChain(toFixedHex(deposit.commitment),false);
+          depositId = await charon.getDepositIdByCommitment(toFixedHex(deposit.commitment))
+          queryData = abiCoder.encode(
+            ['string', 'bytes'],
+            ['Charon', abiCoder.encode(
+              ['uint256','uint256'],
+              [1,depositId]
+            )]
+          );
+          queryId = h.hash(queryData)
+          nonce = await tellor2.getNewValueCountbyQueryId(queryId)
+          await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
+          dIdArray.push(depositId)
+        }
         await h.advanceTime(43200)//12 hours
-        let tx = await charon2.oracleDeposit(1,depositId);
+        let tx = await charon2.oracleDeposit([1,1],dIdArray);
         const receipt = await tx.wait();
         const events = await charon2.queryFilter(
             charon2.filters.OracleDeposit(),
             receipt.blockHash
         );
         //@ts-ignore
-        deposit.leafIndex = events[0].args._insertedIndex;
+        let myIndices = events[0].args._insertedIndices;
+        deposit.leafIndex = myIndices[0]
         assert(await charon2.isCommitment(toFixedHex(deposit.commitment)), "should be a commitment")
         assert(await charon2.isSpent(deposit.nullifierHash) == false, "nullifierHash should be false")
         });
@@ -290,19 +300,19 @@ describe("Charon tests", function () {
         let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
         await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
         await h.advanceTime(43200)//12 hours
-        let tx = await charon2.oracleDeposit(1,depositId);
+        let tx = await charon2.oracleDeposit([1],[depositId]);
         const receipt = await tx.wait();
         const events = await charon2.queryFilter(
             charon2.filters.OracleDeposit(),
             receipt.blockHash
         );
         //@ts-ignore
-        deposit.leafIndex = events[0].args._insertedIndex;
+        let myIndices = events[0].args._insertedIndices;
+        deposit.leafIndex = myIndices[0]
         //@ts-ignore
         assert.equal(events[0].args._commitment, deposit.commitment);
         console.log("Deposit gas cost", receipt.gasUsed.toNumber());
         //@ts-ignore
-        deposit.leafIndex = events[0].args._insertedIndex;
         assert.equal(await tree.root(), await charon2.roots(0));
         await tree.insert(deposit.commitment);
         assert.equal(tree.totalElements, await charon2.nextIndex());
@@ -352,14 +362,15 @@ describe("Charon tests", function () {
         let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
         await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
         await h.advanceTime(43200)//12 hours
-        let tx = await charon2.oracleDeposit(1,depositId);
+        let tx = await charon2.oracleDeposit([1],[depositId]);
         const receipt = await tx.wait();
         const events = await charon2.queryFilter(
             charon2.filters.OracleDeposit(),
             receipt.blockHash
         );
         //@ts-ignore
-        deposit.leafIndex = events[0].args._insertedIndex;
+        let myIndices = events[0].args._insertedIndices;
+        deposit.leafIndex = myIndices[0]
         await tree.insert(deposit.commitment);
         const nullifierHash = deposit.nullifierHash;
         const recipient = await userNewSigner.getAddress();
@@ -415,7 +426,7 @@ describe("Charon tests", function () {
         let nonce = await tellor2.getNewValueCountbyQueryId(queryId)
         await tellor2.submitValue(queryId,toFixedHex(depositHonest.commitment),nonce,queryData)
         await h.advanceTime(43200)//12 hours
-        let tx = await charon2.oracleDeposit(1,depositId);
+        let tx = await charon2.oracleDeposit([1],[depositId]);
         const receipt = await tx.wait();
         const events = await charon2.queryFilter(
             charon2.filters.OracleDeposit(),
@@ -484,14 +495,15 @@ describe("Charon tests", function () {
           await tellor2.submitValue(queryId,toFixedHex(deposit.commitment),nonce,queryData)
           await h.advanceTime(43200)//12 hours
           //withdraw on other chain
-          let tx = await charon2.oracleDeposit(1,depositId);
+          let tx = await charon2.oracleDeposit([1],[depositId]);
           const receipt = await tx.wait();
           const events = await charon2.queryFilter(
               charon2.filters.OracleDeposit(),
               receipt.blockHash
           );
           //@ts-ignore
-          deposit.leafIndex = events[0].args._insertedIndex;
+          let myIndices = events[0].args._insertedIndices;
+          deposit.leafIndex = myIndices[0]
           //@ts-ignore
           assert.equal(events[0].args._commitment, deposit.commitment);
           assert.equal(tree.totalElements, await charon2.nextIndex());

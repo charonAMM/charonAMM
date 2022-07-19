@@ -237,6 +237,24 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     }
 
     /**
+     * @dev allows a user to single-side LP CHUSD 
+     * @param _tokenAmountIn amount of CHUSD to deposit
+     * @param _minPoolAmountOut minimum number of pool tokens you need out
+     */
+    function lpSingleCHUSD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external _finalized_ _lock_{
+        uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
+                            recordBalanceSynth,//pool tokenIn balance
+                            supply,
+                            _tokenAmountIn//amount of token In
+                        );
+        recordBalance += _tokenAmountIn;
+        require(_poolAmountOut >= _minPoolAmountOut, "not enough squeeze");
+        _mint(msg.sender,_poolAmountOut);
+        require (chusd.transferFrom(msg.sender,address(this), _tokenAmountIn));
+        emit LPDeposit(msg.sender,_tokenAmountIn);
+    }
+
+    /**
      * @dev Allows an lp to withdraw funds
      * @param _poolAmountIn amount of pool tokens to transfer in
      * @param _minCHUSDOut min aount of chusd you need out
@@ -267,24 +285,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         require(token.transfer(msg.sender, _tokenAmountOut));
         require(chusd.transfer(msg.sender, _CHUSDOut));
         emit LPWithdrawal(msg.sender, _poolAmountIn);
-    }
-
-    /**
-     * @dev allows a user to single-side LP CHUSD 
-     * @param _tokenAmountIn amount of CHUSD to deposit
-     * @param _minPoolAmountOut minimum number of pool tokens you need out
-     */
-    function lpSingleCHUSD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external _finalized_ _lock_{
-        uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
-                            recordBalanceSynth,//pool tokenIn balance
-                            supply,
-                            _tokenAmountIn//amount of token In
-                        );
-        recordBalance += _tokenAmountIn;
-        require(_poolAmountOut >= _minPoolAmountOut, "not enough squeeze");
-        _mint(msg.sender,_poolAmountOut);
-        require (chusd.transferFrom(msg.sender,address(this), _tokenAmountIn));
-        emit LPDeposit(msg.sender,_tokenAmountIn);
     }
 
     /**
@@ -450,7 +450,30 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     function getDepositIdByCommitment(bytes32 _commitment) external view returns(uint256){
       return depositIdByCommitment[_commitment];
     }
-    
+
+    /**
+     * @dev returns the partner contracts in this charon system and their chains
+     */
+    function getPartnerContracts() external view returns(PartnerContract[] memory){
+      return partnerContracts;
+    }
+
+    /**
+     * @dev allows you to check the spot price of the token pair
+     * @return _spotPrice uint256 price of the pair
+     */
+    function getSpotPrice() external view returns(uint256 _spotPrice){
+      return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
+    }
+
+    /**
+     * @dev allows you to see check if a commitment is present
+     * @param _commitment bytes32 deposit commitment
+     */
+    function isCommitment(bytes32 _commitment) external view returns(bool){
+      return commitments[_commitment];
+    }
+
     /**
      * @dev allows a user to see if their deposit has been withdrawn
      * @param _nullifierHash hash of nullifier identifying withdrawal
@@ -470,28 +493,5 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
           _spent[_i] = true;
         }
       }
-    }
-
-    /**
-     * @dev allows you to see check if a commitment is present
-     * @param _commitment bytes32 deposit commitment
-     */
-    function isCommitment(bytes32 _commitment) external view returns(bool){
-      return commitments[_commitment];
-    }
-
-    /**
-     * @dev returns the partner contracts in this charon system and their chains
-     */
-    function getPartnerContracts() external view returns(PartnerContract[] memory){
-      return partnerContracts;
-    }
-
-    /**
-     * @dev allows you to check the spot price of the token pair
-     * @return _spotPrice uint256 price of the pair
-     */
-    function getSpotPrice() external view returns(uint256 _spotPrice){
-      return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
     }
 }

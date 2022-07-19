@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-
-pragma solidity ^0.8.0;
+pragma solidity 0.8.4;
 
 import "./interfaces/IHasher.sol";
 
+/**
+ @title MerkleTreeWithHistory
+ @dev solidity implementation of a merkle tree with historical inputs
+ * taken from the poseidon-tornado repository
+**/  
 contract MerkleTreeWithHistory {
     uint256 public constant FIELD_SIZE =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;

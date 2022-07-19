@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity 0.8.4;
 
-
 /**
  @title Token
  @dev base ERC20 to act as token underlying CHUSD and pool tokens
@@ -19,6 +18,7 @@ contract Token{
     event Approval(address indexed _src, address indexed _dst, uint _amt);
     event Transfer(address indexed _src, address indexed _dst, uint _amt);
 
+    /*Functions*/
     /**
      * @dev Constructor to initialize token
      * @param _name of token
@@ -30,29 +30,43 @@ contract Token{
     }
 
     /**
-     * @dev retrieves name of token
-     * @return string token name
+     * @dev allows a user to approve a spender of their tokens
+     * @param _spender address of party granting approval
+     * @param _amount amount of tokens to allow spender access
      */
-    function name() external view returns (string memory) {
-        return tokenName;
+    function approve(address _spender, uint256 _amount) external returns (bool) {
+        userAllowance[msg.sender][_spender] = _amount;
+        emit Approval(msg.sender, _spender, _amount);
+        return true;
     }
 
     /**
-     * @dev retrieves symbol of token
-     * @return string token sybmol
+     * @dev function to transfer tokens
+     * @param _to destination of tokens
+     * @param _amount of tokens
      */
-    function symbol() public view returns (string memory) {
-        return tokenSymbol;
+    function transfer(address _to, uint256 _amount) external returns (bool) {
+        _move(msg.sender, _to, _amount);
+        return true;
     }
 
     /**
-     * @dev retrieves token number of decimals
-     * @return uint8 number of decimals (18 standard)
+     * @dev allows a party to transfer tokens from an approved address
+     * @param _from address source of tokens 
+     * @param _to address destination of tokens
+     * @param _amount uint256 amount of tokens
      */
-    function decimals() public pure returns(uint8) {
-        return 18;
+    function transferFrom(address _from, address _to, uint256 _amount) external returns (bool) {
+        require(msg.sender == _from || _amount <= userAllowance[_from][msg.sender], "not approved");
+        _move(_from,_to,_amount);
+        if (msg.sender != _from) {
+            userAllowance[_from][msg.sender] = userAllowance[_from][msg.sender] -  _amount;
+            emit Approval(msg.sender, _to, userAllowance[_from][msg.sender]);
+        }
+        return true;
     }
 
+    //Getters
     /**
      * @dev retrieves standard token allowance
      * @param _src user who owns tokens
@@ -71,31 +85,35 @@ contract Token{
     function balanceOf(address _user) external view returns (uint256) {
         return balance[_user];
     }
+    
+    /**
+     * @dev retrieves token number of decimals
+     * @return uint8 number of decimals (18 standard)
+     */
+    function decimals() public pure returns(uint8) {
+        return 18;
+    }
+
+    /**
+     * @dev retrieves name of token
+     * @return string token name
+     */
+    function name() external view returns (string memory) {
+        return tokenName;
+    }
+
+    /**
+     * @dev retrieves symbol of token
+     * @return string token sybmol
+     */
+    function symbol() public view returns (string memory) {
+        return tokenSymbol;
+    }
 
     function totalSupply() public view returns (uint256) {
         return supply;
     }
 
-    function approve(address _dst, uint _amt) external returns (bool) {
-        userAllowance[msg.sender][_dst] = _amt;
-        emit Approval(msg.sender, _dst, _amt);
-        return true;
-    }
-
-    function transfer(address dst, uint amt) external returns (bool) {
-        _move(msg.sender, dst, amt);
-        return true;
-    }
-
-    function transferFrom(address src, address dst, uint amt) external returns (bool) {
-        require(msg.sender == src || amt <= userAllowance[src][msg.sender], "ERR_BTOKEN_BAD_CALLER");
-        _move(src, dst, amt);
-        if (msg.sender != src) {
-            userAllowance[src][msg.sender] = userAllowance[src][msg.sender] -  amt;
-            emit Approval(msg.sender, dst, userAllowance[src][msg.sender]);
-        }
-        return true;
-    }
     /**Internal Functions */
     function _mint(address _to,uint amt) internal {
         balance[_to] = balance[_to] + amt;

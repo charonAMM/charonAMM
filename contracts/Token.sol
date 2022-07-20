@@ -3,7 +3,7 @@ pragma solidity 0.8.4;
 
 /**
  @title Token
- @dev base ERC20 to act as token underlying CHUSD and pool tokens
+ @dev base ERC20 to act as token underlying CHD and pool tokens
  */
 contract Token{
 

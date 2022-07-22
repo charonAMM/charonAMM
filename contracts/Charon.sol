@@ -64,6 +64,18 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
       address contractAddress;
     }
 
+   struct ExtData {
+    address recipient;
+    int256 extAmount;
+    address relayer;
+    uint256 fee;
+    bytes encryptedOutput1;
+    bytes encryptedOutput2;
+    bool isL1Withdrawal;
+    uint256 l1Fee;
+  }
+
+
     CHD public chd;
     IERC20 public token;//token deposited at this address
     IVerifier public verifier;
@@ -433,6 +445,58 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
         require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");
       }
+
+        /** @dev Main function that allows deposits, transfers and withdrawal.
+   */
+  function transact(Proof memory _args, ExtData memory _extData) public {
+    if (_extData.extAmount > 0) {
+      // for deposits from L2
+      token.transferFrom(msg.sender, address(this), uint256(_extData.extAmount));
+      require(uint256(_extData.extAmount) <= maximumDepositAmount, "amount is larger than maximumDepositAmount");
+    }
+
+    _transact(_args, _extData);
+  }
+
+
+      function _transact(Proof memory _args, ExtData memory _extData) internal nonReentrant {
+    require(isKnownRoot(_args.root), "Invalid merkle root");
+    for (uint256 i = 0; i < _args.inputNullifiers.length; i++) {
+      require(!isSpent(_args.inputNullifiers[i]), "Input is already spent");
+    }
+    require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
+    require(_args.publicAmount == calculatePublicAmount(_extData.extAmount, _extData.fee), "Invalid public amount");
+    require(verifyProof(_args), "Invalid transaction proof");
+
+    for (uint256 i = 0; i < _args.inputNullifiers.length; i++) {
+      nullifierHashes[_args.inputNullifiers[i]] = true;
+    }
+
+    if (_extData.extAmount < 0) {
+      require(_extData.recipient != address(0), "Can't withdraw to zero address");
+      if (_extData.isL1Withdrawal) {
+        token.transferAndCall(
+          omniBridge,
+          uint256(-_extData.extAmount),
+          abi.encodePacked(l1Unwrapper, abi.encode(_extData.recipient, _extData.l1Fee))
+        );
+      } else {
+        token.transfer(_extData.recipient, uint256(-_extData.extAmount));
+      }
+    }
+    if (_extData.fee > 0) {
+      token.transfer(_extData.relayer, _extData.fee);
+    }
+
+    lastBalance = token.balanceOf(address(this));
+    _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
+    emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
+    emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
+    for (uint256 i = 0; i < _args.inputNullifiers.length; i++) {
+      emit NewNullifier(_args.inputNullifiers[i]);
+    }
+  }
+  
 
     //getters
     /**

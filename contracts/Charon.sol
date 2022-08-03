@@ -53,27 +53,26 @@ import "./interfaces/IVerifier.sol";
 */
 contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
-    struct Proof {
-        uint256[2] a;
-        uint256[2][2] b;
-        uint256[2] c;
-    }
-
     struct PartnerContract{
       uint256 chainID;
       address contractAddress;
     }
 
-   struct ExtData {
-    address recipient;
-    int256 extAmount;
-    address relayer;
-    uint256 fee;
-    bytes encryptedOutput1;
-    bytes encryptedOutput2;
-    bool isL1Withdrawal;
-    uint256 l1Fee;
-  }
+    struct ExtData {
+      address recipient;
+      uint256 extAmount;
+      address relayer;
+      uint256 fee;
+    }
+
+    struct Proof {
+      bytes proof;
+      bytes32 root;
+      bytes32[] inputNullifiers;
+      bytes32[2] outputCommitments;
+      uint256 publicAmount;
+      bytes32 extDataHash;
+    }
 
 
     CHD public chd;
@@ -340,51 +339,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
     /**
      * @dev withdraw your tokens from deposit on alternate chain
-     * @param _proof proof information from zkproof corresponding to commitment
-     * @param _root root in merkle tree where you're commitment was deposited
-     * @param _nullifierHash secret hash of your nullifier corresponding to deposit
-     * @param _recipient address funds (pool tokens or base token) will be be sent
-     * @param _relayer address of relayer pushing txn on chain (for anonymity)
-     * @param _refund amount to pay relayer
-     */
-    function secretWithdraw(
-        Proof calldata _proof,
-        bytes32 _root,
-        bytes32 _nullifierHash,
-        address payable _recipient,
-        address payable _relayer,
-        uint256 _refund
-    ) external payable _finalized_ _lock_{
-      require(!nullifierHashes[_nullifierHash], "The note has been already spent");
-      require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
-        require(
-            verifier.verifyProof(
-                _proof.a,
-                _proof.b,
-                _proof.c,
-                [
-                    chainID,
-                    uint256(_root),
-                    uint256(_nullifierHash),
-                    uint256(uint160(address(_recipient))),
-                    uint256(uint160(address(_relayer))),
-                    _refund
-                ]
-            ),
-            "Invalid withdraw proof"
-        );
-      chd.mintCHD(_recipient,denomination);
-      nullifierHashes[_nullifierHash] = true;
-      if (_refund > 0) {
-        (bool _success, ) = _recipient.call{ value: _refund }("");
-        if (!_success) {
-          _relayer.transfer(_refund);
-        }
-      }
-    }
-
-    /**
-     * @dev withdraw your tokens from deposit on alternate chain
      * @param _inIsCHD bool if token sending in is CHD
      * @param _tokenAmountIn amount of token to send in
      * @param _minAmountOut minimum amount of out token you need
@@ -448,18 +402,16 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
         /** @dev Main function that allows deposits, transfers and withdrawal.
    */
-  function transact(Proof memory _args, ExtData memory _extData) public {
-    if (_extData.extAmount > 0) {
-      // for deposits from L2
-      token.transferFrom(msg.sender, address(this), uint256(_extData.extAmount));
-      require(uint256(_extData.extAmount) <= maximumDepositAmount, "amount is larger than maximumDepositAmount");
-    }
-
+  function secretWithdraw(Proof memory _args, ExtData memory _extData) public {
+    require(_extData.extAmount > 0,"must withdraw amount")
+    require(chd.mintCHD(_recipient,uint256(_extData.extAmount)));
+    require(uint256(_extData.extAmount) <= maximumDepositAmount, "amount is larger than maximumDepositAmount");
+    require(token.transfer(relayer,_extData.fee));
     _transact(_args, _extData);
   }
 
 
-      function _transact(Proof memory _args, ExtData memory _extData) internal nonReentrant {
+  function _transact(Proof memory _args, ExtData memory _extData) internal _finalized_ _lock_ {
     require(isKnownRoot(_args.root), "Invalid merkle root");
     for (uint256 i = 0; i < _args.inputNullifiers.length; i++) {
       require(!isSpent(_args.inputNullifiers[i]), "Input is already spent");
@@ -467,31 +419,13 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
     require(_args.publicAmount == calculatePublicAmount(_extData.extAmount, _extData.fee), "Invalid public amount");
     require(verifyProof(_args), "Invalid transaction proof");
-
     for (uint256 i = 0; i < _args.inputNullifiers.length; i++) {
       nullifierHashes[_args.inputNullifiers[i]] = true;
     }
-
-    if (_extData.extAmount < 0) {
-      require(_extData.recipient != address(0), "Can't withdraw to zero address");
-      if (_extData.isL1Withdrawal) {
-        token.transferAndCall(
-          omniBridge,
-          uint256(-_extData.extAmount),
-          abi.encodePacked(l1Unwrapper, abi.encode(_extData.recipient, _extData.l1Fee))
-        );
-      } else {
-        token.transfer(_extData.recipient, uint256(-_extData.extAmount));
-      }
-    }
-    if (_extData.fee > 0) {
-      token.transfer(_extData.relayer, _extData.fee);
-    }
-
     lastBalance = token.balanceOf(address(this));
     _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
-    emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
-    emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
+    emit NewCommitment(_args.outputCommitments[0], nextIndex - 2);
+    emit NewCommitment(_args.outputCommitments[1], nextIndex - 1);
     for (uint256 i = 0; i < _args.inputNullifiers.length; i++) {
       emit NewNullifier(_args.inputNullifiers[i]);
     }

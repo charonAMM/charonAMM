@@ -1,41 +1,32 @@
-pragma circom 2.0.0;
-
 include "../node_modules/circomlib/circuits/poseidon.circom";
 
+// Helper template that computes hashes of the next tree layer
+template TreeLayer(height) {
+  var nItems = 1 << height;
+  signal input ins[nItems * 2];
+  signal output outs[nItems];
 
-// if s == 0 returns [in[0], in[1]]
-// if s == 1 returns [in[1], in[0]]
-template DualMux() {
-    signal input in[2];
-    signal input s;
-    signal output out[2];
-
-    s * (1 - s) === 0;
-    out[0] <== (in[1] - in[0])*s + in[0];
-    out[1] <== (in[0] - in[1])*s + in[1];
+  component hash[nItems];
+  for(var i = 0; i < nItems; i++) {
+    hash[i] = Poseidon(2);
+    hash[i].inputs[0] <== ins[i * 2];
+    hash[i].inputs[1] <== ins[i * 2 + 1];
+    hash[i].out ==> outs[i];
+  }
 }
 
-// Verifies that merkle proof is correct for given merkle root and a leaf
-// pathIndices input is an array of 0/1 selectors telling whether given pathElement is on the left or right side of merkle path
-template MerkleTreeChecker(levels) {
-    signal input leaf;
-    signal input root;
-    signal input pathElements[levels];
-    signal input pathIndices[levels];
+// Builds a merkle tree from leaf array
+template MerkleTree(levels) {
+  signal input leaves[1 << levels];
+  signal output root;
 
-    component selectors[levels];
-    component hashers[levels];
-
-    for (var i = 0; i < levels; i++) {
-        selectors[i] = DualMux();
-        selectors[i].in[0] <== i == 0 ? leaf : hashers[i - 1].out;
-        selectors[i].in[1] <== pathElements[i];
-        selectors[i].s <== pathIndices[i];
-
-        hashers[i] = Poseidon(2);
-        hashers[i].inputs[0] <== selectors[i].out[0];
-        hashers[i].inputs[1] <== selectors[i].out[1];
+  component layers[levels];
+  for(var level = levels - 1; level >= 0; level--) {
+    layers[level] = TreeLayer(level);
+    for(var i = 0; i < (1 << (level + 1)); i++) {
+      layers[level].ins[i] <== level == levels - 1 ? leaves[i] : layers[level + 1].outs[i];
     }
+  }
 
-    root === hashers[levels - 1].out;
+  root <== levels > 0 ? layers[0].outs[0] : leaves[0];
 }

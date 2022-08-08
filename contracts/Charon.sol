@@ -404,7 +404,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
    */
   function secretWithdraw(Proof memory _args, ExtData memory _extData) public {
     require(_extData.extAmount > 0,"must withdraw amount")
-    require(chd.mintCHD(_recipient,uint256(_extData.extAmount)));
+    require(chd.mintCHD(_recipient,uint256(_extData.extAmount - _extData.fee)));
     require(uint256(_extData.extAmount) <= maximumDepositAmount, "amount is larger than maximumDepositAmount");
     require(token.transfer(relayer,_extData.fee));
     _transact(_args, _extData);

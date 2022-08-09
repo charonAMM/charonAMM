@@ -1,3 +1,5 @@
+pragma circom 2.0.0;
+
 include "./merkleProof.circom";
 include "./merkleTree.circom";
 
@@ -11,7 +13,7 @@ template MerkleTreeUpdater(levels, subtreeLevels, zeroSubtreeRoot) {
     signal input newRoot;
     signal input leaves[1 << subtreeLevels];
     signal input pathIndices;
-    signal private input pathElements[remainingLevels];
+    signal input pathElements[remainingLevels];
 
     // calculate subtree root
     component subtree = MerkleTree(subtreeLevels);

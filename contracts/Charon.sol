@@ -71,11 +71,13 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     }
 
     struct Proof {
-      bytes proof;
+      uint256[2] a;
+      uint256[2][2] b;
+      uint256[2] c;
+      uint256 publicAmount;
       bytes32 root;
       bytes32[] inputNullifiers;
       bytes32[2] outputCommitments;
-      uint256 publicAmount;
       bytes32 extDataHash;
     }
 
@@ -193,7 +195,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         Commitment memory _commitment = Commitment(_extData,_proofArgs);
         depositCommitments.push(_commitment);
         _depositId = depositCommitments.length;
-        depositIdByCommitmentHash[keccak256(_commitment)] = _depositId;
+        depositIdByCommitmentHash[_hashCommitment(_commitment)] = _depositId;
         uint256 _tokenAmount;
         if (_isCHD){
           chd.burnCHD(msg.sender,denomination);
@@ -330,14 +332,14 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @param _depositId depositId of deposit on that chain
      */
     function oracleDeposit(uint256[] memory _chain, uint256[] memory _depositId) external{
-        Proof memory _proofArgs;
-        ExtData memory _extData;
+        Commitment memory _commitment;
+        bytes memory _value;
         require(_chain.length == _depositId.length, "must be same length");
         for(uint256 _i; _i< _chain.length; _i++){
-          (_proofArgs,_extData)= getCommitments(_chain[_i], _depositId[_i]);
-          _transact(_proofArgs, _extData);
+          _value = getCommitment(_chain[_i], _depositId[_i]);
+          _commitment = abi.decode(_value,(Commitment));
+          _transact(_commitment.proof, _commitment.extData);
         }
-
     }
 
 
@@ -407,7 +409,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
         /** @dev Main function that allows deposits, transfers and withdrawal.
    */
-  function secretWithdraw(Proof memory _args, ExtData memory _extData, address _to) public {
+  function secretWithdraw(Proof memory _args, ExtData memory _extData, address _to) external {
     require(_extData.extAmount > 0,"must withdraw amount");
     require(_extData.recipient == address(this));//they send it here, we mint them token
     require(chd.mintCHD(_to,uint256(_extData.extAmount - _extData.fee)));
@@ -430,7 +432,19 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     }
     require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
     require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
-    require(verifier.verifyProof(_args), "Invalid transaction proof");
+    require(verifier.verifyProof(_args.a,
+                _args.b,
+                _args.c,
+          [
+            chainID,
+            uint256(_args.root),
+            _args.publicAmount,
+            uint256(_args.extDataHash),
+            uint256(_args.inputNullifiers[0]),
+            uint256(_args.inputNullifiers[1]),
+            uint256(_args.outputCommitments[0]),
+            uint256(_args.outputCommitments[1])
+          ]), "Invalid transaction proof");
     for (_i = 0; _i < _args.inputNullifiers.length; _i++) {
       nullifierHashes[_args.inputNullifiers[_i]] = true;
     }
@@ -494,5 +508,10 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
           _spent[_i] = true;
         }
       }
+    }
+
+    function _hashCommitment(Commitment memory _c) internal pure returns(bytes32){
+      return keccak256(abi.encode(_c.proof.a,_c.proof.b,_c.proof.b,_c.proof.publicAmount,_c.proof.root,
+      _c.proof.inputNullifiers,_c.proof.outputCommitments,_c.proof.extDataHash));
     }
 }

@@ -13,7 +13,7 @@ fi
 # Untrusted phase 2
 npx snarkjs powersoftau prepare phase2 $PHASE1 $PHASE2 -v
 
-npx snarkjs zkey new build/withdraw.r1cs $PHASE2 $CIRCUIT_ZKEY
+npx snarkjs zkey new build/transaction.r1cs $PHASE2 $CIRCUIT_ZKEY
 
 npx snarkjs zkey export verificationkey $CIRCUIT_ZKEY build/verification_key.json
 

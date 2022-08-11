@@ -128,4 +128,4 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     signal extDataSquare <== extDataHash * extDataHash;
 }
 
-component main {public [chainID,root,publicAmount,extDataHash,inputNullifier[nIns],outputCommitment[nOuts]]} = Transaction(5, 2, 2, 11850551329423159860688778991827824730037759162201783566284850822760196767874)
+component main {public [chainID,root,publicAmount,extDataHash,inputNullifier,outputCommitment]} = Transaction(5, 2, 2, 11850551329423159860688778991827824730037759162201783566284850822760196767874);

@@ -106,6 +106,8 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
     event NewCommitment(bytes32 commitment, uint256 index);
     event NewNullifier(bytes32 nullifier);
+    event LPWithdrawSingleCHD(address _lp,uint256 _tokenAmountOut);
+    event ControllerChanged(address _newController);
 
     //modifiers
     /**
@@ -182,6 +184,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     function changeController(address _newController) external{
       require(msg.sender == controller,"should be controler");
       controller = _newController;
+      emit ControllerChanged(_newController);
     }
 
     /**
@@ -323,6 +326,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         _burn(msg.sender,_poolAmountIn - _exitFee);
         _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
         require(chd.transfer(msg.sender, _tokenAmountOut));
+        emit LPWithdrawSingleCHD(msg.sender,_tokenAmountOut);
     }
 
 
@@ -470,7 +474,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @dev allows you to find a depositId for a given commitment
      * @param _commitment the commitment of your deposit
      */
-    function getDepositIdByCommitment(bytes32 _commitment) external view returns(uint256){
+    function getDepositIdByCommitmentHash(bytes32 _commitment) external view returns(uint256){
       return depositIdByCommitmentHash[_commitment];
     }
 

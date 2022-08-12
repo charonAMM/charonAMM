@@ -11,7 +11,7 @@
     "compile": "npx hardhat compile && yarn compile:hasher",
     "build": "npm run circuit && npm run compile",
     "deploy": "npx hardhat run scripts/deploy.js --network optimism",
-    "test": "npx hardhat test",
+    "test": "hardhat test tests/*",
     "setup": "sh quickSetup.sh",
     "eslint": "eslint --ext .js --ignore-path .gitignore .",
     "prettier:check": "prettier --check . --config .prettierrc",

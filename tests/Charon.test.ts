@@ -639,4 +639,7 @@ describe("Charon tests", function () {
         assert(await chd.balanceOf(accounts[1].address) - web3.utils.toWei("99") > 0, "token balance should be back to correct" )
         assert(web3.utils.toWei("101") - await chd.balanceOf(accounts[1].address) > 0, "token balance should be back to correct" )
       });
+      it("test transact", async function () {
+        assert(0==1);
+      });
 });

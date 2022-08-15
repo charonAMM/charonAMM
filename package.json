@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "hardhat-contract-sizer": "^2.6.1",
     "usingtellor": "^4.0.6"
   }
 }

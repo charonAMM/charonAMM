@@ -90,7 +90,7 @@ contract Token{
      * @dev retrieves token number of decimals
      * @return uint8 number of decimals (18 standard)
      */
-    function decimals() public pure returns(uint8) {
+    function decimals() external pure returns(uint8) {
         return 18;
     }
 
@@ -106,7 +106,7 @@ contract Token{
      * @dev retrieves symbol of token
      * @return string token sybmol
      */
-    function symbol() public view returns (string memory) {
+    function symbol() external view returns (string memory) {
         return tokenSymbol;
     }
 
@@ -114,7 +114,7 @@ contract Token{
      * @dev retrieves totalSupply of token
      * @return amount of token
      */
-    function totalSupply() public view returns (uint256) {
+    function totalSupply() external view returns (uint256) {
         return supply;
     }
 
@@ -138,7 +138,7 @@ contract Token{
     function _burn(address _from, uint256 _amount) internal {
         balance[_from] = balance[_from] - _amount;//will overflow if too big
         supply = supply - _amount;
-        emit Transfer(_to, address(0), _amount);
+        emit Transfer(_from, address(0), _amount);
     }
 
     /**

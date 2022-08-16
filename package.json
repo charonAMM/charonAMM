@@ -43,7 +43,9 @@
   },
   "dependencies": {
     "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "fixed-merkle-tree": "^0.7.3",
     "hardhat-contract-sizer": "^2.6.1",
+    "tmp-promise": "^3.0.3",
     "usingtellor": "^4.0.6"
   }
 }

@@ -2,10 +2,7 @@
 const crypto = require('crypto')
 const { ethers } = require('hardhat')
 const BigNumber = ethers.BigNumber
-const { poseidon } = require('./poseidon')
-
-const poseidonHash = (items) => BigNumber.from(poseidon(items).toString())
-const poseidonHash2 = (a, b) => poseidonHash([a, b])
+const { poseidonContract, buildPoseidon } = require("circomlibjs");
 
 const FIELD_SIZE = BigNumber.from(
   '21888242871839275222246405745257275088548364400416034343698204186575808495617',
@@ -97,13 +94,20 @@ async function getSignerFromAddress(address) {
   return await ethers.provider.getSigner(address)
 }
 
+async function poseidonHash(inputs){
+  let poseidon = await buildPoseidon();
+  const hash = poseidon(inputs.map((x) => BigNumber.from(x).toBigInt()));
+  const hashStr = poseidon.F.toString(hash);
+  const hashHex = BigNumber.from(hashStr).toHexString();
+  return await ethers.utils.hexZeroPad(hashHex, 32);
+}
+
 module.exports = {
   FIELD_SIZE,
   randomBN,
   toFixedHex,
   toBuffer,
   poseidonHash,
-  poseidonHash2,
   getExtDataHash,
   shuffle,
   getSignerFromAddress,

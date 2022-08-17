@@ -200,9 +200,11 @@ describe("Charon tests", function () {
       });
       it("Test finalize", async function() {
         let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2,"Charon Pool Token","CPT");
-        await testCharon.deployed();await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address]))//must be controller
-        await testCharon.finalize([1],[charon.address]);
-        await h.expectThrow(testCharon.finalize([1],[charon.address]))//already finalized
+        await testCharon.deployed();
+        await token2.approve(testCharon.address,web3.utils.toWei("100"))//100
+        await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd.address))//must be controller
+        await testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd.address);
+        await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd.address))//already finalized
         assert(await testCharon.finalized(), "should be finalized")
         assert(await testCharon.balanceOf(accounts[0].address) - web3.utils.toWei("100") == 0, "should have full balance")
         let pC = await testCharon.getPartnerContracts();

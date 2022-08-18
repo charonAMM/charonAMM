@@ -17,15 +17,13 @@ function getExtDataHash({
   relayer,
   fee,
   encryptedOutput1,
-  encryptedOutput2,
-  isL1Withdrawal,
-  l1Fee,
+  encryptedOutput2
 }) {
   const abi = new ethers.utils.AbiCoder()
 
   const encodedData = abi.encode(
     [
-      'tuple(address recipient,int256 extAmount,address relayer,uint256 fee,bytes encryptedOutput1,bytes encryptedOutput2,bool isL1Withdrawal,uint256 l1Fee)',
+      'tuple(address recipient,int256 extAmount,address relayer,uint256 fee,bytes encryptedOutput1,bytes encryptedOutput2)',
     ],
     [
       {
@@ -34,9 +32,7 @@ function getExtDataHash({
         relayer: toFixedHex(relayer, 20),
         fee: toFixedHex(fee),
         encryptedOutput1: encryptedOutput1,
-        encryptedOutput2: encryptedOutput2,
-        isL1Withdrawal: isL1Withdrawal,
-        l1Fee: l1Fee,
+        encryptedOutput2: encryptedOutput2
       },
     ],
   )
@@ -46,6 +42,9 @@ function getExtDataHash({
 
 /** BigNumber to hex string of specified length */
 function toFixedHex(number, length = 32) {
+  if (number < 1) {
+    number = 0
+  }
   let result =
     '0x' +
     (number instanceof Buffer
@@ -57,6 +56,9 @@ function toFixedHex(number, length = 32) {
   }
   return result
 }
+
+
+// const toFixedHex = (number, length = 32) => (number.toString().padStart(2, '0'))
 
 /** Convert value into buffer of specified byte length */
 const toBuffer = (value, length) =>
@@ -90,7 +92,6 @@ async function getSignerFromAddress(address) {
     method: 'hardhat_impersonateAccount',
     params: [address],
   })
-
   return await ethers.provider.getSigner(address)
 }
 

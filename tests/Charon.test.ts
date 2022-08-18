@@ -10,7 +10,8 @@ import { MerkleTree, Hasher } from "../src/merkleTree";
 // @ts-ignore
 import { groth16, bigInt } from "snarkjs";
 import path from "path";
-const { transaction, prepareTransaction, buildMerkleTree } = require('./helpers/index')
+const { transaction, prepareTransaction, getLeaves } = require('./helpers/index')
+const { poseidonHash2 } = require('./helpers/utils')
 const Utxo = require('./helpers/utxo')
 const h = require("usingtellor/test/helpers/helpers.js");
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
@@ -168,14 +169,49 @@ describe("Charon tests", function () {
                                                   web3.utils.toWei("100"),
                                                   0)
         await token.connect(accounts[1]).approve(charon.address,_amount)
-        const aliceKeypair = new Keypair() // contains private and public keys
-        const aliceDepositUtxo = new Utxo({ amount: _amount, keypair: aliceKeypair })
-        const { args, extData } = await prepareTransaction({
-          charon,
-          outputs: [aliceDepositUtxo],
-        })
+        const nullifierHash = deposit.nullifierHash;
+        const recipient = await userNewSigner.getAddress();
+        const relayer = await relayerSigner.getAddress();
+        const fee = 0;
+        //@ts-ignore
+        const { root, path_elements, path_index } = await tree.path(deposit.leafIndex);
+        const witness = {
+            // Public
+            chainID: 2,
+            root,
+            _amount,
+            recipient,
+            relayer,
+            fee,
+            // Private
+            privateChainID: 2,
+            nullifier: BigNumber.from(deposit.nullifier).toBigInt(),
+            pathElements: path_elements,
+            pathIndices: path_index,
+        };
+        const solProof = await prove(witness);
+        //Public - chainID,root,publicAmount,extDataHash,inputNullifier,outputCommitment
+        //Private -     signal input inputNullifier[nIns];
+              // signal input inAmount[nIns];
+              // signal input inPrivateKey[nIns];
+              // signal input inBlinding[nIns];
+              // signal input inPathIndices[nIns];
+              // signal input inPathElements[nIns][levels];
+
+              // // data for transaction outputs
+              // signal input outAmount[nOuts];
+              // signal input outPubkey[nOuts];
+              // signal input outBlinding[nOuts];
+        const extData = {
+          recipient: toFixedHex(recipient, 20),
+          extAmount: toFixedHex(extAmount),
+          relayer: toFixedHex(relayer, 20),
+          fee: toFixedHex(fee),
+          encryptedOutput1: outputs[0].encrypt(),
+          encryptedOutput2: outputs[1].encrypt()
+        }
         await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
-        let commi = await charon.getDepositCommitmentsById(1);
+        let commi = awaitx charon.getDepositCommitmentsById(1);
         assert(commi[0] == args, "commitment should be stored")
         assert(commi[1] == extData, "extData should be correct");
         assert(await charon.getDepositIdByCommitment([args,extData]) == 1, "reverse commitment mapping should work")
@@ -650,6 +686,9 @@ describe("Charon tests", function () {
       //   assert(web3.utils.toWei("101") - await chd.balanceOf(accounts[1].address) > 0, "token balance should be back to correct" )
       // });
       it("test transact", async function () {
+        //send to other chain
+        //transfer secretly to another account
+        //withdraw chd via other account
         assert(await chd.totalSupply() == 0);
       });
 });

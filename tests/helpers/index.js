@@ -1,5 +1,4 @@
 /* eslint-disable no-console */
-const MerkleTree = require('fixed-merkle-tree')
 const { ethers } = require('hardhat')
 const { BigNumber } = ethers
 const { toFixedHex, poseidonHash2, getExtDataHash, FIELD_SIZE, shuffle } = require('./utils')
@@ -8,12 +7,11 @@ const Utxo = require('./utxo')
 const { prove } = require('./prover')
 const MERKLE_TREE_HEIGHT = 5
 
-async function buildMerkleTree({ contractInstance }) {
+async function getLeaves({ contractInstance }) {
   const filter = contractInstance.filters.NewCommitment()
   const events = await contractInstance.queryFilter(filter, 0)
-
   const leaves = events.sort((a, b) => a.args.index - b.args.index).map((e) => toFixedHex(e.args.commitment))
-  return new MerkleTree(MERKLE_TREE_HEIGHT, leaves, { hashFunction: poseidonHash2 })
+  return leaves
 }
 
 async function getProof({
@@ -23,16 +21,13 @@ async function getProof({
   extAmount,
   fee,
   recipient,
-  relayer,
-  isL1Withdrawal,
-  l1Fee,
+  relayer
 }) {
   inputs = shuffle(inputs)
   outputs = shuffle(outputs)
 
   let inputMerklePathIndices = []
   let inputMerklePathElements = []
-
   for (const input of inputs) {
     if (input.amount > 0) {
       input.index = tree.indexOf(toFixedHex(input.getCommitment()))
@@ -43,7 +38,7 @@ async function getProof({
       inputMerklePathElements.push(tree.path(input.index).pathElements)
     } else {
       inputMerklePathIndices.push(0)
-      inputMerklePathElements.push(new Array(tree.levels).fill(0))
+      inputMerklePathElements.push(new Array(tree.n_levels).fill(0))
     }
   }
 
@@ -53,9 +48,7 @@ async function getProof({
     relayer: toFixedHex(relayer, 20),
     fee: toFixedHex(fee),
     encryptedOutput1: outputs[0].encrypt(),
-    encryptedOutput2: outputs[1].encrypt(),
-    isL1Withdrawal,
-    l1Fee,
+    encryptedOutput2: outputs[1].encrypt()
   }
 
   const extDataHash = getExtDataHash(extData)
@@ -79,7 +72,7 @@ async function getProof({
     outPubkey: outputs.map((x) => x.keypair.pubkey),
   }
 
-  const proof = await prove(input, `./artifacts/circuits/transaction${inputs.length}`)
+  const proof = await prove(input, `./build/transaction_js/transaction`)
 
   const args = {
     proof,
@@ -102,10 +95,9 @@ async function prepareTransaction({
   inputs = [],
   outputs = [],
   fee = 0,
+  Tree,
   recipient = 0,
   relayer = 0,
-  isL1Withdrawal = false,
-  l1Fee = 0,
 }) {
   if (inputs.length > 16 || outputs.length > 2) {
     throw new Error('Incorrect inputs/outputs count')
@@ -120,17 +112,14 @@ async function prepareTransaction({
   let extAmount = BigNumber.from(fee)
     .add(outputs.reduce((sum, x) => sum.add(x.amount), BigNumber.from(0)))
     .sub(inputs.reduce((sum, x) => sum.add(x.amount), BigNumber.from(0)))
-
   const { args, extData } = await getProof({
     inputs,
     outputs,
-    tree: await buildMerkleTree({ contractInstance }),
+    tree: Tree,
     extAmount,
     fee,
     recipient,
-    relayer,
-    isL1Withdrawal,
-    l1Fee,
+    relayer
   })
 
   return {
@@ -151,4 +140,4 @@ async function transaction({ contractInstance, ...rest }) {
   return await receipt.wait()
 }
 
-module.exports = { transaction, prepareTransaction, buildMerkleTree }
+module.exports = { transaction, prepareTransaction, getLeaves }

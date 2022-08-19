@@ -25,9 +25,9 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     // publicAmount = extAmount - fee
     signal input publicAmount;
     signal input extDataHash;
-
-    // data for transaction inputs
     signal input privateChainID;
+    
+    // data for transaction inputs
     signal input inputNullifier[nIns];
     signal input inAmount[nIns];
     signal input inPrivateKey[nIns];
@@ -49,8 +49,8 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     component inCheckRoot[nIns];
     var sumIns = 0;
 
-    //asserts your withdrawing on the right chain (private input in proof, public by smart contract)
-    privateChainID = chainID;
+    // asserts your withdrawing on the right chain
+    privateChainID === chainID;
 
     // verify correctness of transaction inputs
     for (var tx = 0; tx < nIns; tx++) {

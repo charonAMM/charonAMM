@@ -1,3 +1,5 @@
+mkdir build
+
 PHASE1=build/phase1_final.ptau
 PHASE2=build/phase2_final.ptau
 CIRCUIT_ZKEY=build/circuit_final.zkey

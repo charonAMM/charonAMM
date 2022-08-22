@@ -25,6 +25,7 @@ class Utxo {
    */
   getCommitment() {
     if (!this._commitment) {
+      console.log([this.amount, this.keypair.pubkey, this.blinding])
       this._commitment = poseidonHash([this.amount, this.keypair.pubkey, this.blinding])
     }
     return this._commitment
@@ -47,6 +48,7 @@ class Utxo {
         throw new Error('Can not compute nullifier without utxo index or private key')
       }
       const signature = this.keypair.privkey ? this.keypair.sign(this.getCommitment(), this.index || 0) : 0
+      console.log("input nullifier", this.index,signature)
       this._nullifier = poseidonHash([this.getCommitment(), this.index || 0, signature])
     }
     return this._nullifier

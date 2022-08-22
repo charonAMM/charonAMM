@@ -97,6 +97,7 @@ async function getSignerFromAddress(address) {
 
 async function poseidonHash(inputs){
   let poseidon = await buildPoseidon();
+  await Promise.all(inputs)
   const hash = poseidon(inputs.map((x) => BigNumber.from(x).toBigInt()));
   const hashStr = poseidon.F.toString(hash);
   const hashHex = BigNumber.from(hashStr).toHexString();

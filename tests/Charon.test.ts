@@ -224,6 +224,7 @@ describe("Charon tests", function () {
         outputs = [aliceDepositUtxo]
         //@ts-ignore
         let outCommitments = []
+        let outKeys = []
         let inNullifier = []
         if (inputs.length > 16 || outputs.length > 2) {
             throw new Error('Incorrect inputs/outputs count')
@@ -239,6 +240,7 @@ describe("Charon tests", function () {
             outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount, recipient, outputs[i].blinding])
           }
           outCommitments.push(outputs[i]._commitment)
+          outKeys.push(await outputs[i].keypair.pubkey)
         }
         for(var i = 0; i< inputs.length;i++){
           if (!inputs[i]._nullifier) {
@@ -294,8 +296,9 @@ describe("Charon tests", function () {
             inPathElements: inputMerklePathElements,
             //for txn outputs
             outAmount: await Promise.all(outputs.map(async (x) => await BigNumber.from(x.amount).toString())),
-            outBlinding: await Promise.all(outputs.map(async (x) => await BigNumber.from(x.blinding).toString())),
-            outPubkey: await Promise.all(outputs.map(async (x) => await x.keypair.pubkey)),
+            outBlinding: await Promise.all(outputs.map(async (x) => await x.blinding)),
+            outPubkey: await Promise.all(outputs.map(async (x) => await x.keypair.pubkey))
+            //outPubkey: [0,0]
         };
         await sleep(5000)
         console.log("here")
@@ -325,21 +328,21 @@ describe("Charon tests", function () {
         assert(await charon.recordBalance() * 1 -(1* web3.utils.toWei("100") + 1 * _amount) == 0, "recordBalance should go up")
         assert(await token.balanceOf(accounts[1].address) == web3.utils.toWei("100") - _amount, "balance should change properly")
       });
-      it("Test depositToOtherChain - CHD", async function() {
-        const commitment = h.hash("test")
-        await chd.mint(accounts[1].address,web3.utils.toWei("100"))
-        let amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
-                                                  web3.utils.toWei("1000"),
-                                                  web3.utils.toWei("100"),
-                                                  0)
-        await chd.connect(accounts[1]).approve(charon.address,amount)
-        await charon.connect(accounts[1]).depositToOtherChain(commitment,true);
-        assert(await charon.getDepositCommitmentsById(1) == commitment, "commitment should be stored")
-        assert(await charon.getDepositIdByCommitment(commitment) == 1, "reverse commitment mapping should work")
-        assert(await charon.didDepositCommitment(commitment), "didDeposit should be true")
-        assert(await charon.recordBalanceSynth() * 1 -(1* web3.utils.toWei("1000")) == 0, "recordBalance should not go up")
-        assert(await chd.balanceOf(accounts[1].address) == 0, "balance should change properly")
-      });
+      // it("Test depositToOtherChain - CHD", async function() {
+      //   const commitment = h.hash("test")
+      //   await chd.mint(accounts[1].address,web3.utils.toWei("100"))
+      //   let amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+      //                                             web3.utils.toWei("1000"),
+      //                                             web3.utils.toWei("100"),
+      //                                             0)
+      //   await chd.connect(accounts[1]).approve(charon.address,amount)
+      //   await charon.connect(accounts[1]).depositToOtherChain(commitment,true);
+      //   assert(await charon.getDepositCommitmentsById(1) == commitment, "commitment should be stored")
+      //   assert(await charon.getDepositIdByCommitment(commitment) == 1, "reverse commitment mapping should work")
+      //   assert(await charon.didDepositCommitment(commitment), "didDeposit should be true")
+      //   assert(await charon.recordBalanceSynth() * 1 -(1* web3.utils.toWei("1000")) == 0, "recordBalance should not go up")
+      //   assert(await chd.balanceOf(accounts[1].address) == 0, "balance should change properly")
+      // });
     //   it("Test finalize", async function() {
     //     let testCharon = await cfac.deploy(verifier.address,hasher.address,token2.address,fee,tellor2.address,denomination,HEIGHT,2,"Charon Pool Token","CPT");
     //     await testCharon.deployed();

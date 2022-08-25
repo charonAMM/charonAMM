@@ -78,6 +78,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
+    uint256 public LPRewards; // total amount of staking rewards
     mapping(bytes32=>bool) commitments;//commitments ready for withdrawal (or withdrawn)
     mapping(bytes32 => uint256) public depositIdByCommitment;//gives you a deposit ID (used by tellor) given a commitment
     mapping(bytes32=>bool) public didDepositCommitment;//tells you whether tellor deposited a commitment
@@ -433,6 +434,51 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
         require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");
       }
+
+    //pays LP's their share of the pie
+    function payRewards(address _stakerAddress) internal {
+        uint256 _newAccumulatedRewardPerShare = accumulatedRewardPerShare +
+            ((block.timestamp - timeOfLastAllocation) * rewardRate * 1e18) /
+            totalStakeAmount;
+        // calculate accumulated reward with _newAccumulatedRewardPerShare
+        uint256 _accumulatedReward = (_newAccumulatedRewardPerShare *
+            totalStakeAmount) /
+            1e18 -
+            totalRewardDebt;
+        if (_accumulatedReward >= stakingRewardsBalance) {
+            // if staking rewards run out, calculate remaining reward per staked
+            // token and set rewardRate to 0
+            uint256 _newPendingRewards = stakingRewardsBalance -
+                ((accumulatedRewardPerShare * totalStakeAmount) /
+                    1e18 -
+                    totalRewardDebt);
+            accumulatedRewardPerShare +=
+                (_newPendingRewards * 1e18) /
+                totalStakeAmount;
+            rewardRate = 0;
+        } else {
+            accumulatedRewardPerShare = _newAccumulatedRewardPerShare;
+        }
+        timeOfLastAllocation = block.timestamp;
+        if (_staker.stakedBalance > 0) {
+            // if address already has a staked balance, calculate and transfer pending rewards
+            uint256 _pendingReward = (_staker.stakedBalance *
+                accumulatedRewardPerShare) /
+                1e18 -
+                _staker.rewardDebt;
+          
+            stakingRewardsBalance -= _pendingReward;
+            require(token.transfer(msg.sender, _pendingReward));
+            totalRewardDebt -= _staker.rewardDebt;
+            totalStakeAmount -= _staker.stakedBalance;
+        }
+        _staker.stakedBalance = _newStakedBalance;
+        // tracks rewards accumulated before stake amount updated
+        _staker.rewardDebt =
+            (_staker.stakedBalance * accumulatedRewardPerShare) /
+            1e18;
+        totalRewardDebt += _staker.rewardDebt;
+    }
 
     //getters
     /**

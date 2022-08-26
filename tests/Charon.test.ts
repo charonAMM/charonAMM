@@ -99,8 +99,8 @@ async function buildLeaves(charonInstance:any, thisTree:any){
 async function prove(witness: any): Promise<Proof> {
     const wasmPath = path.join(__dirname, "../build/transaction_js/transaction.wasm");
     const zkeyPath = path.join(__dirname, "../artifacts/circuits/transaction.zkey");
-    console.log(witness)
-    const { proof } = await groth16.fullProve(utils.stringifyBigInts(witness), wasmPath, zkeyPath);
+    //console.log(witness)
+    const { proof } = await groth16.fullProve(witness, wasmPath, zkeyPath);
     const solProof: Proof = {
         a: [proof.pi_a[0], proof.pi_a[1]],
         b: [
@@ -297,6 +297,7 @@ describe("Charon tests", function () {
             //for txn outputs
             outAmount: await Promise.all(outputs.map(async (x) => await BigNumber.from(x.amount).toString())),
             outBlinding: await Promise.all(outputs.map(async (x) => await x.blinding)),
+            //outPubKey: outKeys
             outPubkey: await Promise.all(outputs.map(async (x) => await x.keypair.pubkey))
             //outPubkey: [0,0]
         };

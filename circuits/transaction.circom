@@ -1,4 +1,4 @@
-pragma circom 2.0.0;
+pragma circom 2.0.4;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "./merkleProof.circom";
@@ -48,10 +48,11 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     component inTree[nIns];
     component inCheckRoot[nIns];
     var sumIns = 0;
+    log(51);
 
     // asserts your withdrawing on the right chain
     privateChainID === chainID;
-
+    log(55);
     // verify correctness of transaction inputs
     for (var tx = 0; tx < nIns; tx++) {
         inKeypair[tx] = Keypair();

@@ -1,5 +1,5 @@
 <p align="center">
-    <img src= './public/charon.jpg' height="300"/>
+    <img src= './public/charonLogo.png' height="350"/>
 </p>
 
 

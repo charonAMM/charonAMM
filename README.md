@@ -1,9 +1,7 @@
 <p align="center">
-    <img src= './public/charonLogo.png' height="350"/>
+    <img src= './public/charonLogo.png' height="2750"/>
 </p>
 
-
-## Charon
 
 <b>Charon</b> is a privacy enabled cross-chain automated market maker (PECCAMM). It achieves privacy by breaking the link between deposits on one chain and withdrawals on another.  Charon works by having AMMs on multiple chains, with one of the assets on each AMM being the charon dollar(CHD), a free-floating price-neutral token created by deposits on an alternate chain and then a withdrawal via a zero-knowledge proof . To achieve this cross-chain functionality, charon utilizes an oracle to pass commitments (proof of deposits) between chains.  
 

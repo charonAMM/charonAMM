@@ -98,7 +98,7 @@ async function buildLeaves(charonInstance:any, thisTree:any){
 
 async function prove(witness: any): Promise<Proof> {
     const wasmPath = path.join(__dirname, "../build/transaction_js/transaction.wasm");
-    const zkeyPath = path.join(__dirname, "../artifacts/circuits/transaction.zkey");
+    const zkeyPath = path.join(__dirname, "../build/circuit_final.zkey");
     //console.log(witness)
     const { proof } = await groth16.fullProve(witness, wasmPath, zkeyPath);
     const solProof: Proof = {
@@ -237,7 +237,7 @@ describe("Charon tests", function () {
           }
         for(var i = 0; i< outputs.length;i++){
           if (!outputs[i]._commitment) {
-            outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount, recipient, outputs[i].blinding])
+            outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount,await outputs[i].keypair.pubkey, outputs[i].blinding])
           }
           outCommitments.push(outputs[i]._commitment)
           outKeys.push(await outputs[i].keypair.pubkey)
@@ -253,9 +253,8 @@ describe("Charon tests", function () {
             ) {
               throw new Error('Can not compute nullifier without utxo index or private key')
             }
-            inputs[i]._commitment  = poseidonHash(deposit.poseidon,[inputs[i].amount,0, inputs[i].blinding])
+            inputs[i]._commitment  = poseidonHash(deposit.poseidon,[inputs[i].amount,await inputs[i].keypair.pubkey, inputs[i].blinding])
             const signature = inputs[i].keypair.privkey ? inputs[i].keypair.sign(inputs[i]._commitment, inputs[i].index || 0) : 0
-            console.log("input nullifier", inputs[i].index,await signature)
             inputs[i]._nullifier = poseidonHash(deposit.poseidon,[inputs[i]._commitment, this.index || 0, await signature])
           }
           inNullifier.push(inputs[i]._nullifier)
@@ -302,28 +301,49 @@ describe("Charon tests", function () {
             //outPubkey: [0,0]
         };
         await sleep(5000)
-        console.log("here")
         const proof = await prove(input);
-        console.log("proof", proof)
         const args = {
-            proof,
+            a: proof.a,
+            b: proof.b,
+            c: proof.c,
+            publicAmount: toFixedHex(input.publicAmount),
             root: toFixedHex(input.root),
             inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
             outputCommitments: outputs.map((x) => toFixedHex(x.getCommitment())),
-            publicAmount: toFixedHex(input.publicAmount),
-            extDataHash: toFixedHex(extDataHash),
+            extDataHash: extDataHash,
           }
 
         const extData = {
           recipient: toFixedHex(recipient, 20),
-          extAmount: toFixedHex(_amount),
+          extAmount: toFixedHex(BigNumber.from(_amount).toString()),
           relayer: toFixedHex(relayer, 20),
           fee: toFixedHex(0)
         }
         await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
         let commi = await charon.getDepositCommitmentsById(1);
-        assert(commi[0] == args, "commitment should be stored")
-        assert(commi[1] == extData, "extData should be correct");
+        console.log("commitment",commi)
+        let num= BigNumber.from(args.extDataHash)
+        console.log(BigNumber.from(commi[1].extDataHash).sub(num))
+        assert(commi[1].a[0] == args.a[0], "commitment a should be stored")
+        assert(commi[1].a[1] == args.a[1], "commitment a should be stored")
+        assert(commi[1].b[0][0] == args.b[0][0], "commitment b should be stored")
+        assert(commi[1].b[0][1] == args.b[0][1], "commitment b should be stored")
+        assert(commi[1].b[1][0] == args.b[1][0], "commitment b should be stored")
+        assert(commi[1].b[1][1] == args.b[1][1], "commitment b should be stored")
+        assert(commi[1].c[0] == args.c[0], "commitment c should be stored")
+        assert(commi[1].c[1] == args.c[1], "commitment c should be stored")
+        assert(commi[1].publicAmount == args.publicAmount, "commitment publicAmount should be stored")
+        assert(commi[1].root == args.root, "commitment root should be stored")
+        assert(commi[1].inputNullifiers[0] == args.inputNullifiers[0], "commitment inputNullifiers should be stored")
+        assert(commi[1].inputNullifiers[1] == args.inputNullifiers[1], "commitment inputNullifiers should be stored")
+        assert(commi[1].outputCommitments[0] == args.outputCommitments[0], "commitment outputCommitments should be stored")
+        assert(commi[1].outputCommitments[1] == args.outputCommitments[1], "commitment outputCommitments should be stored")
+        assert(BigNumber.from(commi[1].extDataHash).sub(num).toNumber() == 0, "commitment extDataHash should be stored")
+        assert(commi[0].recipient == extData.recipient, "extData should be correct");
+        assert(commi[0].extAmount == extData.extAmount, "extData should be correct");
+        assert(commi[0].relayer == extData.relayer, "extData should be correct");
+        console.log(commi[0].fee == extData.fee)
+        assert(BigNumber.from(commi[0].fee).toNumber() == extData.fee, "extData fee should be correct");
         assert(await charon.getDepositIdByCommitment([args,extData]) == 1, "reverse commitment mapping should work")
         assert(await charon.didDepositCommitment(h.hash([args,extData])), "didDeposit should be true")
         assert(await charon.recordBalance() * 1 -(1* web3.utils.toWei("100") + 1 * _amount) == 0, "recordBalance should go up")

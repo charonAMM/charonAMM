@@ -10,7 +10,7 @@ npx circom -v -r build/transaction.r1cs -w build/transaction_js/transaction.wasm
 npx snarkjs groth16 setup build/transaction.r1cs artifacts/circuits/ptau$POWERS_OF_TAU artifacts/circuits/tmp_transaction.zkey
 echo "qwe" | npx snarkjs zkey contribute artifacts/circuits/tmp_transaction.zkey artifacts/circuits/transaction.zkey
 npx snarkjs zkey export solidityverifier artifacts/circuits/transaction.zkey artifacts/circuits/Verifier.sol
-sed -i.bak "s/contract Verifier/contract Verifier/g" build/Verifier.sol
+# sed -i.bak "s/contract Verifier/contract Verifier/g" build/Verifier.sol
 #zkutil setup -c artifacts/circuits/transaction$1.r1cs -p artifacts/circuits/transaction$1.params
 #zkutil generate-verifier -p artifacts/circuits/transaction$1.params -v artifacts/circuits/Verifier.sol
-npx snarkjs info -r build/transaction.r1cs
+# npx snarkjs info -r build/transaction.r1cs

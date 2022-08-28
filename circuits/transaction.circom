@@ -48,44 +48,32 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     component inTree[nIns];
     component inCheckRoot[nIns];
     var sumIns = 0;
-    log(51);
 
     // asserts your withdrawing on the right chain
     privateChainID === chainID;
-    log(55);
     // verify correctness of transaction inputs
     for (var tx = 0; tx < nIns; tx++) {
         inKeypair[tx] = Keypair();
         inKeypair[tx].privateKey <== inPrivateKey[tx];
-        log(inAmount[tx]);
-        log(inKeypair[tx].publicKey);
-        log(inBlinding[tx]);
         inCommitmentHasher[tx] = Poseidon(3);
         inCommitmentHasher[tx].inputs[0] <== inAmount[tx];
         inCommitmentHasher[tx].inputs[1] <== inKeypair[tx].publicKey;
         inCommitmentHasher[tx].inputs[2] <== inBlinding[tx];
-        log(67);
         inSignature[tx] = Signature();
         inSignature[tx].privateKey <== inPrivateKey[tx];
         inSignature[tx].commitment <== inCommitmentHasher[tx].out;
         inSignature[tx].merklePath <== inPathIndices[tx];
-        log(72);
-        log(inCommitmentHasher[tx].out);
         inNullifierHasher[tx] = Poseidon(3);
         inNullifierHasher[tx].inputs[0] <== inCommitmentHasher[tx].out;
         inNullifierHasher[tx].inputs[1] <== inPathIndices[tx];
         inNullifierHasher[tx].inputs[2] <== inSignature[tx].out;
-        log(77);
-        log(inNullifierHasher[tx].out == inputNullifier[tx]);
         inNullifierHasher[tx].out === inputNullifier[tx];
-        log(78);
         inTree[tx] = MerkleProof(levels);
         inTree[tx].leaf <== inCommitmentHasher[tx].out;
         inTree[tx].pathIndices <== inPathIndices[tx];
         for (var i = 0; i < levels; i++) {
             inTree[tx].pathElements[i] <== inPathElements[tx][i];
         }
-        log(84);
         // check merkle proof only if amount is non-zero
         inCheckRoot[tx] = ForceEqualIfEnabled();
         inCheckRoot[tx].in[0] <== root;
@@ -103,7 +91,6 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     component outAmountCheck[nOuts];
     var sumOuts = 0;
 
-    log(101);
     // verify correctness of transaction outputs
     for (var tx = 0; tx < nOuts; tx++) {
         outCommitmentHasher[tx] = Poseidon(3);
@@ -122,7 +109,6 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     // check that there are no same nullifiers among all inputs
     component sameNullifiers[nIns * (nIns - 1) / 2];
     var index = 0;
-    log(119);
     for (var i = 0; i < nIns - 1; i++) {
       for (var j = i + 1; j < nIns; j++) {
           sameNullifiers[index] = IsEqual();
@@ -132,14 +118,11 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
           index++;
       }
     }
-    log(128);
-    log(sumIns + publicAmount == sumOuts);
     // verify amount invariant
     sumIns + publicAmount === sumOuts;
 
     // optional safety constraint to make sure extDataHash cannot be changed
     signal extDataSquare <== extDataHash * extDataHash;
-    log(134);
 }
 
 component main {public [chainID,root,publicAmount,extDataHash,inputNullifier,outputCommitment]} = Transaction(5, 2, 2, 11850551329423159860688778991827824730037759162201783566284850822760196767874);

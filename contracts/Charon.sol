@@ -182,10 +182,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         Commitment memory _c = Commitment(_extData,_proofArgs);
         depositCommitments.push(_c);
         _depositId = depositCommitments.length;
-        bytes32 _hashedCommitment = keccak256(abi.encode(_c.proof.a,
-          _c.proof.b,_c.proof.b,_c.proof.publicAmount,_c.proof.root,
-          _c.proof.inputNullifiers,_c.proof.outputCommitments,
-          _c.proof.extDataHash));
+        bytes32 _hashedCommitment = keccak256(abi.encode(_proofArgs.a,_proofArgs.b,_proofArgs.c,_proofArgs.publicAmount,_proofArgs.root));
         depositIdByCommitmentHash[_hashedCommitment] = _depositId;
         uint256 _tokenAmount;
         if (_isCHD){

@@ -321,9 +321,7 @@ describe("Charon tests", function () {
         }
         await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
         let commi = await charon.getDepositCommitmentsById(1);
-        console.log("commitment",commi)
         let num= BigNumber.from(args.extDataHash)
-        console.log(BigNumber.from(commi[1].extDataHash).sub(num))
         assert(commi[1].a[0] == args.a[0], "commitment a should be stored")
         assert(commi[1].a[1] == args.a[1], "commitment a should be stored")
         assert(commi[1].b[0][0] == args.b[0][0], "commitment b should be stored")
@@ -342,10 +340,26 @@ describe("Charon tests", function () {
         assert(commi[0].recipient == extData.recipient, "extData should be correct");
         assert(commi[0].extAmount == extData.extAmount, "extData should be correct");
         assert(commi[0].relayer == extData.relayer, "extData should be correct");
-        console.log(commi[0].fee == extData.fee)
         assert(BigNumber.from(commi[0].fee).toNumber() == extData.fee, "extData fee should be correct");
-        assert(await charon.getDepositIdByCommitment([args,extData]) == 1, "reverse commitment mapping should work")
-        assert(await charon.didDepositCommitment(h.hash([args,extData])), "didDeposit should be true")
+        const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+          ['uint256[2]', 'uint256[2][2]', 'uint256[2]','uint256','bytes32'],
+          [args.a,[[args.b[0][0],args.b[0][1]],[args.b[1][0],args.b[1][1]]],[args.c[0],args.c[1]],args.publicAmount,args.root]
+        );
+        console.log(dataEncoded)
+        console.log("break")
+        console.log(commi)
+        console.log(h.hash(dataEncoded))
+        const dd = ethers.utils.AbiCoder.prototype.encode(
+          ['uint256','uint256','uint256[2]','uint256'],
+          [1,2,[3,4],5]
+        );
+        console.log("dd",h.hash(dd))
+        /*
+          (1,2)(3,4)
+
+        */
+        //console.log(h.hash(commi))
+        assert(await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded)) == 1, "reverse commitment mapping should work")
         assert(await charon.recordBalance() * 1 -(1* web3.utils.toWei("100") + 1 * _amount) == 0, "recordBalance should go up")
         assert(await token.balanceOf(accounts[1].address) == web3.utils.toWei("100") - _amount, "balance should change properly")
       });

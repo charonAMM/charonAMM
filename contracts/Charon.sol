@@ -8,7 +8,7 @@ import "./helpers/Math.sol";
 import "./helpers/Oracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
-
+import "hardhat/console.sol";
 /**
  @title charon
  @dev charon is a decentralized protocol for a Privacy Enabled Cross-Chain AMM (PECCAMM). 
@@ -78,7 +78,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
       bytes32 root;
       bytes32[] inputNullifiers;
       bytes32[2] outputCommitments;
-      bytes32 extDataHash;
+      uint256 extDataHash;
     }
 
 
@@ -304,7 +304,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         emit LPWithdrawal(msg.sender, _poolAmountIn);
     }
 
-    /**
+   /**
      * @dev allows a user to single-side LP withdraw CHD 
      * @param _poolAmountIn amount of pool tokens to deposit
      * @param _minAmountOut minimum amount of CHD you need out
@@ -332,13 +332,54 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @param _depositId depositId of deposit on that chain
      */
     function oracleDeposit(uint256[] memory _chain, uint256[] memory _depositId) external{
-        Commitment memory _commitment;
+        Proof memory _proof;
+        ExtData memory _extData;
         bytes memory _value;
+        bytes memory _iv;
         require(_chain.length == _depositId.length, "must be same length");
         for(uint256 _i; _i< _chain.length; _i++){
           _value = getCommitment(_chain[_i], _depositId[_i]);
-          _commitment = abi.decode(_value,(Commitment));
-          _transact(_commitment.proof, _commitment.extData);
+          _iv = sliceBytes(_value,0,192);
+          (_proof.a,_proof.b) = abi.decode(_iv,(uint256[2],uint256[2][2]));
+          _iv= sliceBytes(_value,_value.length - 224,128);
+          console.log(string(_value));
+          _extData = abi.decode(_iv,(ExtData));
+          (bytes32 _a, bytes32 _b)= abi.decode(sliceBytes(_value,_value.length - 64,64),(bytes32,bytes32));
+          _proof.inputNullifiers = new bytes32[](2);
+          _proof.inputNullifiers[0] = _a;
+          _proof.inputNullifiers[1] = _b;
+          _transact(_proof, _extData);
+        }
+    }
+
+
+function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal pure returns (bytes memory tempBytes){
+        require(_length + 31 >= _length, "slice_overflow");
+        require(_bytes.length >= _start + _length, "slice_outOfBounds");
+        assembly {
+            switch iszero(_length)
+            case 0 {
+                tempBytes := mload(0x40)
+                let lengthmod := and(_length, 31)
+                let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
+                let end := add(mc, _length)
+                for {
+                    let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
+                } lt(mc, end) {
+                    mc := add(mc, 0x20)
+                    cc := add(cc, 0x20)
+                } {
+                    mstore(mc, mload(cc))
+                }
+                mstore(tempBytes, _length)
+                mstore(0x40, and(add(mc, 31), not(31)))
+            }
+            //if we want a zero-length slice let's just return a zero-length array
+            default {
+                tempBytes := mload(0x40)
+                mstore(tempBytes, 0)
+                mstore(0x40, add(tempBytes, 0x20))
+            }
         }
     }
 
@@ -426,7 +467,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
       nullifierHashes[_args.inputNullifiers[_i]] = true;
       emit NewNullifier(_args.inputNullifiers[_i]);
     }
-    require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
+    require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");//why is this here?
     require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
     require(verifier.verifyProof(_args.a,
                 _args.b,

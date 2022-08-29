@@ -92,7 +92,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     Commitment[] public depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
     uint32 public merkleTreeHeight;
     uint256 public chainID; //chainID of this charon instance
-    uint256 public denomination;//trade size in USD (1e18 decimals)
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
@@ -132,7 +131,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @param _token address of token on this chain of the system
      * @param _fee fee when withdrawing liquidity or trading (pct of tokens)
      * @param _oracle address of oracle contract
-     * @param _denomination size of deposit/withdraw in _token
      * @param _merkleTreeHeight merkleTreeHeight (should match that of circom compile)
      * @param _chainID chainID of this chain
      * @param _name name of pool token
@@ -143,7 +141,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
                 address _token,
                 uint256 _fee,
                 address payable _oracle,
-                uint256 _denomination,
                 uint32 _merkleTreeHeight,
                 uint256 _chainID,
                 string memory _name,
@@ -152,11 +149,9 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
               MerkleTreeWithHistory(_merkleTreeHeight, _hasher)
               Oracle(_oracle)
               Token(_name,_symbol){
-        require(_fee < _denomination,"fee should be less than denomination");
         verifier = IVerifier(_verifier);
         token = IERC20(_token);
         fee = _fee;
-        denomination = _denomination;
         controller = msg.sender;
         chainID = _chainID;
     }
@@ -186,11 +181,10 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         depositIdByCommitmentHash[_hashedCommitment] = _depositId;
         uint256 _tokenAmount;
         if (_isCHD){
-          chd.burnCHD(msg.sender,denomination);
-          _tokenAmount = denomination;
+          chd.burnCHD(msg.sender,_extData.extAmount);
         }
         else{
-          _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,denomination,0);
+          _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,_extData.extAmount,0);
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         }
         recordBalance += _tokenAmount;
@@ -451,7 +445,7 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
 
   //lets you do secret transfers / withdraw + mintCHD
   function transact(Proof memory _args, ExtData memory _extData,address _to) external _finalized_ _lock_{
-      require(_extData.extAmount > 0,"must withdraw amount");
+      require(_extData.extAmount > 0,"must move amount");
       require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
       require(isKnownRoot(_args.root), "Invalid merkle root");
       require(verifier.verifyProof(_args.a,
@@ -470,7 +464,9 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
       if(_extData.recipient == address(this)){
         require(chd.mintCHD(_to,uint256(_extData.extAmount - _extData.fee)));
       }
-      require(token.transfer(_extData.relayer,_extData.fee));
+      if(_extData.fee > 0){
+        require(token.transfer(_extData.relayer,_extData.fee));
+      }
       _transact(_args, _extData);
   }
 

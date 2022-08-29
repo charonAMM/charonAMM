@@ -339,12 +339,14 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         require(_chain.length == _depositId.length, "must be same length");
         for(uint256 _i; _i< _chain.length; _i++){
           _value = getCommitment(_chain[_i], _depositId[_i]);
-          _iv = sliceBytes(_value,0,192);
-          (_proof.a,_proof.b) = abi.decode(_iv,(uint256[2],uint256[2][2]));
+          _iv = sliceBytes(_value,0,352);
+          (_proof.a,_proof.b,_proof.c,_proof.publicAmount,_proof.root,_proof.extDataHash) = abi.decode(_iv,(uint256[2],uint256[2][2],uint256[2],uint256,bytes32,uint256));
           _iv= sliceBytes(_value,_value.length - 224,128);
           console.log(string(_value));
           _extData = abi.decode(_iv,(ExtData));
-          (bytes32 _a, bytes32 _b)= abi.decode(sliceBytes(_value,_value.length - 64,64),(bytes32,bytes32));
+          _iv = sliceBytes(_value,384,64);
+          (_proof.outputCommitments[0],_proof.outputCommitments[1]) = abi.decode(_iv,(bytes32,bytes32));
+          (bytes32 _a, bytes32 _b) = abi.decode(sliceBytes(_value,_value.length - 64,64),(bytes32,bytes32));
           _proof.inputNullifiers = new bytes32[](2);
           _proof.inputNullifiers[0] = _a;
           _proof.inputNullifiers[1] = _b;

@@ -37,16 +37,16 @@ function getTellorSubmission(args: any, extData: any){
   console.log(args,extData);
   const abiCoder = new ethers.utils.AbiCoder()
   const dataEncoded = abiCoder.encode(
-    ['uint256[2]','uint256[2][2]','uint256[2]','uint256','bytes32','bytes32[]','bytes32[2]','uint256','address','int256','address','uint256'],
+    ['uint256[2]','uint256[2][2]','uint256[2]','uint256','bytes32','uint256','bytes32[]','bytes32[2]','address','int256','address','uint256'],
     [
       args.a,
       args.b,
       args.c,
       args.publicAmount,
       args.root,
+      args.extDataHash,
       args.inputNullifiers,
       args.outputCommitments,
-      args.extDataHash,
       extData.recipient,
       extData.extAmount,
       extData.relayer,
@@ -54,8 +54,8 @@ function getTellorSubmission(args: any, extData: any){
     ]
   );
   const proofPart = abiCoder.encode(
-    ['uint256[2]'],
-    [args.a]
+    ['uint256'],
+    [args.extDataHash]
   );
   console.log("proof part",proofPart)
   console.log(dataEncoded);

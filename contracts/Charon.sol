@@ -74,11 +74,11 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
       uint256[2] a;
       uint256[2][2] b;
       uint256[2] c;
-      uint256 publicAmount;
       bytes32 root;
+      uint256 extDataHash;
+      uint256 publicAmount;
       bytes32[] inputNullifiers;
       bytes32[2] outputCommitments;
-      uint256 extDataHash;
     }
 
 
@@ -342,7 +342,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
           _iv = sliceBytes(_value,0,352);
           (_proof.a,_proof.b,_proof.c,_proof.publicAmount,_proof.root,_proof.extDataHash) = abi.decode(_iv,(uint256[2],uint256[2][2],uint256[2],uint256,bytes32,uint256));
           _iv= sliceBytes(_value,_value.length - 224,128);
-          console.log(string(_value));
           _extData = abi.decode(_iv,(ExtData));
           _iv = sliceBytes(_value,384,64);
           (_proof.outputCommitments[0],_proof.outputCommitments[1]) = abi.decode(_iv,(bytes32,bytes32));
@@ -453,6 +452,21 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
   //lets you do secret transfers / withdraw + mintCHD
   function transact(Proof memory _args, ExtData memory _extData,address _to) external _finalized_ _lock_{
       require(_extData.extAmount > 0,"must withdraw amount");
+      require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
+      require(isKnownRoot(_args.root), "Invalid merkle root");
+      require(verifier.verifyProof(_args.a,
+                _args.b,
+                _args.c,
+          [
+            chainID,
+            uint256(_args.root),
+            _args.publicAmount,
+            _args.extDataHash,
+            uint256(_args.inputNullifiers[0]),
+            uint256(_args.inputNullifiers[1]),
+            uint256(_args.outputCommitments[0]),
+            uint256(_args.outputCommitments[1])
+          ]), "Invalid transaction proof");
       if(_extData.recipient == address(this)){
         require(chd.mintCHD(_to,uint256(_extData.extAmount - _extData.fee)));
       }
@@ -460,30 +474,13 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
       _transact(_args, _extData);
   }
 
-
   function _transact(Proof memory _args, ExtData memory _extData) internal _finalized_ _lock_ {
-    require(isKnownRoot(_args.root), "Invalid merkle root");
-    uint256 _i;
-    for (_i = 0; _i < _args.inputNullifiers.length; _i++) {
+    for (uint256 _i = 0; _i < _args.inputNullifiers.length; _i++) {
       require(!nullifierHashes[_args.inputNullifiers[_i]], "Input is already spent");
       nullifierHashes[_args.inputNullifiers[_i]] = true;
       emit NewNullifier(_args.inputNullifiers[_i]);
     }
-    require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");//why is this here?
-    require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
-    require(verifier.verifyProof(_args.a,
-                _args.b,
-                _args.c,
-          [
-            chainID,
-            uint256(_args.root),
-            _args.publicAmount,
-            uint256(_args.extDataHash),
-            uint256(_args.inputNullifiers[0]),
-            uint256(_args.inputNullifiers[1]),
-            uint256(_args.outputCommitments[0]),
-            uint256(_args.outputCommitments[1])
-          ]), "Invalid transaction proof");
+    require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
     _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
     emit NewCommitment(_args.outputCommitments[0], nextIndex - 2);
     emit NewCommitment(_args.outputCommitments[1], nextIndex - 1);

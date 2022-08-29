@@ -699,11 +699,11 @@ describe("Charon tests", function () {
               a: proof.a,
               b: proof.b,
               c: proof.c,
-              publicAmount: toFixedHex(input.publicAmount),
               root: toFixedHex(input.root),
-              inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
-              outputCommitments: outputs.map((x) => toFixedHex(x.getCommitment())),
+              publicAmount: toFixedHex(input.publicAmount),
               extDataHash: extDataHash,
+              inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
+              outputCommitments: outputs.map((x) => toFixedHex(x.getCommitment()))
             }
   
           const extData = {

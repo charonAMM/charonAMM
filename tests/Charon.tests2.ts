@@ -695,7 +695,7 @@ describe("Charon tests 2", function () {
         let recipient = ethers.utils.getAddress(addy.slice(0,42))
         relayer = accounts[2].address
         //@ts-ignore
-        let extDataHash = getExtDataHash(recipient,_amount,relayer,0,FIELD_SIZE)
+        let extDataHash = getExtDataHash(recipient,_chdOut,relayer,0,FIELD_SIZE)
         await buildLeaves(charon,tree)
         const { root, path_elements, path_index } = await tree.path(deposit.leafIndex);
         //@ts-ignore
@@ -813,16 +813,17 @@ describe("Charon tests 2", function () {
         assert(await charon2.isSpent(args.inputNullifiers[1]) == true ,"nullifierHash should be true")
         //deposit = Deposit.new(poseidon);
         // Alice sends some funds to withdraw (ignore bob)
-        const bobKeypair = new Keypair()
+        const bobKeypair = await new Keypair()
         let bobSendAmount = web3.utils.toWei("4")
-        const bobAddress = bobKeypair.address() // contains only public key
-        const bobSendUtxo = new Utxo({ amount: bobSendAmount, keypair: Keypair.fromString(bobAddress) })
+        addy = await aliceKeypair.pubkey
+        let bobAddress = ethers.utils.getAddress(addy.slice(0,42))
+        const bobSendUtxo = new Utxo({amount:bobSendAmount, keypair:bobAddress })
         let aliceChangeUtxo = new Utxo({
-            amount: _chdOut.sub(bobSendAmount),
+            amount: BigNumber.from(_chdOut).sub(bobSendAmount).toString(),
             keypair: aliceDepositUtxo.keypair,
         })
       //  await transaction({ tornadoPool, inputs: [aliceDepositUtxo], outputs: [bobSendUtxo, aliceChangeUtxo] })
-                recipient = ethers.utils.getAddress(addy.slice(0,42))
+                recipient = bobAddress
                 relayer = accounts[2].address
                 //@ts-ignore
                 extDataHash = getExtDataHash(recipient,bobSendAmount,relayer,0,FIELD_SIZE)
@@ -830,12 +831,13 @@ describe("Charon tests 2", function () {
                 //@ts-ignore
                 const { root2, path_elements2, path_index2 } = await tree.path(deposit.leafIndex);
                 //@ts-ignore
-                inputs = []
-                outputs = [aliceDepositUtxo]
+                inputs = [aliceDepositUtxo]
+                outputs = [bobSendUtxo, aliceChangeUtxo]
                 //@ts-ignore
                 outCommitments = []
                 outKeys = []
                 inNullifier = []
+                let pubkey;
                 if (inputs.length > 16 || outputs.length > 2) {
                     throw new Error('Incorrect inputs/outputs count')
                   }
@@ -847,7 +849,12 @@ describe("Charon tests 2", function () {
                   }
                 for(var i = 0; i< outputs.length;i++){
                   if (!outputs[i]._commitment) {
-                    outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount,await outputs[i].keypair.pubkey, outputs[i].blinding])
+                    pubkey = await outputs[i].keypair.pubkey;
+                    if(!pubkey){
+                      pubkey = await outputs[i].keypair
+                    }
+                    console.log(pubkey)
+                    outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount,pubkey, outputs[i].blinding])
                   }
                   outCommitments.push(outputs[i]._commitment)
                   outKeys.push(await outputs[i].keypair.pubkey)

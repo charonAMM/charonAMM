@@ -837,16 +837,33 @@ describe("Charon tests 2", function () {
                 outCommitments = []
                 outKeys = []
                 inNullifier = []
-                let pubkey;
+                inputMerklePathIndices = []
+                inputMerklePathElements = []
                 if (inputs.length > 16 || outputs.length > 2) {
-                    throw new Error('Incorrect inputs/outputs count')
+                  throw new Error('Incorrect inputs/outputs count')
+                }
+                while (inputs.length !== 2 && inputs.length < 16) {
+                  inputs.push(new Utxo())
+                }
+                while (outputs.length < 2) {
+                  outputs.push(new Utxo())
+                }
+                for (const input of inputs) {
+                  if (input.amount > 0) {
+                    input.index = tree.getIndexByElement(toFixedHex(input.getCommitment()))
+                    if (input.index < 0) {
+                      throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
+                    }
+                    inputMerklePathIndices.push(input.index)
+                    let myPath = await tree.path(input.index)
+                    inputMerklePathElements.push(myPath.path_elements)
+                  } else {
+                    inputMerklePathIndices.push(0)
+                    inputMerklePathElements.push(new Array(tree.n_levels).fill(0))
                   }
-                  while (inputs.length !== 2 && inputs.length < 16) {
-                    inputs.push(new Utxo())
-                  }
-                  while (outputs.length < 2) {
-                    outputs.push(new Utxo())
-                  }
+                }
+                let pubkey;
+
                 for(var i = 0; i< outputs.length;i++){
                   if (!outputs[i]._commitment) {
                     pubkey = await outputs[i].keypair.pubkey;
@@ -857,7 +874,7 @@ describe("Charon tests 2", function () {
                     outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount,pubkey, outputs[i].blinding])
                   }
                   outCommitments.push(outputs[i]._commitment)
-                  outKeys.push(await outputs[i].keypair.pubkey)
+                  outKeys.push(pubkey)
                 }
                 for(var i = 0; i< inputs.length;i++){
                   if (!inputs[i]._nullifier) {
@@ -876,27 +893,10 @@ describe("Charon tests 2", function () {
                   }
                   inNullifier.push(inputs[i]._nullifier)
                 }
-              
-                inputMerklePathIndices = []
-                inputMerklePathElements = []
-              
-                for (const input of inputs) {
-                  if (input.amount > 0) {
-                    input.index = tree.getIndexByElement(toFixedHex(input.getCommitment()))
-                    if (input.index < 0) {
-                      throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
-                    }
-                    inputMerklePathIndices.push(input.index)
-                    let myPath = await tree.path(input.index)
-                    inputMerklePathElements.push(myPath.path_elements)
-                  } else {
-                    inputMerklePathIndices.push(0)
-                    inputMerklePathElements.push(new Array(tree.n_levels).fill(0))
-                  }
-                }
+            
                 input = {
                     chainID: 2,
-                    root: root2,
+                    root: await tree.root(),
                     publicAmount: BigNumber.from(_amount).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
                     extDataHash: extDataHash,
                     inputNullifier: await inNullifier,
@@ -909,8 +909,9 @@ describe("Charon tests 2", function () {
                     inPathElements: inputMerklePathElements,
                     outAmount: await Promise.all(outputs.map(async (x) => await BigNumber.from(x.amount).toString())),
                     outBlinding: await Promise.all(outputs.map(async (x) => await x.blinding)),
-                    outPubkey: await Promise.all(outputs.map(async (x) => await x.keypair.pubkey))
+                    outPubkey: outKeys //this is wrong and check root
                 };
+                console.log(input)
                 proof = await prove(input);
                 args = {
                     a: proof.a,

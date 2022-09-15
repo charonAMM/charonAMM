@@ -111,9 +111,11 @@ async function buildLeaves(charonInstance:any, thisTree:any){
   const events = await charonInstance.queryFilter(filter, 0)
   //@ts-ignore
   const leaves = events.sort((a, b) => a.args.index - b.args.index).map((e) => toFixedHex(e.args.commitment))
-  for(var i = 0; i < leaves.length; i ++ ){
+  console.log(leaves)
+  for(var i = leaves.length - 1; i >= 0; i-- ){
     thisTree.insert(leaves[i])
   }
+  return thisTree;
 }
 
 async function prove(witness: any): Promise<Proof> {
@@ -741,7 +743,7 @@ describe("Charon tests 2", function () {
       
         let inputMerklePathIndices = []
         let inputMerklePathElements = []
-      
+        let root2;
         for (const input of inputs) {
           if (input.amount > 0) {
             input.index = tree.getIndexByElement(toFixedHex(input.getCommitment()))
@@ -815,9 +817,9 @@ describe("Charon tests 2", function () {
         // Alice sends some funds to withdraw (ignore bob)
         const bobKeypair = await new Keypair()
         let bobSendAmount = web3.utils.toWei("4")
-        addy = await aliceKeypair.pubkey
+        addy = await bobKeypair.pubkey
         let bobAddress = ethers.utils.getAddress(addy.slice(0,42))
-        const bobSendUtxo = new Utxo({amount:bobSendAmount, keypair:bobAddress })
+        const bobSendUtxo = new Utxo({amount:bobSendAmount, keypair:addy })
         let aliceChangeUtxo = new Utxo({
             amount: BigNumber.from(_chdOut).sub(bobSendAmount).toString(),
             keypair: aliceDepositUtxo.keypair,
@@ -827,9 +829,11 @@ describe("Charon tests 2", function () {
                 relayer = accounts[2].address
                 //@ts-ignore
                 extDataHash = getExtDataHash(recipient,bobSendAmount,relayer,0,FIELD_SIZE)
-                await buildLeaves(charon2,tree)
+                let newTree =  await buildLeaves(charon2,tree)
+                console.log(newTree)
+                console.log(await newTree.root())
                 //@ts-ignore
-                const { root2, path_elements2, path_index2 } = await tree.path(deposit.leafIndex);
+                //const { root2, path_elements2, path_index2 } = await tree.path(1);
                 //@ts-ignore
                 inputs = [aliceDepositUtxo]
                 outputs = [bobSendUtxo, aliceChangeUtxo]
@@ -857,6 +861,7 @@ describe("Charon tests 2", function () {
                     inputMerklePathIndices.push(input.index)
                     let myPath = await tree.path(input.index)
                     inputMerklePathElements.push(myPath.path_elements)
+                    root2 = myPath.root;
                   } else {
                     inputMerklePathIndices.push(0)
                     inputMerklePathElements.push(new Array(tree.n_levels).fill(0))
@@ -870,7 +875,6 @@ describe("Charon tests 2", function () {
                     if(!pubkey){
                       pubkey = await outputs[i].keypair
                     }
-                    console.log(pubkey)
                     outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount,pubkey, outputs[i].blinding])
                   }
                   outCommitments.push(outputs[i]._commitment)
@@ -893,10 +897,13 @@ describe("Charon tests 2", function () {
                   }
                   inNullifier.push(inputs[i]._nullifier)
                 }
-            
+                console.log(BigNumber.from(await newTree.root()).toString())
+                console.log(toFixedHex(BigNumber.from(await newTree.root()).toString()))
+          
                 input = {
                     chainID: 2,
-                    root: await tree.root(),
+                    //@ts-ignore
+                    root: BigNumber.from(await newTree.root()).toString(),
                     publicAmount: BigNumber.from(_amount).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
                     extDataHash: extDataHash,
                     inputNullifier: await inNullifier,
@@ -911,7 +918,7 @@ describe("Charon tests 2", function () {
                     outBlinding: await Promise.all(outputs.map(async (x) => await x.blinding)),
                     outPubkey: outKeys //this is wrong and check root
                 };
-                console.log(input)
+                //console.log(input)
                 proof = await prove(input);
                 args = {
                     a: proof.a,
@@ -931,7 +938,6 @@ describe("Charon tests 2", function () {
                 }
                 
         await charon2.transact(args,extData,accounts[5].address)
-        console.log("this works?")
         assert(await chd2.balanceOf(accounts[5].address) == web3.utils.toWei("1000"),"user should have 1000 chd")
 
     }).timeout(500000);

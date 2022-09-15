@@ -48,11 +48,12 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     component inTree[nIns];
     component inCheckRoot[nIns];
     var sumIns = 0;
-
+    log(51);
     // asserts your withdrawing on the right chain
     privateChainID === chainID;
     // verify correctness of transaction inputs
     for (var tx = 0; tx < nIns; tx++) {
+        log(tx);
         inKeypair[tx] = Keypair();
         inKeypair[tx].privateKey <== inPrivateKey[tx];
         inCommitmentHasher[tx] = Poseidon(3);
@@ -67,6 +68,7 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
         inNullifierHasher[tx].inputs[0] <== inCommitmentHasher[tx].out;
         inNullifierHasher[tx].inputs[1] <== inPathIndices[tx];
         inNullifierHasher[tx].inputs[2] <== inSignature[tx].out;
+        log(71);
         inNullifierHasher[tx].out === inputNullifier[tx];
         inTree[tx] = MerkleProof(levels);
         inTree[tx].leaf <== inCommitmentHasher[tx].out;
@@ -74,18 +76,25 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
         for (var i = 0; i < levels; i++) {
             inTree[tx].pathElements[i] <== inPathElements[tx][i];
         }
+        log(78);
         // check merkle proof only if amount is non-zero
         inCheckRoot[tx] = ForceEqualIfEnabled();
+        log(79);
         inCheckRoot[tx].in[0] <== root;
+        log(84);
+        log(root);
+        log(inTree[tx].root);
         inCheckRoot[tx].in[1] <== inTree[tx].root;
+        log(85);
         inCheckRoot[tx].enabled <== inAmount[tx];
-
+        log(86);
         // We don't need to range check input amounts, since all inputs are valid UTXOs that
         // were already checked as outputs in the previous transaction (or zero amount UTXOs that don't
         // need to be checked either).
 
         sumIns += inAmount[tx];
     }
+    log(89);
 
     component outCommitmentHasher[nOuts];
     component outAmountCheck[nOuts];
@@ -105,7 +114,7 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
 
         sumOuts += outAmount[tx];
     }
-
+    log(109);
     // check that there are no same nullifiers among all inputs
     component sameNullifiers[nIns * (nIns - 1) / 2];
     var index = 0;
@@ -123,6 +132,7 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
 
     // optional safety constraint to make sure extDataHash cannot be changed
     signal extDataSquare <== extDataHash * extDataHash;
+    log(127);
 }
 
 component main {public [chainID,root,publicAmount,extDataHash,inputNullifier,outputCommitment]} = Transaction(5, 2, 2, 11850551329423159860688778991827824730037759162201783566284850822760196767874);

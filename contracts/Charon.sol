@@ -446,7 +446,7 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
   //lets you do secret transfers / withdraw + mintCHD
   function transact(Proof memory _args, ExtData memory _extData,address _to) external _finalized_ _lock_{
       require(_extData.extAmount > 0,"must move amount");
-      require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
+      //require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
       require(isKnownRoot(_args.root), "Invalid merkle root");
       require(verifier.verifyProof(_args.a,
                 _args.b,

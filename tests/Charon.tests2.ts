@@ -815,17 +815,14 @@ describe("Charon tests 2", function () {
         assert(await charon2.isSpent(args.inputNullifiers[1]) == true ,"nullifierHash should be true")
         //deposit = Deposit.new(poseidon);
         // Alice sends some funds to withdraw (ignore bob)
-        const bobKeypair = await new Keypair()
         let bobSendAmount = web3.utils.toWei("4")
-        addy = await bobKeypair.pubkey
-        let bobAddress = ethers.utils.getAddress(addy.slice(0,42))
-        const bobSendUtxo = new Utxo({amount:bobSendAmount, keypair:addy })
+        const bobSendUtxo = new Utxo({amount:bobSendAmount, keypair:charon2.address })
         let aliceChangeUtxo = new Utxo({
             amount: BigNumber.from(_chdOut).sub(bobSendAmount).toString(),
             keypair: aliceDepositUtxo.keypair,
         })
       //  await transaction({ tornadoPool, inputs: [aliceDepositUtxo], outputs: [bobSendUtxo, aliceChangeUtxo] })
-                recipient = bobAddress
+                recipient = charon2.address
                 relayer = accounts[2].address
                 //@ts-ignore
                 extDataHash = getExtDataHash(recipient,bobSendAmount,relayer,0,FIELD_SIZE)
@@ -904,7 +901,7 @@ describe("Charon tests 2", function () {
                     chainID: 2,
                     //@ts-ignore
                     root: BigNumber.from(await newTree.root()).toString(),
-                    publicAmount: BigNumber.from(_amount).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
+                    publicAmount:BigNumber.from(0).toString(),
                     extDataHash: extDataHash,
                     inputNullifier: await inNullifier,
                     outputCommitment: await outCommitments,
@@ -920,11 +917,11 @@ describe("Charon tests 2", function () {
                 };
                 //console.log(input)
                 proof = await prove(input);
-                args = {
+                let args2 = {
                     a: proof.a,
                     b: proof.b,
                     c: proof.c,
-                    root: toFixedHex(input.root),
+                    root: await newTree.root(),
                     publicAmount: toFixedHex(input.publicAmount),
                     extDataHash: extDataHash,
                     inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
@@ -932,13 +929,16 @@ describe("Charon tests 2", function () {
                   }
                 extData = {
                   recipient: toFixedHex(recipient, 20),
-                  extAmount: toFixedHex(BigNumber.from(_amount).toString()),
+                  extAmount: toFixedHex(BigNumber.from(bobSendAmount).toString()),
                   relayer: toFixedHex(relayer, 20),
                   fee: toFixedHex(0)
                 }
-                
-        await charon2.transact(args,extData,accounts[5].address)
-        assert(await chd2.balanceOf(accounts[5].address) == web3.utils.toWei("1000"),"user should have 1000 chd")
+        console.log("to Here")
+        console.log("args", args2)
+        console.log("extData",extData)
+        await charon2.transact(args2,extData,accounts[5].address)
+        console.log("here")
+        assert(await chd2.balanceOf(accounts[5].address) == bobSendAmount,"user should have chd")
 
     }).timeout(500000);
 });

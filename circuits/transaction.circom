@@ -123,11 +123,15 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
           sameNullifiers[index] = IsEqual();
           sameNullifiers[index].in[0] <== inputNullifier[i];
           sameNullifiers[index].in[1] <== inputNullifier[j];
+          log(126);
           sameNullifiers[index].out === 0;
+          log(i);
+          log(j);
           index++;
       }
     }
     // verify amount invariant
+    log(131);
     sumIns + publicAmount === sumOuts;
 
     // optional safety constraint to make sure extDataHash cannot be changed

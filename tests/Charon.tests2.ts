@@ -7,7 +7,8 @@ const { Keypair } = require('./helpers/keypair')
 // @ts-ignore
 import { poseidonContract, buildPoseidon } from "circomlibjs";
 // @ts-ignore
-import { MerkleTree, Hasher } from "../src/merkleTree";
+//import { MerkleTree, Hasher } from "../src/merkleTree";
+import { MerkleTree }  from "../src/fixed-merkle-tree";
 // @ts-ignore
 import { groth16, bigInt } from "snarkjs";
 import path from "path";
@@ -23,6 +24,20 @@ const HEIGHT = 5;
 
 function sleep(ms:any) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function shuffle(array:any) {
+    let currentIndex = array.length
+    let randomIndex
+    // While there remain elements to shuffle...
+    while (0 !== currentIndex) {
+      // Pick a remaining element...
+      randomIndex = Math.floor(Math.random() * currentIndex)
+      currentIndex--
+      // And swap it with the current element.
+      ;[array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]]
+    }
+    return array
   }
 
 function poseidonHash(poseidon: any, inputs: BigNumberish[]): string {
@@ -68,16 +83,6 @@ function getExtDataHash(recipient: any,extAmount:any ,relayer: any,fee: any, fsi
     return BigNumber.from(hash).mod(fsize)
   }
 
-class PoseidonHasher implements Hasher {
-    poseidon: any;
-    constructor(poseidon: any) {
-        this.poseidon = poseidon;
-    }
-    hash(left: string, right: string) {
-        return poseidonHash(this.poseidon, [left, right]);
-    }
-}
-
 class Deposit {
     private constructor(
         public readonly nullifier: Uint8Array,
@@ -106,16 +111,31 @@ interface Proof {
     c: [BigNumberish, BigNumberish];
 }
 
-async function buildLeaves(charonInstance:any, thisTree:any){
+/** BigNumber to hex string of specified length */
+async function toFixedHex2(number:any, length:any) {
+  let result =
+    '0x' +
+    (number instanceof Buffer
+      ? number.toString('hex')
+      : BigNumber.from(number).toHexString().replace('0x', '')
+    ).padStart(length * 2, '0')
+  if (result.indexOf('-') > -1) {
+    result = '-' + result.replace('-', '')
+  }
+  return result
+}
+
+async function buildLeaves(charonInstance:any){
   const filter = charonInstance.filters.NewCommitment()
   const events = await charonInstance.queryFilter(filter, 0)
   //@ts-ignore
   const leaves = events.sort((a, b) => a.args.index - b.args.index).map((e) => toFixedHex(e.args.commitment))
   console.log(leaves)
-  for(var i = leaves.length - 1; i >= 0; i-- ){
-    thisTree.insert(leaves[i])
-  }
-  return thisTree;
+  // for(var i = leaves.length - 1; i >= 0; i-- ){
+  //   thisTree.insert(leaves[i])
+  // }
+  console.log(MerkleTree)
+  return new MerkleTree(HEIGHT, leaves, { hashFunction: poseidonHash2 });
 }
 
 async function prove(witness: any): Promise<Proof> {
@@ -682,7 +702,7 @@ describe("Charon tests 2", function () {
         let queryData: any
         let queryId: any
         let nonce: any
-        const tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
+        //const tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
         await token.mint(accounts[1].address,web3.utils.toWei("100"))
         let _chdOut = web3.utils.toWei("10")
         let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
@@ -698,8 +718,8 @@ describe("Charon tests 2", function () {
         relayer = accounts[2].address
         //@ts-ignore
         let extDataHash = getExtDataHash(recipient,_chdOut,relayer,0,FIELD_SIZE)
-        await buildLeaves(charon,tree)
-        const { root, path_elements, path_index } = await tree.path(deposit.leafIndex);
+        //@ts-ignore
+        let tree = await buildLeaves(charon)
         //@ts-ignore
         inputs = []
         outputs = [aliceDepositUtxo]
@@ -743,24 +763,22 @@ describe("Charon tests 2", function () {
       
         let inputMerklePathIndices = []
         let inputMerklePathElements = []
-        let root2;
         for (const input of inputs) {
           if (input.amount > 0) {
-            input.index = tree.getIndexByElement(toFixedHex(input.getCommitment()))
+            input.index = tree.indexOf(toFixedHex(input.getCommitment()))
             if (input.index < 0) {
               throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
             }
             inputMerklePathIndices.push(input.index)
-            let myPath = await tree.path(input.index)
-            inputMerklePathElements.push(myPath.path_elements)
+            inputMerklePathElements.push(tree.path(input.index).pathElements)
           } else {
             inputMerklePathIndices.push(0)
-            inputMerklePathElements.push(new Array(tree.n_levels).fill(0))
+            inputMerklePathElements.push(new Array(tree.levels).fill(0))
           }
         }
         let input = {
             chainID: 2,
-            root,
+            root: BigNumber.from(await tree.root).toString(),
             publicAmount: BigNumber.from(_chdOut).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
             extDataHash: extDataHash,
             inputNullifier: await inNullifier,
@@ -780,7 +798,7 @@ describe("Charon tests 2", function () {
             a: proof.a,
             b: proof.b,
             c: proof.c,
-            root: toFixedHex(input.root),
+            root: await toFixedHex2(tree.root,32),
             publicAmount: toFixedHex(input.publicAmount),
             extDataHash: extDataHash,
             inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
@@ -810,6 +828,7 @@ describe("Charon tests 2", function () {
         let commi = await getTellorSubmission(args,extData);
         await tellor2.submitValue(queryId,commi,nonce,queryData)
         await h.advanceTime(43200)//12 hours
+        console.log("lr", await charon2.getLastRoot())
         let tx = await charon2.oracleDeposit([1],[1]);
         assert(await charon2.isSpent(args.inputNullifiers[0]) == true ,"nullifierHash should be true")
         assert(await charon2.isSpent(args.inputNullifiers[1]) == true ,"nullifierHash should be true")
@@ -826,15 +845,13 @@ describe("Charon tests 2", function () {
                 relayer = accounts[2].address
                 //@ts-ignore
                 extDataHash = getExtDataHash(recipient,bobSendAmount,relayer,0,FIELD_SIZE)
-                let newTree =  await buildLeaves(charon2,tree)
-                console.log(newTree)
-                console.log(await newTree.root())
-                //@ts-ignore
-                //const { root2, path_elements2, path_index2 } = await tree.path(1);
+                let newTree =  await buildLeaves(charon2)
                 //@ts-ignore
                 inputs = [aliceDepositUtxo]
                 outputs = [bobSendUtxo, aliceChangeUtxo]
                 //@ts-ignore
+                inputs = await shuffle(inputs)
+                outputs = await shuffle(outputs)
                 outCommitments = []
                 outKeys = []
                 inNullifier = []
@@ -851,17 +868,16 @@ describe("Charon tests 2", function () {
                 }
                 for (const input of inputs) {
                   if (input.amount > 0) {
-                    input.index = tree.getIndexByElement(toFixedHex(input.getCommitment()))
+                    console.log(newTree)
+                    input.index = newTree.indexOf(toFixedHex(input.getCommitment()))
                     if (input.index < 0) {
                       throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
                     }
                     inputMerklePathIndices.push(input.index)
-                    let myPath = await tree.path(input.index)
-                    inputMerklePathElements.push(myPath.path_elements)
-                    root2 = myPath.root;
+                    inputMerklePathElements.push(newTree.path(input.index).pathElements)
                   } else {
                     inputMerklePathIndices.push(0)
-                    inputMerklePathElements.push(new Array(tree.n_levels).fill(0))
+                    inputMerklePathElements.push(new Array(newTree.levels).fill(0))
                   }
                 }
                 let pubkey;
@@ -894,19 +910,18 @@ describe("Charon tests 2", function () {
                   }
                   inNullifier.push(inputs[i]._nullifier)
                 }
-                console.log(BigNumber.from(await newTree.root()).toString())
-                console.log(toFixedHex(BigNumber.from(await newTree.root()).toString()))
-          
+                console.log(BigNumber.from(await newTree.root).toString())
+                console.log(toFixedHex(BigNumber.from(await newTree.root).toString()))
                 input = {
                     chainID: 2,
                     //@ts-ignore
-                    root: BigNumber.from(await newTree.root()).toString(),
+                    root: newTree.root,
                     publicAmount:BigNumber.from(0).toString(),
                     extDataHash: extDataHash,
                     inputNullifier: await inNullifier,
                     outputCommitment: await outCommitments,
                     privateChainID: 2,
-                    inAmount: await Promise.all(inputs.map(async (x) => await BigNumber.from(x.amount).toString())),
+                    inAmount: await Promise.all(inputs.map(async (x) => BigNumber.from(x.amount).toString())),
                     inPrivateKey: await Promise.all(inputs.map(async (x) => await x.keypair.privkey)),
                     inBlinding: await Promise.all(inputs.map(async (x) => await x.blinding)),
                     inPathIndices: inputMerklePathIndices,
@@ -915,13 +930,15 @@ describe("Charon tests 2", function () {
                     outBlinding: await Promise.all(outputs.map(async (x) => await x.blinding)),
                     outPubkey: outKeys //this is wrong and check root
                 };
-                //console.log(input)
+                console.log("lr", await charon2.getLastRoot())
+                console.log(BigNumber.from(await charon2.getLastRoot()).toString())
+                console.log(input)
                 proof = await prove(input);
                 let args2 = {
                     a: proof.a,
                     b: proof.b,
                     c: proof.c,
-                    root: await newTree.root(),
+                    root: await newTree.root,
                     publicAmount: toFixedHex(input.publicAmount),
                     extDataHash: extDataHash,
                     inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
@@ -936,6 +953,9 @@ describe("Charon tests 2", function () {
         console.log("to Here")
         console.log("args", args2)
         console.log("extData",extData)
+        console.log(web3.utils.toHex(input.root))
+        console.log(toFixedHex(input.root))
+        console.log("lr", await charon2.getLastRoot())
         await charon2.transact(args2,extData,accounts[5].address)
         console.log("here")
         assert(await chd2.balanceOf(accounts[5].address) == bobSendAmount,"user should have chd")

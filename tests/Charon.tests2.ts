@@ -1,5 +1,6 @@
 import { assert, expect } from "chai";
 import { Verifier__factory, Hasher__factory } from "../types";
+const hre = require("hardhat");
 const { ethers } = require("hardhat");
 const { utils } = require('ffjavascript')
 import { Contract, ContractFactory, BigNumber, BigNumberish } from "ethers";
@@ -12,12 +13,13 @@ import { MerkleTree }  from "../src/fixed-merkle-tree";
 // @ts-ignore
 import { groth16, bigInt } from "snarkjs";
 import path from "path";
-const { transaction, prepareTransaction, getLeaves } = require('./helpers/index')
 const { poseidonHash2 } = require('./helpers/utils')
 const Utxo = require('./helpers/utxo')
 const h = require("usingtellor/test/helpers/helpers.js");
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
-const web3 = require('web3');
+var Web3 = require('web3');
+const web3 = new Web3(hre.network.provider)
+const abiCoder = new ethers.utils.AbiCoder()
 
 const ETH_AMOUNT = ethers.utils.parseEther("1");
 const HEIGHT = 5;
@@ -48,7 +50,6 @@ function poseidonHash(poseidon: any, inputs: BigNumberish[]): string {
 }
 
 function getTellorSubmission(args: any, extData: any){
-  const abiCoder = new ethers.utils.AbiCoder()
   const dataEncoded = abiCoder.encode(
     ['uint256[2]','uint256[2][2]','uint256[2]','uint256','bytes32','uint256','bytes32[]','bytes32[2]','address','int256','address','uint256'],
     [
@@ -130,11 +131,6 @@ async function buildLeaves(charonInstance:any){
   const events = await charonInstance.queryFilter(filter, 0)
   //@ts-ignore
   const leaves = events.sort((a, b) => a.args.index - b.args.index).map((e) => toFixedHex(e.args.commitment))
-  console.log(leaves)
-  // for(var i = leaves.length - 1; i >= 0; i-- ){
-  //   thisTree.insert(leaves[i])
-  // }
-  console.log(MerkleTree)
   return new MerkleTree(HEIGHT, leaves, { hashFunction: poseidonHash2 });
 }
 
@@ -153,11 +149,117 @@ async function prove(witness: any): Promise<Proof> {
     return solProof;
 }
 
+async function getProofandArgs(FIELD_SIZE: any, tree:any, inputs:any, outputs: any, relayer:any, recipient: any, amount: any, publicAmount: any) {
+        let poseidon = await buildPoseidon();
+        let outCommitments = []
+        let outKeys = []
+        let inNullifier = []
+        let k: any
+        let extDataHash = getExtDataHash(recipient,amount,relayer,0,FIELD_SIZE)
+        if (inputs.length > 16 || outputs.length > 2) {
+            throw new Error('Incorrect inputs/outputs count')
+          }
+          while (inputs.length !== 2 && inputs.length < 16) {
+            k = await new Keypair()
+            await k.init()
+            inputs.push(new Utxo({keypair:k}))
+          }
+          while (outputs.length < 2) {
+            k = await new Keypair()
+            await k.init()
+            outputs.push(new Utxo({keypair:k}))
+          }
+        let pubkey;
+        for(var i = 0; i< outputs.length;i++){
+          if (!outputs[i]._commitment) {
+            pubkey = await outputs[i].keypair.pubkey;
+            if(!pubkey){
+              pubkey = await outputs[i].keypair
+            }
+            console.log(pubkey)
+            outputs[i]._commitment = poseidonHash(poseidon,[outputs[i].amount,pubkey, outputs[i].blinding])
+          }
+          outCommitments.push(outputs[i]._commitment)
+          outKeys.push(pubkey)
+        }
+        let inputMerklePathIndices = []
+        let inputMerklePathElements = []
+        for (const input of inputs) {
+          if (input.amount > 0) {
+            input.index = tree.indexOf(toFixedHex(input.getCommitment()))
+            if (input.index < 0) {
+              throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
+            }
+            inputMerklePathIndices.push(input.index)
+            inputMerklePathElements.push(tree.path(input.index).pathElements)
+          } else {
+            inputMerklePathIndices.push(0)
+            inputMerklePathElements.push(new Array(tree.levels).fill(0))
+          }
+        }
+        for(var i = 0; i< inputs.length;i++){
+          if (!inputs[i]._nullifier) {
+            if (
+              inputs[i].amount > 0 &&
+              (inputs[i].index === undefined ||
+                inputs[i].index === null ||
+                inputs[i].keypair.privkey === undefined ||
+                inputs[i].keypair.privkey === null)
+            ) {
+              throw new Error('Can not compute nullifier without utxo index or private key')
+            }
+            inputs[i]._commitment  = poseidonHash(poseidon,[inputs[i].amount,await inputs[i].keypair.pubkey, inputs[i].blinding])
+            const signature = inputs[i].keypair.privkey ? inputs[i].keypair.sign(inputs[i]._commitment, inputs[i].index || 0) : 0
+            inputs[i]._nullifier = poseidonHash(poseidon,[inputs[i]._commitment, inputs[i].index || 0, await signature])
+          }
+          inNullifier.push(inputs[i]._nullifier)
+        }
+        let input = {
+            chainID: 2,
+            root: BigNumber.from(await tree.root).toString(),
+            publicAmount: BigNumber.from(amount).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
+            extDataHash: extDataHash,
+            inputNullifier: await inNullifier,
+            outputCommitment: await outCommitments,
+            privateChainID: 2,
+            inAmount: await Promise.all(inputs.map(async (x:any) => await BigNumber.from(x.amount).toString())),
+            inPrivateKey: await Promise.all(inputs.map(async (x:any) => await x.keypair.privkey)),
+            inBlinding: await Promise.all(inputs.map(async (x:any) => await x.blinding)),
+            inPathIndices: inputMerklePathIndices,
+            inPathElements: inputMerklePathElements,
+            outAmount: await Promise.all(outputs.map(async (x:any) => await BigNumber.from(x.amount).toString())),
+            outBlinding: await Promise.all(outputs.map(async (x:any) => await x.blinding)),
+            outPubkey: outKeys //check
+        };
+        console.log(input.root)
+        let proof = await prove(input);
+        let args = {
+            a: proof.a,
+            b: proof.b,
+            c: proof.c,
+            root: await toFixedHex2(tree.root,32),
+            publicAmount: toFixedHex(input.publicAmount),
+            extDataHash: extDataHash,
+            inputNullifiers: inputs.map((x:any) => toFixedHex(x.getNullifier())),
+            outputCommitments: outputs.map((x:any) => toFixedHex(x.getCommitment()))
+          }
+        let extData = {
+          recipient: toFixedHex(recipient, 20),
+          extAmount: toFixedHex(BigNumber.from(publicAmount).toString()),
+          relayer: toFixedHex(relayer, 20),
+          fee: toFixedHex(0)
+        }
+        let dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+          ['uint256[2]', 'uint256[2][2]', 'uint256[2]','uint256','bytes32'],
+          [args.a,[[args.b[0][0],args.b[0][1]],[args.b[1][0],args.b[1][1]]],[args.c[0],args.c[1]],args.publicAmount,args.root]
+        );
+        return {args, extData, dataEncoded}
+}
+
 //@ts-ignore
 const toFixedHex = (number, length = 32) => (number.toString(16).padStart(2, '0'))
 
 describe("Charon tests 2", function () {
-    let poseidon: any;
     let hasher: Contract;
     let charon: Contract;
     let charon2: Contract;
@@ -177,10 +279,7 @@ describe("Charon tests 2", function () {
     let inputs: any[]
     let outputs: any[]
     let FIELD_SIZE: any;
-
-    before(async () => {
-        poseidon = await buildPoseidon();
-    });
+    let testTree: Contract;
     beforeEach(async function () {
         accounts = await ethers.getSigners();
             //deploy mock token
@@ -202,6 +301,9 @@ describe("Charon tests 2", function () {
         cfac = await ethers.getContractFactory("contracts/Charon.sol:Charon");
         charon = await cfac.deploy(verifier.address,hasher.address,token.address,fee,tellor.address,HEIGHT,1,"Charon Pool Token","CPT");
         await charon.deployed();
+        let merkleFac = await ethers.getContractFactory("contracts/helpers/TestMerkleTree.sol:TestMerkleTree");
+        testTree = await merkleFac.deploy(HEIGHT,hasher.address);
+        await testTree.deployed();
         FIELD_SIZE = await charon.FIELD_SIZE() 
         //now deploy on other chain (same chain, but we pretend w/ oracles)
         token2 = await tfac.deploy(accounts[1].address,"Dissapearing Space Monkey2","DSM2");
@@ -696,10 +798,8 @@ describe("Charon tests 2", function () {
       //   assert(await charon2.isSpent(args.inputNullifiers[1]) == true ,"nullifierHash should be true")
       //   });
     it("deposit and withdraw", async function () {
-        let deposit: any;
         let relayer: any;
         let extAmount:any;
-        let queryData: any
         let queryId: any
         let nonce: any
         //const tree = new MerkleTree(HEIGHT,"test",new PoseidonHasher(poseidon));
@@ -710,129 +810,32 @@ describe("Charon tests 2", function () {
                                                   _chdOut,
                                                   0)
         await token.connect(accounts[1]).approve(charon.address,_amount)
-        deposit = Deposit.new(poseidon);
-        const aliceKeypair = await new Keypair() // contains private and public keys
-        const aliceDepositUtxo = await new Utxo({ amount: _chdOut})//should this include alice's keypair?
+        let aliceKeypair = await new Keypair() // contains private and public keys
+        await aliceKeypair.init()
+        console.log(aliceKeypair)
+        const aliceDepositUtxo = await new Utxo({keypair:aliceKeypair, amount: _chdOut})//should this include alice's keypair?
         let addy = await aliceKeypair.pubkey
         let recipient = ethers.utils.getAddress(addy.slice(0,42))
         relayer = accounts[2].address
-        //@ts-ignore
-        let extDataHash = getExtDataHash(recipient,_chdOut,relayer,0,FIELD_SIZE)
         //@ts-ignore
         let tree = await buildLeaves(charon)
         //@ts-ignore
         inputs = []
         outputs = [aliceDepositUtxo]
-        //@ts-ignore
-        let outCommitments = []
-        let outKeys = []
-        let inNullifier = []
-        if (inputs.length > 16 || outputs.length > 2) {
-            throw new Error('Incorrect inputs/outputs count')
-          }
-          while (inputs.length !== 2 && inputs.length < 16) {
-            inputs.push(new Utxo())
-          }
-          while (outputs.length < 2) {
-            outputs.push(new Utxo())
-          }
-        for(var i = 0; i< outputs.length;i++){
-          if (!outputs[i]._commitment) {
-            outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount,await outputs[i].keypair.pubkey, outputs[i].blinding])
-          }
-          outCommitments.push(outputs[i]._commitment)
-          outKeys.push(await outputs[i].keypair.pubkey)
-        }
-        for(var i = 0; i< inputs.length;i++){
-          if (!inputs[i]._nullifier) {
-            if (
-              inputs[i].amount > 0 &&
-              (inputs[i].index === undefined ||
-                inputs[i].index === null ||
-                inputs[i].keypair.privkey === undefined ||
-                inputs[i].keypair.privkey === null)
-            ) {
-              throw new Error('Can not compute nullifier without utxo index or private key')
-            }
-            inputs[i]._commitment  = poseidonHash(deposit.poseidon,[inputs[i].amount,await inputs[i].keypair.pubkey, inputs[i].blinding])
-            const signature = inputs[i].keypair.privkey ? inputs[i].keypair.sign(inputs[i]._commitment, inputs[i].index || 0) : 0
-            inputs[i]._nullifier = poseidonHash(deposit.poseidon,[inputs[i]._commitment, this.index || 0, await signature])
-          }
-          inNullifier.push(inputs[i]._nullifier)
-        }
-      
-        let inputMerklePathIndices = []
-        let inputMerklePathElements = []
-        for (const input of inputs) {
-          if (input.amount > 0) {
-            input.index = tree.indexOf(toFixedHex(input.getCommitment()))
-            if (input.index < 0) {
-              throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
-            }
-            inputMerklePathIndices.push(input.index)
-            inputMerklePathElements.push(tree.path(input.index).pathElements)
-          } else {
-            inputMerklePathIndices.push(0)
-            inputMerklePathElements.push(new Array(tree.levels).fill(0))
-          }
-        }
-        let input = {
-            chainID: 2,
-            root: BigNumber.from(await tree.root).toString(),
-            publicAmount: BigNumber.from(_chdOut).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
-            extDataHash: extDataHash,
-            inputNullifier: await inNullifier,
-            outputCommitment: await outCommitments,
-            privateChainID: 2,
-            inAmount: await Promise.all(inputs.map(async (x) => await BigNumber.from(x.amount).toString())),
-            inPrivateKey: await Promise.all(inputs.map(async (x) => await x.keypair.privkey)),
-            inBlinding: await Promise.all(inputs.map(async (x) => await x.blinding)),
-            inPathIndices: inputMerklePathIndices,
-            inPathElements: inputMerklePathElements,
-            outAmount: await Promise.all(outputs.map(async (x) => await BigNumber.from(x.amount).toString())),
-            outBlinding: await Promise.all(outputs.map(async (x) => await x.blinding)),
-            outPubkey: await Promise.all(outputs.map(async (x) => await x.keypair.pubkey))
-        };
-        let proof = await prove(input);
-        let args = {
-            a: proof.a,
-            b: proof.b,
-            c: proof.c,
-            root: await toFixedHex2(tree.root,32),
-            publicAmount: toFixedHex(input.publicAmount),
-            extDataHash: extDataHash,
-            inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
-            outputCommitments: outputs.map((x) => toFixedHex(x.getCommitment()))
-          }
-        let extData = {
-          recipient: toFixedHex(recipient, 20),
-          extAmount: toFixedHex(BigNumber.from(_chdOut).toString()),
-          relayer: toFixedHex(relayer, 20),
-          fee: toFixedHex(0)
-        }
-        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
-        let dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
-          ['uint256[2]', 'uint256[2][2]', 'uint256[2]','uint256','bytes32'],
-          [args.a,[[args.b[0][0],args.b[0][1]],[args.b[1][0],args.b[1][1]]],[args.c[0],args.c[1]],args.publicAmount,args.root]
-        );
-        let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
-        queryData = abiCoder.encode(
-          ['string', 'bytes'],
-          ['Charon', abiCoder.encode(
-            ['uint256','uint256'],
-            [1,depositId]
-          )]
+        let inputData = await getProofandArgs(FIELD_SIZE, tree,inputs,outputs,relayer,recipient,_chdOut, _chdOut)
+        await charon.connect(accounts[1]).depositToOtherChain(inputData.args,inputData.extData,false);
+        let depositId = await charon.getDepositIdByCommitmentHash(h.hash(inputData.dataEncoded))
+        let queryData = abiCoder.encode(['string', 'bytes'],
+          ['Charon', abiCoder.encode(['uint256','uint256'],[1,depositId])]
         );
         queryId = h.hash(queryData)
         nonce = await tellor2.getNewValueCountbyQueryId(queryId)
-        let commi = await getTellorSubmission(args,extData);
+        let commi = await getTellorSubmission(inputData.args,inputData.extData);
         await tellor2.submitValue(queryId,commi,nonce,queryData)
         await h.advanceTime(43200)//12 hours
-        console.log("lr", await charon2.getLastRoot())
         let tx = await charon2.oracleDeposit([1],[1]);
-        assert(await charon2.isSpent(args.inputNullifiers[0]) == true ,"nullifierHash should be true")
-        assert(await charon2.isSpent(args.inputNullifiers[1]) == true ,"nullifierHash should be true")
-        //deposit = Deposit.new(poseidon);
+        assert(await charon2.isSpent(inputData.args.inputNullifiers[0]) == true ,"nullifierHash should be true")
+        assert(await charon2.isSpent(inputData.args.inputNullifiers[1]) == true ,"nullifierHash should be true")
         // Alice sends some funds to withdraw (ignore bob)
         let bobSendAmount = web3.utils.toWei("4")
         const bobSendUtxo = new Utxo({amount:bobSendAmount, keypair:charon2.address })
@@ -840,124 +843,16 @@ describe("Charon tests 2", function () {
             amount: BigNumber.from(_chdOut).sub(bobSendAmount).toString(),
             keypair: aliceDepositUtxo.keypair,
         })
-      //  await transaction({ tornadoPool, inputs: [aliceDepositUtxo], outputs: [bobSendUtxo, aliceChangeUtxo] })
-                recipient = charon2.address
-                relayer = accounts[2].address
-                //@ts-ignore
-                extDataHash = getExtDataHash(recipient,bobSendAmount,relayer,0,FIELD_SIZE)
-                let newTree =  await buildLeaves(charon2)
-                //@ts-ignore
-                inputs = [aliceDepositUtxo]
-                outputs = [bobSendUtxo, aliceChangeUtxo]
-                //@ts-ignore
-                inputs = await shuffle(inputs)
-                outputs = await shuffle(outputs)
-                outCommitments = []
-                outKeys = []
-                inNullifier = []
-                inputMerklePathIndices = []
-                inputMerklePathElements = []
-                if (inputs.length > 16 || outputs.length > 2) {
-                  throw new Error('Incorrect inputs/outputs count')
-                }
-                while (inputs.length !== 2 && inputs.length < 16) {
-                  inputs.push(new Utxo())
-                }
-                while (outputs.length < 2) {
-                  outputs.push(new Utxo())
-                }
-                for (const input of inputs) {
-                  if (input.amount > 0) {
-                    console.log(newTree)
-                    input.index = newTree.indexOf(toFixedHex(input.getCommitment()))
-                    if (input.index < 0) {
-                      throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
-                    }
-                    inputMerklePathIndices.push(input.index)
-                    inputMerklePathElements.push(newTree.path(input.index).pathElements)
-                  } else {
-                    inputMerklePathIndices.push(0)
-                    inputMerklePathElements.push(new Array(newTree.levels).fill(0))
-                  }
-                }
-                let pubkey;
-
-                for(var i = 0; i< outputs.length;i++){
-                  if (!outputs[i]._commitment) {
-                    pubkey = await outputs[i].keypair.pubkey;
-                    if(!pubkey){
-                      pubkey = await outputs[i].keypair
-                    }
-                    outputs[i]._commitment = poseidonHash(deposit.poseidon,[outputs[i].amount,pubkey, outputs[i].blinding])
-                  }
-                  outCommitments.push(outputs[i]._commitment)
-                  outKeys.push(pubkey)
-                }
-                for(var i = 0; i< inputs.length;i++){
-                  if (!inputs[i]._nullifier) {
-                    if (
-                      inputs[i].amount > 0 &&
-                      (inputs[i].index === undefined ||
-                        inputs[i].index === null ||
-                        inputs[i].keypair.privkey === undefined ||
-                        inputs[i].keypair.privkey === null)
-                    ) {
-                      throw new Error('Can not compute nullifier without utxo index or private key')
-                    }
-                    inputs[i]._commitment  = poseidonHash(deposit.poseidon,[inputs[i].amount,await inputs[i].keypair.pubkey, inputs[i].blinding])
-                    const signature = inputs[i].keypair.privkey ? inputs[i].keypair.sign(inputs[i]._commitment, inputs[i].index || 0) : 0
-                    inputs[i]._nullifier = poseidonHash(deposit.poseidon,[inputs[i]._commitment, this.index || 0, await signature])
-                  }
-                  inNullifier.push(inputs[i]._nullifier)
-                }
-                console.log(BigNumber.from(await newTree.root).toString())
-                console.log(toFixedHex(BigNumber.from(await newTree.root).toString()))
-                input = {
-                    chainID: 2,
-                    //@ts-ignore
-                    root: newTree.root,
-                    publicAmount:BigNumber.from(0).toString(),
-                    extDataHash: extDataHash,
-                    inputNullifier: await inNullifier,
-                    outputCommitment: await outCommitments,
-                    privateChainID: 2,
-                    inAmount: await Promise.all(inputs.map(async (x) => BigNumber.from(x.amount).toString())),
-                    inPrivateKey: await Promise.all(inputs.map(async (x) => await x.keypair.privkey)),
-                    inBlinding: await Promise.all(inputs.map(async (x) => await x.blinding)),
-                    inPathIndices: inputMerklePathIndices,
-                    inPathElements: inputMerklePathElements,
-                    outAmount: await Promise.all(outputs.map(async (x) => await BigNumber.from(x.amount).toString())),
-                    outBlinding: await Promise.all(outputs.map(async (x) => await x.blinding)),
-                    outPubkey: outKeys //this is wrong and check root
-                };
-                console.log("lr", await charon2.getLastRoot())
-                console.log(BigNumber.from(await charon2.getLastRoot()).toString())
-                console.log(input)
-                proof = await prove(input);
-                let args2 = {
-                    a: proof.a,
-                    b: proof.b,
-                    c: proof.c,
-                    root: await newTree.root,
-                    publicAmount: toFixedHex(input.publicAmount),
-                    extDataHash: extDataHash,
-                    inputNullifiers: inputs.map((x) => toFixedHex(x.getNullifier())),
-                    outputCommitments: outputs.map((x) => toFixedHex(x.getCommitment()))
-                  }
-                extData = {
-                  recipient: toFixedHex(recipient, 20),
-                  extAmount: toFixedHex(BigNumber.from(bobSendAmount).toString()),
-                  relayer: toFixedHex(relayer, 20),
-                  fee: toFixedHex(0)
-                }
+        recipient = charon2.address
+        let newTree =  await buildLeaves(charon2)
+        //@ts-ignore
+        inputs = [aliceDepositUtxo]
+        outputs = [bobSendUtxo, aliceChangeUtxo]
+        //@ts-ignore
+        inputData = await getProofandArgs(FIELD_SIZE, newTree,inputs,outputs,relayer,recipient,bobSendAmount,0)
         console.log("to Here")
-        console.log("args", args2)
-        console.log("extData",extData)
-        console.log(web3.utils.toHex(input.root))
-        console.log(toFixedHex(input.root))
-        console.log("lr", await charon2.getLastRoot())
-        await charon2.transact(args2,extData,accounts[5].address)
-        console.log("here")
+        assert(await charon2.isKnownRoot(inputData.args.root));
+        await charon2.transact(inputData.args,inputData.extData,accounts[5].address)
         assert(await chd2.balanceOf(accounts[5].address) == bobSendAmount,"user should have chd")
 
     }).timeout(500000);

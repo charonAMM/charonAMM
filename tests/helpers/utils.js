@@ -2,7 +2,18 @@
 const crypto = require('crypto')
 const { ethers } = require('hardhat')
 const BigNumber = ethers.BigNumber
-const { poseidonContract, buildPoseidon } = require("circomlibjs");
+const { buildPoseidon }  = require("circomlibjs");
+
+async function poseidonHash (inputs){
+  let poseidon = await buildPoseidon();
+  const hash = await Promise.all(poseidon(inputs.map((x) => BigNumber.from(x.toString()).toBigInt())));
+  const hashStr = poseidon.F.toString(hash);
+  const hashHex = BigNumber.from(hashStr).toHexString();
+  return ethers.utils.hexZeroPad(hashHex, 32);
+} 
+
+
+const poseidonHash2 = (a, b) => poseidonHash([a, b])
 
 const FIELD_SIZE = BigNumber.from(
   '21888242871839275222246405745257275088548364400416034343698204186575808495617',
@@ -17,13 +28,15 @@ function getExtDataHash({
   relayer,
   fee,
   encryptedOutput1,
-  encryptedOutput2
+  encryptedOutput2,
+  isL1Withdrawal,
+  l1Fee,
 }) {
   const abi = new ethers.utils.AbiCoder()
 
   const encodedData = abi.encode(
     [
-      'tuple(address recipient,int256 extAmount,address relayer,uint256 fee,bytes encryptedOutput1,bytes encryptedOutput2)',
+      'tuple(address recipient,int256 extAmount,address relayer,uint256 fee,bytes encryptedOutput1,bytes encryptedOutput2,bool isL1Withdrawal,uint256 l1Fee)',
     ],
     [
       {
@@ -32,7 +45,9 @@ function getExtDataHash({
         relayer: toFixedHex(relayer, 20),
         fee: toFixedHex(fee),
         encryptedOutput1: encryptedOutput1,
-        encryptedOutput2: encryptedOutput2
+        encryptedOutput2: encryptedOutput2,
+        isL1Withdrawal: isL1Withdrawal,
+        l1Fee: l1Fee,
       },
     ],
   )
@@ -42,9 +57,6 @@ function getExtDataHash({
 
 /** BigNumber to hex string of specified length */
 function toFixedHex(number, length = 32) {
-  if (number < 1) {
-    number = 0
-  }
   let result =
     '0x' +
     (number instanceof Buffer
@@ -56,9 +68,6 @@ function toFixedHex(number, length = 32) {
   }
   return result
 }
-
-
-// const toFixedHex = (number, length = 32) => (number.toString().padStart(2, '0'))
 
 /** Convert value into buffer of specified byte length */
 const toBuffer = (value, length) =>
@@ -92,16 +101,8 @@ async function getSignerFromAddress(address) {
     method: 'hardhat_impersonateAccount',
     params: [address],
   })
-  return await ethers.provider.getSigner(address)
-}
 
-async function poseidonHash(inputs){
-  let poseidon = await buildPoseidon();
-  await Promise.all(inputs)
-  const hash = poseidon(inputs.map((x) => BigNumber.from(x).toBigInt()));
-  const hashStr = poseidon.F.toString(hash);
-  const hashHex = BigNumber.from(hashStr).toHexString();
-  return await ethers.utils.hexZeroPad(hashHex, 32);
+  return await ethers.provider.getSigner(address)
 }
 
 module.exports = {
@@ -110,6 +111,7 @@ module.exports = {
   toFixedHex,
   toBuffer,
   poseidonHash,
+  poseidonHash2,
   getExtDataHash,
   shuffle,
   getSignerFromAddress,

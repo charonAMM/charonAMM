@@ -41,11 +41,7 @@ class Keypair {
    */
   constructor(privkey = ethers.Wallet.createRandom().privateKey) {
     this.privkey = privkey
-  }
-
-  async init() {
-    this.pubkey = await poseidonHash([this.privkey])
-    let privkey = this.privkey
+    this.pubkey = poseidonHash([this.privkey])
     this.encryptionKey = getEncryptionPublicKey(privkey.slice(2))
   }
 

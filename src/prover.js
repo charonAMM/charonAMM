@@ -1,16 +1,18 @@
 const { wtns, groth16 } = require('snarkjs')
 const { utils } = require('ffjavascript')
+
 const fs = require('fs')
 const tmp = require('tmp-promise')
 const util = require('util')
 const exec = util.promisify(require('child_process').exec)
+
 const { toFixedHex } = require('./utils')
 
 async function prove(input, keyBasePath) {
   const { proof } = await groth16.fullProve(
     utils.stringifyBigInts(input),
     `${keyBasePath}.wasm`,
-    `./build/cicuit_final.zkey`,
+    `${keyBasePath}.zkey`,
   )
   return (
     '0x' +

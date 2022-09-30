@@ -2,17 +2,9 @@
 const crypto = require('crypto')
 const { ethers } = require('hardhat')
 const BigNumber = ethers.BigNumber
-const { buildPoseidon }  = require("circomlibjs");
+const { poseidon } = require('circomlib')
 
-async function poseidonHash (inputs){
-  let poseidon = await buildPoseidon();
-  const hash = await Promise.all(poseidon(inputs.map((x) => BigNumber.from(x.toString()).toBigInt())));
-  const hashStr = poseidon.F.toString(hash);
-  const hashHex = BigNumber.from(hashStr).toHexString();
-  return ethers.utils.hexZeroPad(hashHex, 32);
-} 
-
-
+const poseidonHash = (items) => BigNumber.from(poseidon(items).toString())
 const poseidonHash2 = (a, b) => poseidonHash([a, b])
 
 const FIELD_SIZE = BigNumber.from(
@@ -28,15 +20,13 @@ function getExtDataHash({
   relayer,
   fee,
   encryptedOutput1,
-  encryptedOutput2,
-  isL1Withdrawal,
-  l1Fee,
+  encryptedOutput2
 }) {
   const abi = new ethers.utils.AbiCoder()
 
   const encodedData = abi.encode(
     [
-      'tuple(address recipient,int256 extAmount,address relayer,uint256 fee,bytes encryptedOutput1,bytes encryptedOutput2,bool isL1Withdrawal,uint256 l1Fee)',
+      'tuple(address recipient,int256 extAmount,address relayer,uint256 fee,bytes encryptedOutput1,bytes encryptedOutput2)',
     ],
     [
       {
@@ -45,9 +35,7 @@ function getExtDataHash({
         relayer: toFixedHex(relayer, 20),
         fee: toFixedHex(fee),
         encryptedOutput1: encryptedOutput1,
-        encryptedOutput2: encryptedOutput2,
-        isL1Withdrawal: isL1Withdrawal,
-        l1Fee: l1Fee,
+        encryptedOutput2: encryptedOutput2
       },
     ],
   )

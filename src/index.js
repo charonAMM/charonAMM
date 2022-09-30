@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+const MerkleTree = require('fixed-merkle-tree')
 const { ethers } = require('hardhat')
 const { BigNumber } = ethers
 const { toFixedHex, poseidonHash2, getExtDataHash, FIELD_SIZE, shuffle } = require('./utils')
@@ -7,11 +8,11 @@ const Utxo = require('./utxo')
 const { prove } = require('./prover')
 const MERKLE_TREE_HEIGHT = 5
 
-async function getLeaves({ contractInstance }) {
-  const filter = contractInstance.filters.NewCommitment()
-  const events = await contractInstance.queryFilter(filter, 0)
+async function buildMerkleTree(charon) {
+  let filter = charon.filters.NewCommitment()
+  const events = await charon.queryFilter(filter, 0)
   const leaves = events.sort((a, b) => a.args.index - b.args.index).map((e) => toFixedHex(e.args.commitment))
-  return leaves
+  return new MerkleTree(MERKLE_TREE_HEIGHT, leaves, { hashFunction: poseidonHash2 })
 }
 
 async function getProof({
@@ -21,13 +22,15 @@ async function getProof({
   extAmount,
   fee,
   recipient,
-  relayer
+  relayer,
+  privateChainID
 }) {
   inputs = shuffle(inputs)
   outputs = shuffle(outputs)
 
   let inputMerklePathIndices = []
   let inputMerklePathElements = []
+
   for (const input of inputs) {
     if (input.amount > 0) {
       input.index = tree.indexOf(toFixedHex(input.getCommitment()))
@@ -38,7 +41,7 @@ async function getProof({
       inputMerklePathElements.push(tree.path(input.index).pathElements)
     } else {
       inputMerklePathIndices.push(0)
-      inputMerklePathElements.push(new Array(tree.n_levels).fill(0))
+      inputMerklePathElements.push(new Array(tree.levels).fill(0))
     }
   }
 
@@ -54,12 +57,14 @@ async function getProof({
   const extDataHash = getExtDataHash(extData)
   let input = {
     root: tree.root(),
+    chainID: privateChainID,
+    publicAmount: BigNumber.from(extAmount).sub(fee).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
+    extDataHash: extDataHash,
     inputNullifier: inputs.map((x) => x.getNullifier()),
     outputCommitment: outputs.map((x) => x.getCommitment()),
-    publicAmount: BigNumber.from(extAmount).sub(fee).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
-    extDataHash,
 
     // data for 2 transaction inputs
+    privateChainID: privateChainID,
     inAmount: inputs.map((x) => x.amount),
     inPrivateKey: inputs.map((x) => x.keypair.privkey),
     inBlinding: inputs.map((x) => x.blinding),
@@ -72,7 +77,7 @@ async function getProof({
     outPubkey: outputs.map((x) => x.keypair.pubkey),
   }
 
-  const proof = await prove(input, `./build/transaction_js/transaction`)
+  const proof = await prove(input, `./artifacts/circuits/transaction${inputs.length}`)
 
   const args = {
     proof,
@@ -82,7 +87,6 @@ async function getProof({
     publicAmount: toFixedHex(input.publicAmount),
     extDataHash: toFixedHex(extDataHash),
   }
-  // console.log('Solidity args', args)
 
   return {
     extData,
@@ -91,13 +95,13 @@ async function getProof({
 }
 
 async function prepareTransaction({
-  contractInstance,
+  charon,
   inputs = [],
   outputs = [],
   fee = 0,
-  Tree,
   recipient = 0,
   relayer = 0,
+  privateChainID = 2,
 }) {
   if (inputs.length > 16 || outputs.length > 2) {
     throw new Error('Incorrect inputs/outputs count')
@@ -108,18 +112,19 @@ async function prepareTransaction({
   while (outputs.length < 2) {
     outputs.push(new Utxo())
   }
-
   let extAmount = BigNumber.from(fee)
     .add(outputs.reduce((sum, x) => sum.add(x.amount), BigNumber.from(0)))
     .sub(inputs.reduce((sum, x) => sum.add(x.amount), BigNumber.from(0)))
+
   const { args, extData } = await getProof({
     inputs,
     outputs,
-    tree: Tree,
+    tree: await buildMerkleTree(charon),
     extAmount,
     fee,
     recipient,
-    relayer
+    relayer,
+    privateChainID,
   })
 
   return {
@@ -128,16 +133,28 @@ async function prepareTransaction({
   }
 }
 
-async function transaction({ contractInstance, ...rest }) {
+async function transaction({ charon, ...rest }) {
   const { args, extData } = await prepareTransaction({
-    contractInstance,
+    charon,
     ...rest,
   })
 
-  const receipt = await contractInstance.transact(args, extData, {
+  const receipt = await charon.transact(args, extData, {
     gasLimit: 2e6,
   })
   return await receipt.wait()
 }
 
-module.exports = { transaction, prepareTransaction, getLeaves }
+async function registerAndTransact({ charon, account, ...rest }) {
+  const { args, extData } = await prepareTransaction({
+    charon,
+    ...rest,
+  })
+
+  const receipt = await charon.registerAndTransact(account, args, extData, {
+    gasLimit: 2e6,
+  })
+  await receipt.wait()
+}
+
+module.exports = { transaction, registerAndTransact, prepareTransaction, buildMerkleTree }

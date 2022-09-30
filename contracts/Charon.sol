@@ -8,6 +8,7 @@ import "./helpers/Math.sol";
 import "./helpers/Oracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
+
 import "hardhat/console.sol";
 /**
  @title charon
@@ -60,9 +61,11 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
     struct ExtData {
       address recipient;
-      uint256 extAmount;
+      int256 extAmount;
       address relayer;
       uint256 fee;
+      bytes encryptedOutput1;
+      bytes encryptedOutput2;
     }
 
     struct Commitment{
@@ -71,9 +74,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     }
 
     struct Proof {
-      uint256[2] a;
-      uint256[2][2] b;
-      uint256[2] c;
+      bytes proof;
       bytes32 root;
       uint256 extDataHash;
       uint256 publicAmount;
@@ -84,7 +85,8 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
     CHD public chd;
     IERC20 public token;//token deposited at this address
-    IVerifier public verifier;
+    IVerifier public verifier2;
+    IVerifier public verifier16;
     PartnerContract[] partnerContracts;
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
@@ -103,7 +105,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     event DepositToOtherChain(bool _isCHD, address _sender, uint256 _timestamp, uint256 _tokenAmount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
-    event NewCommitment(bytes32 commitment, uint256 index);
+    event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput);
     event NewNullifier(bytes32 nullifier);
     event LPWithdrawSingleCHD(address _lp,uint256 _tokenAmountOut);
     event ControllerChanged(address _newController);
@@ -113,7 +115,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @dev prevents reentrancy in function
     */
     modifier _lock_() {
-        require(!_mutex|| msg.sender == address(verifier));
+        require(!_mutex|| msg.sender == address(verifier2) || msg.sender == address(verifier16));
         _mutex = true;_;_mutex = false;
     }
 
@@ -126,7 +128,8 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
     /**
      * @dev constructor to launch charon
-     * @param _verifier address of the verifier contract (circom generated sol)
+     * @param _verifier2 address of the verifier contract (circom generated sol)
+     * @param _verifier16 address of the verifier contract (circom generated sol)
      * @param _hasher address of the hasher contract (mimC precompile)
      * @param _token address of token on this chain of the system
      * @param _fee fee when withdrawing liquidity or trading (pct of tokens)
@@ -136,7 +139,8 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @param _name name of pool token
      * @param _symbol of pool token
      */
-    constructor(address _verifier,
+    constructor(address _verifier2,
+                address _verifier16,
                 address _hasher,
                 address _token,
                 uint256 _fee,
@@ -149,7 +153,8 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
               MerkleTreeWithHistory(_merkleTreeHeight, _hasher)
               Oracle(_oracle)
               Token(_name,_symbol){
-        verifier = IVerifier(_verifier);
+        verifier2 = IVerifier(_verifier2);
+        verifier16 = IVerifier(_verifier16);
         token = IERC20(_token);
         fee = _fee;
         controller = msg.sender;
@@ -177,14 +182,14 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         Commitment memory _c = Commitment(_extData,_proofArgs);
         depositCommitments.push(_c);
         _depositId = depositCommitments.length;
-        bytes32 _hashedCommitment = keccak256(abi.encode(_proofArgs.a,_proofArgs.b,_proofArgs.c,_proofArgs.publicAmount,_proofArgs.root));
+        bytes32 _hashedCommitment = keccak256(abi.encode(_proofArgs.proof,_proofArgs.publicAmount,_proofArgs.root));
         depositIdByCommitmentHash[_hashedCommitment] = _depositId;
         uint256 _tokenAmount;
         if (_isCHD){
-          chd.burnCHD(msg.sender,_extData.extAmount);
+          chd.burnCHD(msg.sender,uint256(_extData.extAmount));
         }
         else{
-          _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,_extData.extAmount,0);
+          _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,uint256(_extData.extAmount),0);
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         }
         recordBalance += _tokenAmount;
@@ -333,11 +338,11 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         require(_chain.length == _depositId.length, "must be same length");
         for(uint256 _i; _i< _chain.length; _i++){
           _value = getCommitment(_chain[_i], _depositId[_i]);
-          _iv = sliceBytes(_value,0,352);
-          (_proof.a,_proof.b,_proof.c,_proof.publicAmount,_proof.root,_proof.extDataHash) = abi.decode(_iv,(uint256[2],uint256[2][2],uint256[2],uint256,bytes32,uint256));
-          _iv= sliceBytes(_value,_value.length - 224,128);
-          _extData = abi.decode(_iv,(ExtData));
-          _iv = sliceBytes(_value,384,64);
+          _iv = sliceBytes(_value,32,96);
+          (_proof.publicAmount,_proof.root,_proof.extDataHash) = abi.decode(_iv,(uint256,bytes32,uint256));
+          _iv= sliceBytes(_value,384,256);
+          _proof.proof = _iv;
+          _iv = sliceBytes(_value,160,64);
           (_proof.outputCommitments[0],_proof.outputCommitments[1]) = abi.decode(_iv,(bytes32,bytes32));
           (bytes32 _a, bytes32 _b) = abi.decode(sliceBytes(_value,_value.length - 64,64),(bytes32,bytes32));
           _proof.inputNullifiers = new bytes32[](2);
@@ -347,6 +352,20 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         }
     }
 
+    function iToHex(bytes memory buffer) public pure returns (string memory) {
+
+        // Fixed buffer size for hexadecimal convertion
+        bytes memory converted = new bytes(buffer.length * 2);
+
+        bytes memory _base = "0123456789abcdef";
+
+        for (uint256 i = 0; i < buffer.length; i++) {
+            converted[i * 2] = _base[uint8(buffer[i]) / _base.length];
+            converted[i * 2 + 1] = _base[uint8(buffer[i]) % _base.length];
+        }
+
+        return string(abi.encodePacked("0x", converted));
+    }
 
 function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal pure returns (bytes memory tempBytes){
         require(_length + 31 >= _length, "slice_overflow");
@@ -377,8 +396,6 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
             }
         }
     }
-
-
 
     /**
      * @dev withdraw your tokens from deposit on alternate chain
@@ -443,26 +460,19 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
         require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");
       }
 
+  function calculatePublicAmount(int256 _extAmount, uint256 _fee) public pure returns (uint256) {
+    int256 publicAmount = _extAmount - int256(_fee);
+    return (publicAmount >= 0) ? uint256(publicAmount) : FIELD_SIZE - uint256(-publicAmount);
+  }
+
   //lets you do secret transfers / withdraw + mintCHD
-  function transact(Proof memory _args, ExtData memory _extData,address _to) external _finalized_ _lock_{
-      require(_extData.extAmount > 0,"must move amount");
-      //require(_args.publicAmount == _extData.extAmount -  _extData.fee, "Invalid public amount");
+  function transact(Proof memory _args, ExtData memory _extData) external _finalized_ _lock_{
+      require(_args.publicAmount == calculatePublicAmount(_extData.extAmount, _extData.fee), "Invalid public amount");
       require(isKnownRoot(_args.root), "Invalid merkle root");
-      require(verifier.verifyProof(_args.a,
-                _args.b,
-                _args.c,
-          [
-            chainID,
-            uint256(_args.root),
-            _args.publicAmount,
-            _args.extDataHash,
-            uint256(_args.inputNullifiers[0]),
-            uint256(_args.inputNullifiers[1]),
-            uint256(_args.outputCommitments[0]),
-            uint256(_args.outputCommitments[1])
-          ]), "Invalid transaction proof");
-      if(_extData.recipient == address(this)){
-        require(chd.mintCHD(_to,uint256(_extData.extAmount - _extData.fee)));
+      require(_verifyProof(_args), "Invalid transaction proof");
+      require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
+       if (_extData.extAmount < 0){
+        require(chd.mintCHD(_extData.recipient, uint256(-_extData.extAmount)));
       }
       if(_extData.fee > 0){
         require(token.transfer(_extData.relayer,_extData.fee));
@@ -470,18 +480,71 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
       _transact(_args, _extData);
   }
 
-  function _transact(Proof memory _args, ExtData memory _extData) internal _finalized_ _lock_ {
+  function _transact(Proof memory _args, ExtData memory _extData) internal{
     for (uint256 _i = 0; _i < _args.inputNullifiers.length; _i++) {
       require(!nullifierHashes[_args.inputNullifiers[_i]], "Input is already spent");
       nullifierHashes[_args.inputNullifiers[_i]] = true;
       emit NewNullifier(_args.inputNullifiers[_i]);
     }
-    require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
     _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
-    emit NewCommitment(_args.outputCommitments[0], nextIndex - 2);
-    emit NewCommitment(_args.outputCommitments[1], nextIndex - 1);
+    emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
+    emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
   }
   
+  function _verifyProof(Proof memory _args) internal view returns (bool) {
+    uint[2] memory _a;
+    uint[2][2] memory _b;
+    uint[2] memory _c;
+    (_a,_b,_c) = abi.decode(_args.proof,(uint[2],uint[2][2],uint[2]));
+    if (_args.inputNullifiers.length == 2) {
+      return
+        verifier2.verifyProof(
+          _a,_b,_c,
+          [
+            uint256(_args.root),
+            _args.publicAmount,
+            chainID,
+            uint256(_args.extDataHash),
+            uint256(_args.inputNullifiers[0]),
+            uint256(_args.inputNullifiers[1]),
+            uint256(_args.outputCommitments[0]),
+            uint256(_args.outputCommitments[1])
+          ]
+        );
+    } else if (_args.inputNullifiers.length == 16) {
+      return
+        verifier16.verifyProof(
+          _a,_b,_c,
+          [
+            uint256(_args.root),
+            _args.publicAmount,
+            chainID,
+            uint256(_args.extDataHash),
+            uint256(_args.inputNullifiers[0]),
+            uint256(_args.inputNullifiers[1]),
+            uint256(_args.inputNullifiers[2]),
+            uint256(_args.inputNullifiers[3]),
+            uint256(_args.inputNullifiers[4]),
+            uint256(_args.inputNullifiers[5]),
+            uint256(_args.inputNullifiers[6]),
+            uint256(_args.inputNullifiers[7]),
+            uint256(_args.inputNullifiers[8]),
+            uint256(_args.inputNullifiers[9]),
+            uint256(_args.inputNullifiers[10]),
+            uint256(_args.inputNullifiers[11]),
+            uint256(_args.inputNullifiers[12]),
+            uint256(_args.inputNullifiers[13]),
+            uint256(_args.inputNullifiers[14]),
+            uint256(_args.inputNullifiers[15]),
+            uint256(_args.outputCommitments[0]),
+            uint256(_args.outputCommitments[1])
+          ]
+        );
+    } else {
+      revert("unsupported input count");
+    }
+  }
+
 
     //getters
     /**

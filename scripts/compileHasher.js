@@ -2,7 +2,7 @@
 const path = require('path')
 const fs = require('fs')
 const genContract = require('circomlib/src/poseidon_gencontract.js')
-const outputPath = path.join(__dirname, '..', 'artifacts', 'contracts')
+const outputPath = path.join(__dirname, '..', 'build')
 const outputFile = path.join(outputPath, 'Hasher.json')
 
 if (!fs.existsSync(outputPath)) {

@@ -90,7 +90,7 @@ contract Token{
      * @dev retrieves token number of decimals
      * @return uint8 number of decimals (18 standard)
      */
-    function decimals() public pure returns(uint8) {
+    function decimals() external pure returns(uint8) {
         return 18;
     }
 
@@ -106,32 +106,50 @@ contract Token{
      * @dev retrieves symbol of token
      * @return string token sybmol
      */
-    function symbol() public view returns (string memory) {
+    function symbol() external view returns (string memory) {
         return tokenSymbol;
     }
 
-    function totalSupply() public view returns (uint256) {
+    /**
+     * @dev retrieves totalSupply of token
+     * @return amount of token
+     */
+    function totalSupply() external view returns (uint256) {
         return supply;
     }
 
     /**Internal Functions */
-    function _mint(address _to,uint amt) internal {
-        balance[_to] = balance[_to] + amt;
-        supply = supply + amt;
-        emit Transfer(address(0), _to, amt);
+    /**
+     * @dev mints tokens
+     * @param _to address of recipient
+     * @param _amount amount of token to send
+     */
+    function _mint(address _to,uint256 _amount) internal {
+        balance[_to] = balance[_to] + _amount;
+        supply = supply + _amount;
+        emit Transfer(address(0), _to, _amount);
     }
 
-    function _burn(address _to, uint amt) internal {
-        require(balance[_to] >= amt, "ERR_INSUFFICIENT_BAL");
-        balance[_to] = balance[_to] - amt;
-        supply = supply - amt;
-        emit Transfer(_to, address(0), amt);
+    /**
+     * @dev burns tokens
+     * @param _from address to burn tokens from
+     * @param _amount amount of token to burn
+     */
+    function _burn(address _from, uint256 _amount) internal {
+        balance[_from] = balance[_from] - _amount;//will overflow if too big
+        supply = supply - _amount;
+        emit Transfer(_from, address(0), _amount);
     }
 
-    function _move(address _src, address _dst, uint _amt) internal {
-        require(balance[_src] >= _amt, "ERR_INSUFFICIENT_BAL");
-        balance[_src] = balance[_src] - _amt;
-        balance[_dst] = balance[_dst] + _amt;
-        emit Transfer(_src, _dst, _amt);
+    /**
+     * @dev moves tokens from one address to another
+     * @param _src address of sender
+     * @param _dst address of recipient
+     * @param _amount amount of token to send
+     */
+    function _move(address _src, address _dst, uint256 _amount) internal {
+        balance[_src] = balance[_src] - _amount;//will overflow if too big
+        balance[_dst] = balance[_dst] + _amount;
+        emit Transfer(_src, _dst, _amount);
     }
 }

@@ -20,18 +20,10 @@ contract Oracle is UsingTellor{
      * @param _chain chainID of ID with commitment deposit
      * @param _depositId depositId of the specific deposit
      */
-    function getCommitments(uint256[] memory _chain, uint256[] memory _depositId) public view returns(bytes32[] memory){
-        require(_chain.length == _depositId.length, "must be same length arrays");
-        bytes memory _value;
+    function getCommitment(uint256 _chain, uint256 _depositId) public view returns(bytes memory _value){
         bool _didGet;
-        bytes32 _queryId;
-        bytes32[] memory _commitments  = new bytes32[](_chain.length);
-        for(uint8 _i; _i< _chain.length;_i++){
-            _queryId= keccak256(abi.encode("Charon",abi.encode(_chain[_i],_depositId[_i])));
-            (_didGet,_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
-            require(_didGet);
-            _commitments[_i] = abi.decode(_value,(bytes32));
-        }
-        return _commitments;
+        bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));
+        (_didGet,_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
+        require(_didGet);
     }
 }

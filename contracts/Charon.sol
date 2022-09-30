@@ -9,6 +9,7 @@ import "./helpers/Oracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 
+import "hardhat/console.sol";
 /**
  @title charon
  @dev charon is a decentralized protocol for a Privacy Enabled Cross-Chain AMM (PECCAMM). 
@@ -53,49 +54,68 @@ import "./interfaces/IVerifier.sol";
 */
 contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
-    struct Proof {
-        uint256[2] a;
-        uint256[2][2] b;
-        uint256[2] c;
-    }
-
     struct PartnerContract{
       uint256 chainID;
       address contractAddress;
     }
 
+    struct ExtData {
+      address recipient;
+      int256 extAmount;
+      address relayer;
+      uint256 fee;
+      bytes encryptedOutput1;
+      bytes encryptedOutput2;
+    }
+
+    struct Commitment{
+      ExtData extData;
+      Proof proof;
+    }
+
+    struct Proof {
+      bytes proof;
+      bytes32 root;
+      uint256 extDataHash;
+      uint256 publicAmount;
+      bytes32[] inputNullifiers;
+      bytes32[2] outputCommitments;
+    }
+
+
     CHD public chd;
     IERC20 public token;//token deposited at this address
-    IVerifier public verifier;
+    IVerifier public verifier2;
+    IVerifier public verifier16;
     PartnerContract[] partnerContracts;
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
     bool private _mutex;//used for reentrancy protection
-    bytes32[] public depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
+    Commitment[] public depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
     uint32 public merkleTreeHeight;
     uint256 public chainID; //chainID of this charon instance
-    uint256 public denomination;//trade size in USD (1e18 decimals)
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
-    mapping(bytes32=>bool) commitments;//commitments ready for withdrawal (or withdrawn)
-    mapping(bytes32 => uint256) public depositIdByCommitment;//gives you a deposit ID (used by tellor) given a commitment
-    mapping(bytes32=>bool) public didDepositCommitment;//tells you whether tellor deposited a commitment
+    mapping(bytes32 => uint256) public depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
 
     //events
     event CharonFinalized(uint256[] _partnerChains,address[] _partnerAddys);
-    event DepositToOtherChain(bool _isCHD, bytes32 _commitment, uint256 _timestamp, uint256 _tokenAmount);
+    event DepositToOtherChain(bool _isCHD, address _sender, uint256 _timestamp, uint256 _tokenAmount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
-    event OracleDeposit(bytes32[] _commitment,uint32[] _insertedIndices,uint256 _timestamp);
+    event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput);
+    event NewNullifier(bytes32 nullifier);
+    event LPWithdrawSingleCHD(address _lp,uint256 _tokenAmountOut);
+    event ControllerChanged(address _newController);
 
     //modifiers
     /**
      * @dev prevents reentrancy in function
     */
     modifier _lock_() {
-        require(!_mutex|| msg.sender == address(verifier));
+        require(!_mutex|| msg.sender == address(verifier2) || msg.sender == address(verifier16));
         _mutex = true;_;_mutex = false;
     }
 
@@ -108,23 +128,23 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
     /**
      * @dev constructor to launch charon
-     * @param _verifier address of the verifier contract (circom generated sol)
+     * @param _verifier2 address of the verifier contract (circom generated sol)
+     * @param _verifier16 address of the verifier contract (circom generated sol)
      * @param _hasher address of the hasher contract (mimC precompile)
      * @param _token address of token on this chain of the system
      * @param _fee fee when withdrawing liquidity or trading (pct of tokens)
      * @param _oracle address of oracle contract
-     * @param _denomination size of deposit/withdraw in _token
      * @param _merkleTreeHeight merkleTreeHeight (should match that of circom compile)
      * @param _chainID chainID of this chain
      * @param _name name of pool token
      * @param _symbol of pool token
      */
-    constructor(address _verifier,
+    constructor(address _verifier2,
+                address _verifier16,
                 address _hasher,
                 address _token,
                 uint256 _fee,
                 address payable _oracle,
-                uint256 _denomination,
                 uint32 _merkleTreeHeight,
                 uint256 _chainID,
                 string memory _name,
@@ -133,29 +153,12 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
               MerkleTreeWithHistory(_merkleTreeHeight, _hasher)
               Oracle(_oracle)
               Token(_name,_symbol){
-        require(_fee < _denomination,"fee should be less than denomination");
-        verifier = IVerifier(_verifier);
+        verifier2 = IVerifier(_verifier2);
+        verifier16 = IVerifier(_verifier16);
         token = IERC20(_token);
         fee = _fee;
-        denomination = _denomination;
         controller = msg.sender;
         chainID = _chainID;
-    }
-
-    /**
-     * @dev bind sets the initial balance in the contract for AMM pool
-     * @param _balance balance of _token to initialize AMM pool
-     * @param _synthBalance balance of token on other side of pool initializing pool (sets initial price)
-     * @param _chd address of deployed chd token
-     */
-    function bind(uint256 _balance, uint256 _synthBalance, address _chd) external _lock_{ 
-        require(!finalized, "must be finalized");
-        require(msg.sender == controller,"should be controler");
-        recordBalance = _balance;
-        recordBalanceSynth = _synthBalance;
-        chd = CHD(_chd);
-        require (token.transferFrom(msg.sender, address(this), _balance));
-        chd.mintCHD(address(this),_synthBalance);
     }
 
     /**
@@ -163,43 +166,58 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @param _newController new controller.  Should be DAO for recieving fees
      */
     function changeController(address _newController) external{
-      require(msg.sender == controller,"should be controler");
+      require(msg.sender == controller,"should be controller");
       controller = _newController;
+      emit ControllerChanged(_newController);
     }
 
     /**
      * @dev function for user to lock tokens for lp/trade on other chain
-     * @param _commitment deposit commitment generated by zkproof
+     * @param _proofArgs proofArgs of deposit commitment generated by zkproof
+     * @param _extData data pertaining to deposit
      * @param _isCHD whether deposit is CHD, false if base asset deposit
      * @return _depositId returns the depositId (position in commitment array)
      */
-    function depositToOtherChain(bytes32 _commitment, bool _isCHD) external _finalized_ returns(uint256 _depositId){
-        didDepositCommitment[_commitment] = true;
-        depositCommitments.push(_commitment);
+    function depositToOtherChain(Proof memory _proofArgs,ExtData memory _extData, bool _isCHD) external _finalized_ returns(uint256 _depositId){
+        Commitment memory _c = Commitment(_extData,_proofArgs);
+        depositCommitments.push(_c);
         _depositId = depositCommitments.length;
-        depositIdByCommitment[_commitment] = _depositId;
+        bytes32 _hashedCommitment = keccak256(abi.encode(_proofArgs.proof,_proofArgs.publicAmount,_proofArgs.root));
+        depositIdByCommitmentHash[_hashedCommitment] = _depositId;
         uint256 _tokenAmount;
         if (_isCHD){
-          chd.burnCHD(msg.sender,denomination);
-          _tokenAmount = denomination;
+          chd.burnCHD(msg.sender,uint256(_extData.extAmount));
         }
         else{
-          _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,denomination,0);
+          _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,uint256(_extData.extAmount),0);
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         }
         recordBalance += _tokenAmount;
-        emit DepositToOtherChain(_isCHD, _commitment, block.timestamp, _tokenAmount);
+        emit DepositToOtherChain(_isCHD,msg.sender, block.timestamp, _tokenAmount);
     }
 
     /**
      * @dev Allows the controller to start the system
      * @param _partnerChains list of chainID's in this Charon system
      * @param _partnerAddys list of corresponding addresses of charon contracts on chains in _partnerChains
+     * @param _balance balance of _token to initialize AMM pool
+     * @param _synthBalance balance of token on other side of pool initializing pool (sets initial price)
+     * @param _chd address of deployed chd token
      */
-    function finalize(uint256[] memory _partnerChains,address[] memory _partnerAddys) external _lock_ {
+    function finalize(uint256[] memory _partnerChains,
+                      address[] memory _partnerAddys,
+                      uint256 _balance,
+                      uint256 _synthBalance, 
+                      address _chd) 
+                      external _lock_ {
         require(msg.sender == controller, "should be controller");
         require(!finalized, "should be finalized");
         finalized = true;
+        recordBalance = _balance;
+        recordBalanceSynth = _synthBalance;
+        chd = CHD(_chd);
+        require (token.transferFrom(msg.sender, address(this), _balance));
+        chd.mintCHD(address(this),_synthBalance);
         _mint(msg.sender,100 ether);
         require(_partnerAddys.length == _partnerChains.length, "length should be the same");
         for(uint256 _i; _i < _partnerAddys.length; _i++){
@@ -219,8 +237,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         _lock_
         _finalized_
     {   
-        uint256 _poolTotal = totalSupply();
-        uint256 _ratio = bdiv(_poolAmountOut, _poolTotal);
+        uint256 _ratio = bdiv(_poolAmountOut, supply);
         require(_ratio != 0, "ERR_MATH_APPROX");
         uint256 _baseAssetIn = bmul(_ratio, recordBalance);
         require(_baseAssetIn != 0, "ERR_MATH_APPROX");
@@ -267,10 +284,9 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         _lock_
         returns (uint256 _tokenAmountOut)
     {
-        uint256 _poolTotal = totalSupply();
         uint256 _exitFee = bmul(_poolAmountIn, fee);
         uint256 _pAiAfterExitFee = bsub(_poolAmountIn, _exitFee);
-        uint256 _ratio = bdiv(_pAiAfterExitFee, _poolTotal);
+        uint256 _ratio = bdiv(_pAiAfterExitFee, supply);
         require(_ratio != 0, "ERR_MATH_APPROX");
         _burn(msg.sender,_poolAmountIn - _exitFee);
         _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
@@ -287,7 +303,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         emit LPWithdrawal(msg.sender, _poolAmountIn);
     }
 
-    /**
+   /**
      * @dev allows a user to single-side LP withdraw CHD 
      * @param _poolAmountIn amount of pool tokens to deposit
      * @param _minAmountOut minimum amount of CHD you need out
@@ -305,6 +321,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         _burn(msg.sender,_poolAmountIn - _exitFee);
         _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
         require(chd.transfer(msg.sender, _tokenAmountOut));
+        emit LPWithdrawSingleCHD(msg.sender,_tokenAmountOut);
     }
 
 
@@ -314,61 +331,70 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @param _depositId depositId of deposit on that chain
      */
     function oracleDeposit(uint256[] memory _chain, uint256[] memory _depositId) external{
-        bytes32[] memory _commitments  = new bytes32[](_chain.length);
-        _commitments = getCommitments(_chain, _depositId);
-        uint32[] memory _insertedIndices = new uint32[](_chain.length);
-        uint32 _index;
-        for(uint8 _i; _i < _commitments.length; _i++){
-              _index = _insert(_commitments[_i]);
-              _insertedIndices[_i] = _index;
-              commitments[_commitments[_i]] = true;
+        Proof memory _proof;
+        ExtData memory _extData;
+        bytes memory _value;
+        bytes memory _iv;
+        require(_chain.length == _depositId.length, "must be same length");
+        for(uint256 _i; _i< _chain.length; _i++){
+          _value = getCommitment(_chain[_i], _depositId[_i]);
+          _iv = sliceBytes(_value,32,96);
+          (_proof.publicAmount,_proof.root,_proof.extDataHash) = abi.decode(_iv,(uint256,bytes32,uint256));
+          _iv= sliceBytes(_value,384,256);
+          _proof.proof = _iv;
+          _iv = sliceBytes(_value,160,64);
+          (_proof.outputCommitments[0],_proof.outputCommitments[1]) = abi.decode(_iv,(bytes32,bytes32));
+          (bytes32 _a, bytes32 _b) = abi.decode(sliceBytes(_value,_value.length - 64,64),(bytes32,bytes32));
+          _proof.inputNullifiers = new bytes32[](2);
+          _proof.inputNullifiers[0] = _a;
+          _proof.inputNullifiers[1] = _b;
+          _transact(_proof, _extData);
         }
-        emit OracleDeposit(_commitments, _insertedIndices, block.timestamp);
     }
 
-    /**
-     * @dev withdraw your tokens from deposit on alternate chain
-     * @param _proof proof information from zkproof corresponding to commitment
-     * @param _root root in merkle tree where you're commitment was deposited
-     * @param _nullifierHash secret hash of your nullifier corresponding to deposit
-     * @param _recipient address funds (pool tokens or base token) will be be sent
-     * @param _relayer address of relayer pushing txn on chain (for anonymity)
-     * @param _refund amount to pay relayer
-     */
-    function secretWithdraw(
-        Proof calldata _proof,
-        bytes32 _root,
-        bytes32 _nullifierHash,
-        address payable _recipient,
-        address payable _relayer,
-        uint256 _refund
-    ) external payable _finalized_ _lock_{
-      require(!nullifierHashes[_nullifierHash], "The note has been already spent");
-      require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
-        require(
-            verifier.verifyProof(
-                _proof.a,
-                _proof.b,
-                _proof.c,
-                [
-                    chainID,
-                    uint256(_root),
-                    uint256(_nullifierHash),
-                    uint256(uint160(address(_recipient))),
-                    uint256(uint160(address(_relayer))),
-                    _refund
-                ]
-            ),
-            "Invalid withdraw proof"
-        );
-      chd.mintCHD(_recipient,denomination);
-      nullifierHashes[_nullifierHash] = true;
-      if (_refund > 0) {
-        (bool _success, ) = _recipient.call{ value: _refund }("");
-        if (!_success) {
-          _relayer.transfer(_refund);
+    function iToHex(bytes memory buffer) public pure returns (string memory) {
+
+        // Fixed buffer size for hexadecimal convertion
+        bytes memory converted = new bytes(buffer.length * 2);
+
+        bytes memory _base = "0123456789abcdef";
+
+        for (uint256 i = 0; i < buffer.length; i++) {
+            converted[i * 2] = _base[uint8(buffer[i]) / _base.length];
+            converted[i * 2 + 1] = _base[uint8(buffer[i]) % _base.length];
         }
-      }
+
+        return string(abi.encodePacked("0x", converted));
+    }
+
+function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal pure returns (bytes memory tempBytes){
+        require(_length + 31 >= _length, "slice_overflow");
+        require(_bytes.length >= _start + _length, "slice_outOfBounds");
+        assembly {
+            switch iszero(_length)
+            case 0 {
+                tempBytes := mload(0x40)
+                let lengthmod := and(_length, 31)
+                let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
+                let end := add(mc, _length)
+                for {
+                    let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
+                } lt(mc, end) {
+                    mc := add(mc, 0x20)
+                    cc := add(cc, 0x20)
+                } {
+                    mstore(mc, mload(cc))
+                }
+                mstore(tempBytes, _length)
+                mstore(0x40, and(add(mc, 31), not(31)))
+            }
+            //if we want a zero-length slice let's just return a zero-length array
+            default {
+                tempBytes := mload(0x40)
+                mstore(tempBytes, 0)
+                mstore(0x40, add(tempBytes, 0x20))
+            }
+        }
     }
 
     /**
@@ -434,12 +460,98 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");
       }
 
+  function calculatePublicAmount(int256 _extAmount, uint256 _fee) public pure returns (uint256) {
+    int256 publicAmount = _extAmount - int256(_fee);
+    return (publicAmount >= 0) ? uint256(publicAmount) : FIELD_SIZE - uint256(-publicAmount);
+  }
+
+  //lets you do secret transfers / withdraw + mintCHD
+  function transact(Proof memory _args, ExtData memory _extData) external _finalized_ _lock_{
+      require(_args.publicAmount == calculatePublicAmount(_extData.extAmount, _extData.fee), "Invalid public amount");
+      require(isKnownRoot(_args.root), "Invalid merkle root");
+      require(_verifyProof(_args), "Invalid transaction proof");
+      require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
+       if (_extData.extAmount < 0){
+        require(chd.mintCHD(_extData.recipient, uint256(-_extData.extAmount)));
+      }
+      if(_extData.fee > 0){
+        require(token.transfer(_extData.relayer,_extData.fee));
+      }
+      _transact(_args, _extData);
+  }
+
+  function _transact(Proof memory _args, ExtData memory _extData) internal{
+    for (uint256 _i = 0; _i < _args.inputNullifiers.length; _i++) {
+      require(!nullifierHashes[_args.inputNullifiers[_i]], "Input is already spent");
+      nullifierHashes[_args.inputNullifiers[_i]] = true;
+      emit NewNullifier(_args.inputNullifiers[_i]);
+    }
+    _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
+    emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
+    emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
+  }
+  
+  function _verifyProof(Proof memory _args) internal view returns (bool) {
+    uint[2] memory _a;
+    uint[2][2] memory _b;
+    uint[2] memory _c;
+    (_a,_b,_c) = abi.decode(_args.proof,(uint[2],uint[2][2],uint[2]));
+    if (_args.inputNullifiers.length == 2) {
+      return
+        verifier2.verifyProof(
+          _a,_b,_c,
+          [
+            uint256(_args.root),
+            _args.publicAmount,
+            chainID,
+            uint256(_args.extDataHash),
+            uint256(_args.inputNullifiers[0]),
+            uint256(_args.inputNullifiers[1]),
+            uint256(_args.outputCommitments[0]),
+            uint256(_args.outputCommitments[1])
+          ]
+        );
+    } else if (_args.inputNullifiers.length == 16) {
+      return
+        verifier16.verifyProof(
+          _a,_b,_c,
+          [
+            uint256(_args.root),
+            _args.publicAmount,
+            chainID,
+            uint256(_args.extDataHash),
+            uint256(_args.inputNullifiers[0]),
+            uint256(_args.inputNullifiers[1]),
+            uint256(_args.inputNullifiers[2]),
+            uint256(_args.inputNullifiers[3]),
+            uint256(_args.inputNullifiers[4]),
+            uint256(_args.inputNullifiers[5]),
+            uint256(_args.inputNullifiers[6]),
+            uint256(_args.inputNullifiers[7]),
+            uint256(_args.inputNullifiers[8]),
+            uint256(_args.inputNullifiers[9]),
+            uint256(_args.inputNullifiers[10]),
+            uint256(_args.inputNullifiers[11]),
+            uint256(_args.inputNullifiers[12]),
+            uint256(_args.inputNullifiers[13]),
+            uint256(_args.inputNullifiers[14]),
+            uint256(_args.inputNullifiers[15]),
+            uint256(_args.outputCommitments[0]),
+            uint256(_args.outputCommitments[1])
+          ]
+        );
+    } else {
+      revert("unsupported input count");
+    }
+  }
+
+
     //getters
     /**
      * @dev allows you to find a commitment for a given depositId
      * @param _id deposidId of your commitment
      */
-    function getDepositCommitmentsById(uint256 _id) external view returns(bytes32){
+    function getDepositCommitmentsById(uint256 _id) external view returns(Commitment memory){
       return depositCommitments[_id - 1];
     }
 
@@ -447,8 +559,8 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @dev allows you to find a depositId for a given commitment
      * @param _commitment the commitment of your deposit
      */
-    function getDepositIdByCommitment(bytes32 _commitment) external view returns(uint256){
-      return depositIdByCommitment[_commitment];
+    function getDepositIdByCommitmentHash(bytes32 _commitment) external view returns(uint256){
+      return depositIdByCommitmentHash[_commitment];
     }
 
     /**
@@ -467,18 +579,10 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     }
 
     /**
-     * @dev allows you to see check if a commitment is present
-     * @param _commitment bytes32 deposit commitment
-     */
-    function isCommitment(bytes32 _commitment) external view returns(bool){
-      return commitments[_commitment];
-    }
-
-    /**
      * @dev allows a user to see if their deposit has been withdrawn
      * @param _nullifierHash hash of nullifier identifying withdrawal
      */
-    function isSpent(bytes32 _nullifierHash) public view returns (bool) {
+    function isSpent(bytes32 _nullifierHash) external view returns (bool) {
       return nullifierHashes[_nullifierHash];
     }
 
@@ -489,7 +593,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory _spent) {
       _spent = new bool[](_nullifierHashes.length);
       for (uint256 _i = 0; _i < _nullifierHashes.length; _i++) {
-        if (isSpent(_nullifierHashes[_i])) {
+        if (nullifierHashes[_nullifierHashes[_i]]){
           _spent[_i] = true;
         }
       }

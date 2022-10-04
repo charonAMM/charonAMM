@@ -319,7 +319,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         emit LPWithdrawSingleCHD(msg.sender,_tokenAmountOut);
     }
 
-
     /**
      * @dev reads tellor commitments to allow you to withdraw on this chain
      * @param _chain chain you're requesting your commitment from
@@ -333,48 +332,17 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         require(_chain.length == _depositId.length, "must be same length");
         for(uint256 _i; _i< _chain.length; _i++){
           _value = getCommitment(_chain[_i], _depositId[_i]);
-          _iv = sliceBytes(_value,32,96);
+          _iv = _sliceBytes(_value,32,96);
           (_proof.publicAmount,_proof.root,_proof.extDataHash) = abi.decode(_iv,(uint256,bytes32,uint256));
-          _iv= sliceBytes(_value,384,256);
+          _iv= _sliceBytes(_value,384,256);
           _proof.proof = _iv;
-          _iv = sliceBytes(_value,160,64);
+          _iv = _sliceBytes(_value,160,64);
           (_proof.outputCommitments[0],_proof.outputCommitments[1]) = abi.decode(_iv,(bytes32,bytes32));
-          (bytes32 _a, bytes32 _b) = abi.decode(sliceBytes(_value,_value.length - 64,64),(bytes32,bytes32));
+          (bytes32 _a, bytes32 _b) = abi.decode(_sliceBytes(_value,_value.length - 64,64),(bytes32,bytes32));
           _proof.inputNullifiers = new bytes32[](2);
           _proof.inputNullifiers[0] = _a;
           _proof.inputNullifiers[1] = _b;
           _transact(_proof, _extData);
-        }
-    }
-
-
-function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal pure returns (bytes memory tempBytes){
-        require(_length + 31 >= _length, "slice_overflow");
-        require(_bytes.length >= _start + _length, "slice_outOfBounds");
-        assembly {
-            switch iszero(_length)
-            case 0 {
-                tempBytes := mload(0x40)
-                let lengthmod := and(_length, 31)
-                let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
-                let end := add(mc, _length)
-                for {
-                    let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
-                } lt(mc, end) {
-                    mc := add(mc, 0x20)
-                    cc := add(cc, 0x20)
-                } {
-                    mstore(mc, mload(cc))
-                }
-                mstore(tempBytes, _length)
-                mstore(0x40, and(add(mc, 31), not(31)))
-            }
-            //if we want a zero-length slice let's just return a zero-length array
-            default {
-                tempBytes := mload(0x40)
-                mstore(tempBytes, 0)
-                mstore(0x40, add(tempBytes, 0x20))
-            }
         }
     }
 
@@ -460,16 +428,87 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
       _transact(_args, _extData);
   }
 
-  function _transact(Proof memory _args, ExtData memory _extData) internal{
-    for (uint256 _i = 0; _i < _args.inputNullifiers.length; _i++) {
-      require(!nullifierHashes[_args.inputNullifiers[_i]], "Input is already spent");
-      nullifierHashes[_args.inputNullifiers[_i]] = true;
-      emit NewNullifier(_args.inputNullifiers[_i]);
+    //getters
+    /**
+     * @dev allows you to find a commitment for a given depositId
+     * @param _id deposidId of your commitment
+     */
+    function getDepositCommitmentsById(uint256 _id) external view returns(Commitment memory){
+      return depositCommitments[_id - 1];
     }
-    _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
-    emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
-    emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
-  }
+
+    /**
+     * @dev allows you to find a depositId for a given commitment
+     * @param _commitment the commitment of your deposit
+     */
+    function getDepositIdByCommitmentHash(bytes32 _commitment) external view returns(uint256){
+      return depositIdByCommitmentHash[_commitment];
+    }
+
+    /**
+     * @dev returns the partner contracts in this charon system and their chains
+     */
+    function getPartnerContracts() external view returns(PartnerContract[] memory){
+      return partnerContracts;
+    }
+
+    /**
+     * @dev allows you to check the spot price of the token pair
+     * @return _spotPrice uint256 price of the pair
+     */
+    function getSpotPrice() external view returns(uint256 _spotPrice){
+      return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
+    }
+
+    /**
+     * @dev allows a user to see if their deposit has been withdrawn
+     * @param _nullifierHash hash of nullifier identifying withdrawal
+     */
+    function isSpent(bytes32 _nullifierHash) external view returns (bool) {
+      return nullifierHashes[_nullifierHash];
+    }
+
+  //internal functions
+    function _transact(Proof memory _args, ExtData memory _extData) internal{
+      for (uint256 _i = 0; _i < _args.inputNullifiers.length; _i++) {
+        require(!nullifierHashes[_args.inputNullifiers[_i]], "Input is already spent");
+        nullifierHashes[_args.inputNullifiers[_i]] = true;
+        emit NewNullifier(_args.inputNullifiers[_i]);
+      }
+      _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
+      emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
+      emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
+    }
+
+    function _sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal pure returns (bytes memory tempBytes){
+        require(_length + 31 >= _length, "slice_overflow");
+        require(_bytes.length >= _start + _length, "slice_outOfBounds");
+        assembly {
+            switch iszero(_length)
+            case 0 {
+                tempBytes := mload(0x40)
+                let lengthmod := and(_length, 31)
+                let mc := add(add(tempBytes, lengthmod), mul(0x20, iszero(lengthmod)))
+                let end := add(mc, _length)
+                for {
+                    let cc := add(add(add(_bytes, lengthmod), mul(0x20, iszero(lengthmod))), _start)
+                } lt(mc, end) {
+                    mc := add(mc, 0x20)
+                    cc := add(cc, 0x20)
+                } {
+                    mstore(mc, mload(cc))
+                }
+                mstore(tempBytes, _length)
+                mstore(0x40, and(add(mc, 31), not(31)))
+            }
+            //if we want a zero-length slice let's just return a zero-length array
+            default {
+                tempBytes := mload(0x40)
+                mstore(tempBytes, 0)
+                mstore(0x40, add(tempBytes, 0x20))
+            }
+        }
+    }
   
   function _verifyProof(Proof memory _args) internal view returns (bool) {
     uint[2] memory _a;
@@ -524,46 +563,4 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
       revert("unsupported input count");
     }
   }
-
-
-    //getters
-    /**
-     * @dev allows you to find a commitment for a given depositId
-     * @param _id deposidId of your commitment
-     */
-    function getDepositCommitmentsById(uint256 _id) external view returns(Commitment memory){
-      return depositCommitments[_id - 1];
-    }
-
-    /**
-     * @dev allows you to find a depositId for a given commitment
-     * @param _commitment the commitment of your deposit
-     */
-    function getDepositIdByCommitmentHash(bytes32 _commitment) external view returns(uint256){
-      return depositIdByCommitmentHash[_commitment];
-    }
-
-    /**
-     * @dev returns the partner contracts in this charon system and their chains
-     */
-    function getPartnerContracts() external view returns(PartnerContract[] memory){
-      return partnerContracts;
-    }
-
-    /**
-     * @dev allows you to check the spot price of the token pair
-     * @return _spotPrice uint256 price of the pair
-     */
-    function getSpotPrice() external view returns(uint256 _spotPrice){
-      return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
-    }
-
-    /**
-     * @dev allows a user to see if their deposit has been withdrawn
-     * @param _nullifierHash hash of nullifier identifying withdrawal
-     */
-    function isSpent(bytes32 _nullifierHash) external view returns (bool) {
-      return nullifierHashes[_nullifierHash];
-    }
-
 }

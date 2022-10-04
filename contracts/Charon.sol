@@ -8,8 +8,6 @@ import "./helpers/Math.sol";
 import "./helpers/Oracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
-
-import "hardhat/console.sol";
 /**
  @title charon
  @dev charon is a decentralized protocol for a Privacy Enabled Cross-Chain AMM (PECCAMM). 
@@ -82,16 +80,15 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
       bytes32[2] outputCommitments;
     }
 
-
     CHD public chd;
     IERC20 public token;//token deposited at this address
     IVerifier public verifier2;
     IVerifier public verifier16;
-    PartnerContract[] partnerContracts;
+    Commitment[] depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
+    PartnerContract[] partnerContracts;//list of connected contracts for this deployment
     address public controller;//finalizes contracts, generates fees
     bool public finalized;
-    bool private _mutex;//used for reentrancy protection
-    Commitment[] public depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
+    bool private mutex;//used for reentrancy protection
     uint32 public merkleTreeHeight;
     uint256 public chainID; //chainID of this charon instance
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
@@ -101,7 +98,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
 
     //events
-    event CharonFinalized(uint256[] _partnerChains,address[] _partnerAddys);
     event DepositToOtherChain(bool _isCHD, address _sender, uint256 _timestamp, uint256 _tokenAmount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
@@ -115,8 +111,8 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
      * @dev prevents reentrancy in function
     */
     modifier _lock_() {
-        require(!_mutex|| msg.sender == address(verifier2) || msg.sender == address(verifier16));
-        _mutex = true;_;_mutex = false;
+        require(!mutex|| msg.sender == address(verifier2) || msg.sender == address(verifier16));
+        mutex = true;_;mutex = false;
     }
 
     /**
@@ -223,7 +219,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         for(uint256 _i; _i < _partnerAddys.length; _i++){
           partnerContracts.push(PartnerContract(_partnerChains[_i],_partnerAddys[_i]));
         } 
-        emit CharonFinalized(_partnerChains,_partnerAddys);
     }
 
     /**
@@ -352,20 +347,6 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         }
     }
 
-    function iToHex(bytes memory buffer) public pure returns (string memory) {
-
-        // Fixed buffer size for hexadecimal convertion
-        bytes memory converted = new bytes(buffer.length * 2);
-
-        bytes memory _base = "0123456789abcdef";
-
-        for (uint256 i = 0; i < buffer.length; i++) {
-            converted[i * 2] = _base[uint8(buffer[i]) / _base.length];
-            converted[i * 2 + 1] = _base[uint8(buffer[i]) % _base.length];
-        }
-
-        return string(abi.encodePacked("0x", converted));
-    }
 
 function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal pure returns (bytes memory tempBytes){
         require(_length + 31 >= _length, "slice_overflow");
@@ -460,14 +441,13 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
         require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");
       }
 
-  function calculatePublicAmount(int256 _extAmount, uint256 _fee) public pure returns (uint256) {
-    int256 publicAmount = _extAmount - int256(_fee);
-    return (publicAmount >= 0) ? uint256(publicAmount) : FIELD_SIZE - uint256(-publicAmount);
-  }
-
   //lets you do secret transfers / withdraw + mintCHD
   function transact(Proof memory _args, ExtData memory _extData) external _finalized_ _lock_{
-      require(_args.publicAmount == calculatePublicAmount(_extData.extAmount, _extData.fee), "Invalid public amount");
+      int256 _publicAmount = _extData.extAmount - int256(fee);
+      if(_publicAmount < 0){
+        _publicAmount = int256(FIELD_SIZE - uint256(-_publicAmount));
+      } 
+      require(_args.publicAmount == uint256(_publicAmount), "Invalid public amount");
       require(isKnownRoot(_args.root), "Invalid merkle root");
       require(_verifyProof(_args), "Invalid transaction proof");
       require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
@@ -586,16 +566,4 @@ function sliceBytes(bytes memory _bytes,uint256 _start,uint256 _length)internal 
       return nullifierHashes[_nullifierHash];
     }
 
-    /**
-     * @dev allows you to see whether an array of notes has been spent
-     * @param _nullifierHashes array of notes identifying withdrawals
-     */
-    function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory _spent) {
-      _spent = new bool[](_nullifierHashes.length);
-      for (uint256 _i = 0; _i < _nullifierHashes.length; _i++) {
-        if (nullifierHashes[_nullifierHashes[_i]]){
-          _spent[_i] = true;
-        }
-      }
-    }
 }

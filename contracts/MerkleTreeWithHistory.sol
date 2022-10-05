@@ -1,20 +1,7 @@
-// https://tornado.cash
-/*
- * d888888P                                           dP              a88888b.                   dP
- *    88                                              88             d8'   `88                   88
- *    88    .d8888b. 88d888b. 88d888b. .d8888b. .d888b88 .d8888b.    88        .d8888b. .d8888b. 88d888b.
- *    88    88'  `88 88'  `88 88'  `88 88'  `88 88'  `88 88'  `88    88        88'  `88 Y8ooooo. 88'  `88
- *    88    88.  .88 88       88    88 88.  .88 88.  .88 88.  .88 dP Y8.   .88 88.  .88       88 88    88
- *    dP    `88888P' dP       dP    dP `88888P8 `88888P8 `88888P' 88  Y88888P' `88888P8 `88888P' dP    dP
- * ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
- */
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-interface IHasher {
-  function poseidon(bytes32[2] calldata inputs) external pure returns (bytes32);
-}
+import "./interfaces/IHasher.sol";
 
 contract MerkleTreeWithHistory {
   uint256 public constant FIELD_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
@@ -23,16 +10,14 @@ contract MerkleTreeWithHistory {
   IHasher public immutable hasher;
   uint32 public immutable levels;
 
-  // the following variables are made public for easier testing and debugging and
-  // are not supposed to be accessed in regular code
-
+  // make public for debugging, make all private for deployment
   // filledSubtrees and roots could be bytes32[size], but using mappings makes it cheaper because
   // it removes index range check on every interaction
   mapping(uint256 => bytes32) public filledSubtrees;
-  mapping(uint256 => bytes32) public roots;
+  mapping(uint256 => bytes32) roots;
   uint32 public constant ROOT_HISTORY_SIZE = 100;
-  uint32 public currentRootIndex = 0; // todo remove
-  uint32 public nextIndex = 0;
+  uint32 private currentRootIndex = 0; 
+  uint32 nextIndex = 0;
 
   constructor(uint32 _levels, address _hasher) {
     require(_levels > 0, "_levels should be greater than zero");
@@ -45,7 +30,6 @@ contract MerkleTreeWithHistory {
     for (uint32 i = 0; i < levels; i++) {
       filledSubtrees[i] = zeros(i);
     }
-
     roots[0] = zeros(levels);
   }
 
@@ -69,7 +53,6 @@ contract MerkleTreeWithHistory {
     bytes32 currentLevelHash = hashLeftRight(_leaf1, _leaf2);
     bytes32 left;
     bytes32 right;
-
     for (uint32 i = 1; i < levels; i++) {
       if (currentIndex % 2 == 0) {
         left = currentLevelHash;

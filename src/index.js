@@ -11,7 +11,7 @@ const MERKLE_TREE_HEIGHT = 5
 async function buildMerkleTree(charon) {
   let filter = charon.filters.NewCommitment()
   const events = await charon.queryFilter(filter, 0)
-  const leaves = events.sort((a, b) => a.args.index - b.args.index).map((e) => toFixedHex(e.args.commitment))
+  const leaves = events.sort((a, b) => a.args._index - b.args._index).map((e) => toFixedHex(e.args._commitment))
   return new MerkleTree(MERKLE_TREE_HEIGHT, leaves, { hashFunction: poseidonHash2 })
 }
 

@@ -98,13 +98,15 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
 
     //events
+    event ControllerChanged(address _newController);
     event DepositToOtherChain(bool _isCHD, address _sender, uint256 _timestamp, uint256 _tokenAmount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
-    event NewCommitment(bytes32 commitment, uint256 index, bytes encryptedOutput);
-    event NewNullifier(bytes32 nullifier);
     event LPWithdrawSingleCHD(address _lp,uint256 _tokenAmountOut);
-    event ControllerChanged(address _newController);
+    event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput);
+    event NewNullifier(bytes32 _nullifier);
+    event OracleDeposit(uint256[] _chain, uint256[] _depositId);
+    event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
 
     //modifiers
     /**
@@ -344,6 +346,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
           _proof.inputNullifiers[1] = _b;
           _transact(_proof, _extData);
         }
+        emit OracleDeposit(_chain,_depositId);
     }
 
     /**
@@ -407,6 +410,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
                             );
         require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
         require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");
+        emit Swap(msg.sender,_inIsCHD,_tokenAmountIn,_tokenAmountOut);
       }
 
   //lets you do secret transfers / withdraw + mintCHD

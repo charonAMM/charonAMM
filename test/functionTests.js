@@ -1,6 +1,7 @@
 const { expect, assert } = require("chai");
 const { ethers } = require("hardhat");
 const web3 = require('web3');
+const h = require("usingtellor/test/helpers/helpers.js");
 
 describe("charon system - function tests", function() {
     let token;
@@ -16,32 +17,41 @@ describe("charon system - function tests", function() {
             assert(await token.symbol() == "MT")
     });
     it("approve()", async function() {
+        await token.connect(accounts[2]).approve(accounts[3].address,web3.utils.toWei("200"))
+        assert(await token.allowance(accounts[2].address,accounts[3].address) == web3.utils.toWei("200"))
     });
     it("transfer()", async function() {
+        await token.connect(accounts[1]).mint(accounts[2].address,web3.utils.toWei("100"))
+        await token.connect(accounts[2]).transfer(accounts[3].address,web3.utils.toWei("20"))
+        assert(await token.balanceOf(accounts[3].address) == web3.utils.toWei("20"), "transfer should work")
+        await expect(token.connect(accounts[3]).transfer(accounts[5].address,web3.utils.toWei("100"))).to.be.reverted;
     });
     it("transferFrom()", async function() {
-    });
-    it("allowance()", async function() {
-    });
-    it("balanceOf()", async function() {
+        await token.connect(accounts[1]).mint(accounts[2].address,web3.utils.toWei("100"))
+        await token.connect(accounts[2]).approve(accounts[4].address,web3.utils.toWei("20"))
+        await token.connect(accounts[4]).transferFrom(accounts[2].address,accounts[3].address,web3.utils.toWei("20"))
+        assert(await token.balanceOf(accounts[3].address) == web3.utils.toWei("20"), "transfer should work")
+        await expect(token.connect(accounts[3]).transferFrom(accounts[5].address,accounts[3].address,web3.utils.toWei("100"))).to.be.reverted;
     });
     it("decimals()", async function() {
         assert(await token.decimals() == 18, "decimals should be correct")
     });
-    it("name()", async function() {
-        assert(await token.name() == "mock token", "name should be correct")
-    });
-    it("symbol()", async function() {
-        assert(await token.symbol() == "MT", "symbol should be correct")
-    });
     it("totalSupply()", async function() {
+        await token.connect(accounts[1]).mint(accounts[2].address,web3.utils.toWei("100"))
+        await token.connect(accounts[1]).mint(accounts[3].address,web3.utils.toWei("100"))
+        await token.connect(accounts[1]).mint(accounts[4].address,web3.utils.toWei("100"))
+        assert(await token.totalSupply() == web3.utils.toWei("300"))
     });
     it("_mint()", async function() {
+        await token.connect(accounts[1]).mint(accounts[2].address,web3.utils.toWei("100"))
+        assert(await token.balanceOf(accounts[2].address) == web3.utils.toWei("100"), "mint balance should be correct")
     });
     it("_burn()", async function() {
-    });
-    it("_move()", async function() {
-    });
+        await token.connect(accounts[1]).mint(accounts[2].address,web3.utils.toWei("100"))
+        await token.connect(accounts[1]).burn(accounts[2].address,web3.utils.toWei("20"))
+        assert(await token.balanceOf(accounts[2].address) == web3.utils.toWei("80"), "burn should work")
+        await expect(token.connect(accounts[3]).burn(accounts[2].address,web3.utils.toWei("100"))).to.be.reverted;
+        });
     console.log("Math.sol -- to write")
     it("constructor()", async function() {
     });

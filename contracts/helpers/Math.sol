@@ -18,9 +18,9 @@ contract Math{
         public pure
         returns (uint256)
     {
-        uint256 ratio =  bdiv(tokenBalanceIn ,tokenBalanceOut);
-        uint256 scale = bdiv(BONE , (BONE - swapFee));//10e18/(10e18-fee)
-        return bmul(ratio ,scale);
+        uint256 ratio =  _bdiv(tokenBalanceIn ,tokenBalanceOut);
+        uint256 scale = _bdiv(BONE , (BONE - swapFee));//10e18/(10e18-fee)
+        return _bmul(ratio ,scale);
     }
 
     function calcOutGivenIn(
@@ -33,10 +33,10 @@ contract Math{
         returns (uint256 tokenAmountOut)
     {
         uint256 adjustedIn = BONE - swapFee;
-        adjustedIn = bmul(tokenAmountIn, adjustedIn);
-        uint256 y = bdiv(tokenBalanceIn, (tokenBalanceIn + adjustedIn));
+        adjustedIn = _bmul(tokenAmountIn, adjustedIn);
+        uint256 y = _bdiv(tokenBalanceIn, (tokenBalanceIn + adjustedIn));
         uint256 bar = BONE - y;
-        tokenAmountOut = bmul(tokenBalanceOut, bar);
+        tokenAmountOut = _bmul(tokenBalanceOut, bar);
     }
 
     function calcInGivenOut(
@@ -48,11 +48,11 @@ contract Math{
         public pure
         returns (uint256 tokenAmountIn)
     {
-        uint256 diff = bsub(tokenBalanceOut, tokenAmountOut);
-        uint256 y = bdiv(tokenBalanceOut, diff);
-        uint256 foo = bsub(y, BONE);
-        tokenAmountIn = bsub(BONE, swapFee);
-        tokenAmountIn = bdiv(bmul(tokenBalanceIn, foo), tokenAmountIn);
+        uint256 diff = _bsub(tokenBalanceOut, tokenAmountOut);
+        uint256 y = _bdiv(tokenBalanceOut, diff);
+        uint256 foo = _bsub(y, BONE);
+        tokenAmountIn = _bsub(BONE, swapFee);
+        tokenAmountIn = _bdiv(_bmul(tokenBalanceIn, foo), tokenAmountIn);
     }
 
     function calcPoolOutGivenSingleIn(
@@ -63,12 +63,12 @@ contract Math{
         public pure
         returns (uint256 poolAmountOut)
     {
-        uint256 tokenAmountInAfterFee = bmul(tokenAmountIn,BONE);
-        uint256 newTokenBalanceIn = badd(tokenBalanceIn, tokenAmountInAfterFee);
-        uint256 tokenInRatio = bdiv(newTokenBalanceIn, tokenBalanceIn);
-        uint256 poolRatio = bpow(tokenInRatio, bdiv(1 ether, 2 ether));
-        uint256 newPoolSupply = bmul(poolRatio, poolSupply);
-        poolAmountOut = bsub(newPoolSupply, poolSupply);
+        uint256 tokenAmountInAfterFee = _bmul(tokenAmountIn,BONE);
+        uint256 newTokenBalanceIn = _badd(tokenBalanceIn, tokenAmountInAfterFee);
+        uint256 tokenInRatio = _bdiv(newTokenBalanceIn, tokenBalanceIn);
+        uint256 poolRatio = _bpow(tokenInRatio, _bdiv(1 ether, 2 ether));
+        uint256 newPoolSupply = _bmul(poolRatio, poolSupply);
+        poolAmountOut = _bsub(newPoolSupply, poolSupply);
     }
 
     function calcSingleOutGivenPoolIn(
@@ -80,112 +80,108 @@ contract Math{
         public pure
         returns (uint256 tokenAmountOut)
     {
-        uint256 normalizedWeight = bdiv(1 ether,2 ether);
-        uint256 poolAmountInAfterExitFee = bmul(poolAmountIn, (BONE));
+        uint256 normalizedWeight = _bdiv(1 ether,2 ether);
+        uint256 poolAmountInAfterExitFee = _bmul(poolAmountIn, (BONE));
         uint256 newPoolSupply = poolSupply - poolAmountInAfterExitFee;
-        uint256 poolRatio = bdiv(newPoolSupply, poolSupply);
-        uint256 tokenOutRatio = bpow(poolRatio, bdiv(BONE, normalizedWeight));
-        uint256 newTokenBalanceOut = bmul(tokenOutRatio, tokenBalanceOut);
+        uint256 poolRatio = _bdiv(newPoolSupply, poolSupply);
+        uint256 tokenOutRatio = _bpow(poolRatio, _bdiv(BONE, normalizedWeight));
+        uint256 newTokenBalanceOut = _bmul(tokenOutRatio, tokenBalanceOut);
         uint256 tokenAmountOutBeforeSwapFee = tokenBalanceOut - newTokenBalanceOut;
-        uint256 zaz = bmul((BONE - normalizedWeight), swapFee); 
-        tokenAmountOut = bmul(tokenAmountOutBeforeSwapFee,(BONE - zaz));
+        uint256 zaz = _bmul((BONE - normalizedWeight), swapFee); 
+        tokenAmountOut = _bmul(tokenAmountOutBeforeSwapFee,(BONE - zaz));
     }
 
-    function btoi(uint256 _a) internal pure returns (uint256){
+    function _btoi(uint256 _a) internal pure returns (uint256){
         return _a / BONE;
     }
 
-    function bfloor(uint256 _a) internal pure returns (uint256){
-        return btoi(_a) * BONE;
+    function _bfloor(uint256 _a) internal pure returns (uint256){
+        return _btoi(_a) * BONE;
     }
 
     // DSMath.wpow
-    function bpowi(uint256 a, uint256 n) internal pure returns (uint256 _z){
-        _z = n % 2 != 0 ? a : BONE;
-        for (n /= 2; n != 0; n /= 2) {
-            a = bmul(a, a);
-            if (n % 2 != 0) {
-                _z = bmul(_z, a);
+    function _bpowi(uint256 _a, uint256 _n) internal pure returns (uint256 _z){
+        _z = _n % 2 != 0 ? _a : BONE;
+        for (_n /= 2; _n != 0; _n /= 2) {
+            _a = _bmul(_a, _a);
+            if (_n % 2 != 0) {
+                _z = _bmul(_z, _a);
             }
         }
     }
 
-    function bpow(uint256 base, uint256 exp) internal pure returns (uint256){
-        require(base >= 1 wei, "ERR_POW_BASE_TOO_LOW");
-        require(base <= ((2 * BONE) - 1 wei), "ERR_POW_BASE_TOO_HIGH");
-        uint256 whole  = bfloor(exp);   
-        uint256 remain = bsub(exp, whole);
-        uint256 wholePow = bpowi(base, btoi(whole));
-        if (remain == 0) {
-            return wholePow;
+    function _bpow(uint256 _base, uint256 _exp) internal pure returns (uint256){
+        require(_base >= 1 wei, "ERR_POW_BASE_TOO_LOW");
+        require(_base <= ((2 * BONE) - 1 wei), "ERR_POW_BASE_TOO_HIGH");
+        uint256 _whole  = _bfloor(_exp);   
+        uint256 _remain = _bsub(_exp, _whole);
+        uint256 _wholePow = _bpowi(_base, _btoi(_whole));
+        if (_remain == 0) {
+            return _wholePow;
         }
-        uint256 partialResult = bpowApprox(base, remain, BONE / 10**10);
-        return bmul(wholePow, partialResult);
+        uint256 _partialResult = _bpowApprox(_base, _remain, BONE / 10**10);
+        return _bmul(_wholePow, _partialResult);
     }
 
-    function bpowApprox(uint256 base, uint256 exp, uint256 precision) 
+    function _bpowApprox(uint256 _base, uint256 _exp, uint256 _precision) 
             internal 
             pure 
-            returns (uint256)
+            returns (uint256 _sum)
         {
-        uint256 a     = exp;
-        (uint256 x, bool xneg)  = bsubSign(base, BONE);
-        uint256 term = BONE;
-        uint256 sum   = term;
-        bool negative = false;
-        for (uint256 i = 1; term >= precision; i++) {
-            uint256 bigK = i * BONE;
-            (uint256 c, bool cneg) = bsubSign(a, bsub(bigK, BONE));
-            term = bmul(term, bmul(c, x));
-            term = bdiv(term, bigK);
-            if (term == 0) break;
-            if (xneg) negative = !negative;
-            if (cneg) negative = !negative;
-            if (negative) {
-                sum = bsub(sum, term);
+        uint256 _a = _exp;
+        (uint256 _x, bool _xneg)  = _bsubSign(_base, BONE);
+        uint256 _term = BONE;
+        _sum = _term;
+        bool _negative = false;
+        for (uint256 _i = 1; _term >= _precision; _i++) {
+            uint256 _bigK = _i * BONE;
+            (uint256 _c, bool _cneg) = _bsubSign(_a, _bsub(_bigK, BONE));
+            _term = _bmul(_term, _bmul(_c, _x));
+            _term = _bdiv(_term, _bigK);
+            if (_term == 0) break;
+            if (_xneg) _negative = !_negative;
+            if (_cneg) _negative = !_negative;
+            if (_negative) {
+                _sum = _bsub(_sum, _term);
             } else {
-                sum = badd(sum, term);
+                _sum = _badd(_sum, _term);
             }
         }
-        return sum;
     }
 
-    function bsubSign(uint256 a, uint256 b) internal pure returns (uint256, bool){
-        if (a >= b) {
-            return (a - b, false);
+    function _bsubSign(uint256 _a, uint256 _b) internal pure returns (uint256, bool){
+        if (_a >= _b) {
+            return (_a - _b, false);
         } else {
-            return (b - a, true);
+            return (_b - _a, true);
         }
     }
 
-    function bmul(uint256 a, uint256 b) internal pure returns (uint256){
-        uint256 c0 = a * b;
-        require(a == 0 || c0 / a == b, "ERR_MUL_OVERFLOW");
-        uint256 c1 = c0 + (BONE / 2);
-        require(c1 >= c0, "ERR_MUL_OVERFLOW");
-        uint256 c2 = c1 / BONE;
-        return c2;
+    function _bmul(uint256 _a, uint256 _b) internal pure returns (uint256 _c2){
+        uint256 _c0 = _a * _b;
+        require(_a == 0 || _c0 / _a == _b, "ERR_MUL_OVERFLOW");
+        uint256 _c1 = _c0 + (BONE / 2);
+        require(_c1 >= _c0, "ERR_MUL_OVERFLOW");
+        _c2 = _c1 / BONE;
     }
 
-    function bdiv(uint256 a, uint256 b) internal pure returns (uint256){
-        require(b != 0, "ERR_DIV_ZERO");
-        uint256 c0 = a * BONE;
-        require(a == 0 || c0 / a == BONE, "ERR_DIV_INTERNAL"); // bmul overflow
-        uint256 c1 = c0 + (b / 2);
-        require(c1 >= c0, "ERR_DIV_INTERNAL"); //  badd require
-        uint256 c2 = c1 / b;
-        return c2;
+    function _bdiv(uint256 _a, uint256 _b) internal pure returns (uint256 _c2){
+        require(_b != 0, "ERR_DIV_ZERO");
+        uint256 _c0 = _a * BONE;
+        require(_a == 0 || _c0 / _a == BONE, "ERR_DIV_INTERNAL"); // bmul overflow
+        uint256 _c1 = _c0 + (_b / 2);
+        require(_c1 >= _c0, "ERR_DIV_INTERNAL"); //  badd require
+        _c2 = _c1 / _b;
     }
 
-    function bsub(uint256 a, uint256 b) internal pure returns (uint256){
-        (uint256 c, bool flag) = bsubSign(a, b);
-        require(!flag, "ERR_SUB_UNDERFLOW");
-        return c;
+    function _bsub(uint256 _a, uint256 _b) internal pure returns (uint256){
+        (uint256 _c,bool _flag) = _bsubSign(_a, _b);
+        require(!_flag, "ERR_SUB_UNDERFLOW");
+        return _c;
     }
 
-    function badd(uint256 a, uint256 b) internal pure returns (uint256){
-        uint256 c = a + b;
-        require(c >= a, "ERR_ADD_OVERFLOW");
-        return c;
+    function _badd(uint256 _a, uint256 _b) internal pure returns (uint256 _c){
+        _c = _a + _b;
+        require(_c >= _a, "ERR_ADD_OVERFLOW");
     }
 }

@@ -56,7 +56,7 @@ describe("charon system - function tests", function() {
         assert(await token.balanceOf(accounts[2].address) == web3.utils.toWei("80"), "burn should work")
         await expect(token.connect(accounts[3]).burn(accounts[2].address,web3.utils.toWei("100"))).to.be.reverted;
         });
-    console.log("Math.sol -- to write")
+    console.log("Math.sol")
     it("btoi()", async function() {
         assert( await math.btoi(web3.utils.toWei("55")) == 55,"btoi should work")
     });
@@ -70,6 +70,7 @@ describe("charon system - function tests", function() {
         assert(await math.bpow(web3.utils.toWei("1.5"),web3.utils.toWei("2")) == web3.utils.toWei("2.25"), "bpow should be correct")
     });
     it("bpowApprox()", async function() {
+        assert(await math.bpowApprox(web3.utils.toWei("1.5"),web3.utils.toWei("2"),1) == web3.utils.toWei("2.25"), "bpow should be correct")
     });
     it("bsubSign()", async function() {
         let mvar = await math.bsubSign(4,2)
@@ -89,14 +90,19 @@ describe("charon system - function tests", function() {
         assert(await math.bsub(4,2) == 2, "bsub should work")
     });
     it("calcSpotPrice()", async function() {
+        assert(await math.calcSpotPrice(web3.utils.toWei("100"),web3.utils.toWei("10"),0) == web3.utils.toWei("10"), "spot price should be correct")
     });
     it("calcOutGivenIn()", async function() {
+        assert(await math.calcOutGivenIn(web3.utils.toWei("1000"),web3.utils.toWei("100"),web3.utils.toWei("100"),0) == web3.utils.toWei("9.090909090909090900"), "spot price should be correct")
     });
     it("calcInGivenOut()", async function() {
+        assert(await math.calcInGivenOut(web3.utils.toWei("1000"),web3.utils.toWei("100"),web3.utils.toWei("10"),0) == web3.utils.toWei("111.111111111111111000"), "ingivenout should be correct")
     });
-    it("calcInGivenOut()", async function() {
+    it("calcPoolOutGivenSingleIn(()", async function() {
+        assert(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("100")) == web3.utils.toWei(".488088481710052490"), "pool out should be correct")
     });
     it("calcSingleOutGivenPoolIn()", async function() {
+        assert(await math.calcSingleOutGivenPoolIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("1"),0) == web3.utils.toWei("190"), "single out should be correct")
     });
     console.log("Oracle.sol -- to write")
     it("constructor()", async function() {

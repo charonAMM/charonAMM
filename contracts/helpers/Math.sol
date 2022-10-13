@@ -64,7 +64,7 @@ contract Math{
         returns (uint256 poolAmountOut)
     {
         uint256 tokenAmountInAfterFee = _bmul(tokenAmountIn,BONE);
-        uint256 newTokenBalanceIn = _badd(tokenBalanceIn, tokenAmountInAfterFee);
+        uint256 newTokenBalanceIn = tokenBalanceIn + tokenAmountInAfterFee;
         uint256 tokenInRatio = _bdiv(newTokenBalanceIn, tokenBalanceIn);
         uint256 poolRatio = _bpow(tokenInRatio, _bdiv(1 ether, 2 ether));
         uint256 newPoolSupply = _bmul(poolRatio, poolSupply);
@@ -110,6 +110,8 @@ contract Math{
         }
     }
 
+
+
     function _bpow(uint256 _base, uint256 _exp) internal pure returns (uint256){
         require(_base >= 1 wei, "ERR_POW_BASE_TOO_LOW");
         require(_base <= ((2 * BONE) - 1 wei), "ERR_POW_BASE_TOO_HIGH");
@@ -144,7 +146,7 @@ contract Math{
             if (_negative) {
                 _sum = _bsub(_sum, _term);
             } else {
-                _sum = _badd(_sum, _term);
+                _sum = _sum + _term;
             }
         }
     }
@@ -178,10 +180,5 @@ contract Math{
         (uint256 _c,bool _flag) = _bsubSign(_a, _b);
         require(!_flag, "ERR_SUB_UNDERFLOW");
         return _c;
-    }
-
-    function _badd(uint256 _a, uint256 _b) internal pure returns (uint256 _c){
-        _c = _a + _b;
-        require(_c >= _a, "ERR_ADD_OVERFLOW");
     }
 }

@@ -45,8 +45,4 @@ contract MockMath is Math{
     function bsub(uint256 _a, uint256 _b) external pure returns (uint256){
         return _bsub(_a,_b);
     }
-
-    function badd(uint256 _a, uint256 _b) external pure returns (uint256){
-        return _badd(_a,_b);
-    }
 }

@@ -239,11 +239,11 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         uint256 _baseAssetIn = _bmul(_ratio, recordBalance);
         require(_baseAssetIn != 0, "ERR_MATH_APPROX");
         require(_baseAssetIn <= _maxBaseAssetIn, "ERR_LIMIT_IN");
-        recordBalance = _badd(recordBalance,_baseAssetIn);
+        recordBalance = recordBalance + _baseAssetIn;
         uint256 _CHDIn = _bmul(_ratio, recordBalanceSynth);
         require(_CHDIn != 0, "ERR_MATH_APPROX");
         require(_CHDIn <= _maxCHDIn, "ERR_LIMIT_IN");
-        recordBalanceSynth = _badd(recordBalanceSynth,_CHDIn);
+        recordBalanceSynth = recordBalanceSynth + _CHDIn;
         _mint(msg.sender,_poolAmountOut);
         require (token.transferFrom(msg.sender,address(this), _baseAssetIn));
         require (chd.transferFrom(msg.sender,address(this), _CHDIn));
@@ -388,7 +388,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
            recordBalance -= _tokenAmountOut;
         } 
         else{
-          _inRecordBal = _badd(_inRecordBal, _tokenAmountIn);
+          _inRecordBal = _inRecordBal + _tokenAmountIn;
           _outRecordBal = _bsub(_outRecordBal, _tokenAmountOut);
           require(token.transferFrom(msg.sender,address(this), _tokenAmountOut));
           require(chd.transfer(msg.sender,_tokenAmountOut));

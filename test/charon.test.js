@@ -45,8 +45,6 @@ async function getTellorSubmission(args,extData){
         args.proof
       ]
     );
-
-    console.log(args.inputNullifiers[0],args.inputNullifiers[1],dataEncoded)
     return dataEncoded;
   }
 

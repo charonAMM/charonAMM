@@ -36,20 +36,17 @@ async function getTellorData(tInstance, chain,depositID){
 
 async function getTellorSubmission(args,extData){
     const dataEncoded = abiCoder.encode(
-      ['bytes','uint256','bytes32','uint256','bytes32[]','bytes32[2]','address','int256','address','uint256'],
+      ['bytes32','bytes32','bytes32','bytes32','bytes'],
       [
-        args.proof,
-        args.publicAmount,
-        args.root,
-        args.extDataHash,
-        args.inputNullifiers,
-        args.outputCommitments,
-        extData.recipient,
-        extData.extAmount,
-        extData.relayer,
-        extData.fee
+        args.inputNullifiers[0],
+        args.inputNullifiers[1],
+        args.outputCommitments[0],
+        args.outputCommitments[1],
+        args.proof
       ]
     );
+
+    console.log(args.inputNullifiers[0],args.inputNullifiers[1],dataEncoded)
     return dataEncoded;
   }
 

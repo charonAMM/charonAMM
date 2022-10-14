@@ -8,6 +8,8 @@ import "./helpers/Math.sol";
 import "./helpers/Oracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
+
+
 /**
  @title charon
  @dev charon is a decentralized protocol for a Privacy Enabled Cross-Chain AMM (PECCAMM). 
@@ -86,7 +88,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     IVerifier public verifier16;
     Commitment[] depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
     PartnerContract[] partnerContracts;//list of connected contracts for this deployment
-    address public controller;//finalizes contracts, generates fees
+    address public controller;
     bool public finalized;
     bool private mutex;//used for reentrancy protection
     uint32 public merkleTreeHeight;
@@ -94,6 +96,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
+    uint256 public userRewards;
     mapping(bytes32 => uint256) public depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
 
@@ -159,6 +162,23 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         chainID = _chainID;
     }
 
+    //is called from the CFC.  Either adds to the recordBalance or recordBalanceSynth. 
+    function addLPrewards(bool _isCHD, uint256 _amount) external{
+      if(_isCHD){
+        recordBalanceSynth += _amount;
+        require(chd.transferFrom(msg.sender,address(this),_amount));
+      }
+      else{
+        recordBalance += _amount;
+        require(token.transferFrom(msg.sender,address(this),_amount));
+      }
+    }
+
+    function addUserRewards(uint256 _amount) external{
+      require(token.transferFrom(msg.sender,address(this),_amount));
+      userRewards += _amount;
+    }
+
     /**
      * @dev Allows the controller to change their address
      * @param _newController new controller.  Should be DAO for recieving fees
@@ -189,6 +209,10 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         else{
           _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,uint256(_extData.extAmount),0);
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
+        }
+        if(userRewards / 1000 > 0){
+          require(token.transfer(msg.sender, userRewards / 1000));
+          userRewards -= userRewards / 1000;
         }
         recordBalance += _tokenAmount;
         emit DepositToOtherChain(_isCHD,msg.sender, block.timestamp, _tokenAmount);
@@ -385,15 +409,23 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
            _outRecordBal = _bsub(_outRecordBal, _tokenAmountOut);
            require(chd.burnCHD(msg.sender,_tokenAmountIn));
            require(token.transfer(msg.sender,_tokenAmountOut));
-           recordBalance -= _tokenAmountOut;
+           recordBalance -= _tokenAmountOut;//this captures the 50% to LP's
+           if(fee > 0){
+             recordBalance -= _tokenAmountOut * fee/2;
+             require(token.transfer(controller, fee/2));
+           }
         } 
         else{
           _inRecordBal = _inRecordBal + _tokenAmountIn;
           _outRecordBal = _bsub(_outRecordBal, _tokenAmountOut);
-          require(token.transferFrom(msg.sender,address(this), _tokenAmountOut));
+          require(token.transferFrom(msg.sender,address(this), _tokenAmountIn));
           require(chd.transfer(msg.sender,_tokenAmountOut));
           recordBalance += _tokenAmountIn;
-          recordBalanceSynth -= _tokenAmountOut;
+          recordBalanceSynth -= _tokenAmountOut;//this captures the 50% to LP's
+          if(fee > 0){
+             recordBalanceSynth -= _tokenAmountOut * fee/2;
+             require(chd.transfer(controller, fee/2));
+          }
         }
         _spotPriceAfter = calcSpotPrice(
                                 _inRecordBal,
@@ -407,7 +439,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
   //lets you do secret transfers / withdraw + mintCHD
   function transact(Proof memory _args, ExtData memory _extData) external _finalized_ _lock_{
-      int256 _publicAmount = _extData.extAmount - int256(fee);
+      int256 _publicAmount = _extData.extAmount - int256(_extData.fee);
       if(_publicAmount < 0){
         _publicAmount = int256(FIELD_SIZE - uint256(-_publicAmount));
       } 

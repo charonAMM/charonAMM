@@ -26,4 +26,13 @@ contract Oracle is UsingTellor{
         (_didGet,_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_didGet);
     }
+
+    function getRootHashAndSupply(uint256 _timestamp) public view returns(bytes memory _value){
+        bool _didGet;
+        bytes32 _queryId = keccak256(abi.encode("CITInfo",abi.encode(_timestamp)));
+        (_didGet,_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
+        require(_didGet);
+    }
+
+
 }

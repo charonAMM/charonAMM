@@ -5,7 +5,7 @@ import "./CHD.sol";
 import "./MerkleTreeWithHistory.sol";
 import "./Token.sol";
 import "./helpers/Math.sol";
-import "./helpers/Oracle.sol";
+import "./interfaces/IOracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
 
@@ -52,7 +52,7 @@ import "./interfaces/IVerifier.sol";
 //                             ./%%%#%%%%%%%%%%%%%%%%%%%(((####%###((((#(*,,*(*    
 //                                                   ,*#%%###(##########(((,    
 */
-contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
+contract Charon is Math, MerkleTreeWithHistory, Token{
 
     struct PartnerContract{
       uint256 chainID;
@@ -84,6 +84,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
 
     CHD public chd;
     IERC20 public token;//token deposited at this address
+    IOracle public oracle;
     IVerifier public verifier2;
     IVerifier public verifier16;
     Commitment[] depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
@@ -145,14 +146,13 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
                 address _hasher,
                 address _token,
                 uint256 _fee,
-                address payable _oracle,
+                address _oracle,
                 uint32 _merkleTreeHeight,
                 uint256 _chainID,
                 string memory _name,
                 string memory _symbol
                 )
               MerkleTreeWithHistory(_merkleTreeHeight, _hasher)
-              Oracle(_oracle)
               Token(_name,_symbol){
         verifier2 = IVerifier(_verifier2);
         verifier16 = IVerifier(_verifier16);
@@ -160,6 +160,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         fee = _fee;
         controller = msg.sender;
         chainID = _chainID;
+        oracle = IOracle(_oracle);
     }
 
     //is called from the CFC.  Either adds to the recordBalance or recordBalanceSynth. 
@@ -174,9 +175,15 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
       }
     }
 
-    function addUserRewards(uint256 _amount) external{
-      require(token.transferFrom(msg.sender,address(this),_amount));
-      userRewards += _amount;
+    function addUserRewards(uint256 _amount, bool _isCHD) external{
+      if(_isCHD){
+         require(chd.transferFrom(msg.sender,address(this),_amount));
+         userRewardsCHD += _amount;
+      }
+      else{
+        require(token.transferFrom(msg.sender,address(this),_amount));
+        userRewards += _amount;
+      }
     }
 
     /**
@@ -210,9 +217,21 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
           _tokenAmount = calcInGivenOut(recordBalance,recordBalanceSynth,uint256(_extData.extAmount),0);
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
         }
-        if(userRewards / 1000 > 0){
-          require(token.transfer(msg.sender, userRewards / 1000));
-          userRewards -= userRewards / 1000;
+        uint256 _min = userRewards / 1000;
+        if(_min > 0){
+          if (_min > _tokenAmount / 50){
+            _min = _tokenAmount / 50;
+          }
+          require(token.transfer(msg.sender, _min));
+          userRewards -= _min;
+        }
+        _min = userRewardsCHD / 1000;
+        if(_min > 0){
+          if (_min > _tokenAmount / 50){
+            _min = _tokenAmount / 50;
+          }
+          require(chd.transfer(msg.sender, _min));
+          userRewards -= _min;
         }
         recordBalance += _tokenAmount;
         emit DepositToOtherChain(_isCHD,msg.sender, block.timestamp, _tokenAmount);
@@ -357,7 +376,7 @@ contract Charon is Math, MerkleTreeWithHistory, Oracle, Token{
         bytes memory _iv;
         require(_chain.length == _depositId.length, "must be same length");
         for(uint256 _i; _i< _chain.length; _i++){
-          _value = getCommitment(_chain[_i], _depositId[_i]);
+          _value = oracle.getCommitment(_chain[_i], _depositId[_i]);
           _proof.inputNullifiers = new bytes32[](2);
           (_proof.inputNullifiers[0], _proof.inputNullifiers[1], _proof.outputCommitments[0], _proof.outputCommitments[1], _proof.proof) = abi.decode(_value,(bytes32,bytes32,bytes32,bytes32,bytes));
           _transact(_proof, _extData);

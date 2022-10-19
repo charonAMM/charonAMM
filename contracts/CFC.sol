@@ -2,6 +2,7 @@
 pragma solidity 0.8.4;
 
 import "./interfaces/IOracle.sol";
+import "./interfaces/ICharon.sol";
 import "./helpers/MerkleTree.sol";
 /**
  @title MockMath
@@ -25,7 +26,6 @@ contract CFC {
     uint256 public toDistributeCHD;
     uint256[] public feePeriods;
     mapping(uint256 => FeePeriod) feePeriodByTimestamp; //gov token balance
-    mapping(uint256 => uint256) rewardPerTokenByTimestamp;//reward per governanceToken at given timestamp
     address public charon;
     IOracle public oracle;
     address public oraclePayment;
@@ -47,26 +47,45 @@ contract CFC {
     //to be called onceAMonth
     function endFeeRound(){
         FeePeriod _f = feePeriodByTimestamp[feePeriods[feePeriods.length - 1]];
-        oracle.getRootHashAndSupply(_f.endDate);
+        require(block.timestamp > _f.endDate, "round should be over");
+        bytes _val = oracle.getRootHashAndSupply(_f.endDate);
+        (bytes32 _rootHash, uint256 _totalSupply) = abi.decode(_val,(bytes32,uint256));
         _endDate = block.timestamp + 30 days;
         feePeriods.push(_endDate);
         feePeriodByTimestamp[_endDate].endDate = _endDate;
 
-        //both CHD and Token
-        //sends to oracle
-        //sends to governance token
+        _f.baseTokenRewardsPerToken = toDistributeToken * toHolders/100e18 / _totalSupply;
+        _f.chdRewardsPerToken = toDistributeCHD * toHolders/100e18 / _totalSupply;
 
+        //CHD transfers
+        uint256 _toOracle = toDistributeCHD * toOracle / 100e18;
+        chd.transfer(oraclePayment,_toOracle);
+        _toOracle = toDistributeToken * toOracle / 100e18;
+        token.transfer(oraclePayment, _toOracle);
+
+        toDistributeToken = 0;
+        toDistributeCHD = 0;
+
+        FeeRoundEnded(_f.endDate, _f.baseTokenRewardsPerToken, _f.chdRewardsPerToken);
     }
 
-    function addFees(){
-
-    }
-
-
-    function acceptCharonFees(){
-        //send the stuff going to LP's and users right back
-        addLPRewards()
-        addUserRewards()
+    function addFees(uint256 _amount, bool _isCHD) external{
+        //send LP and User rewards over now
+        uint256 _toLPs = _amount * toLPs / 100e18;
+        uint256 _toUsers = _amount * toUsers / 100e18;
+        _amount = _amount - _toLPs - _toUsers;
+        if(_isCHD){
+            require(chd.transferFrom(msg.sender, _amount), "should transfer amount");
+            toDistributeCHD += _amount;
+            charon.addUserRewards(_toUsers,true);
+            charon.addLPRewards(_toLPs, true);
+        }
+        else{
+            require(token.transferFrom(msg.sender, _amount), "should transfer amount");
+            toDistributeToken += _amount;
+            charon.addUserRewards(_toUsers,false);
+            charon.addLPRewards(_toLPs, false);
+        }
     }
 
     function claimRewards(uint256 _timestamp, address _account, uint256 _balance, bytes32[] calldata _hashes, bool[] calldata _right) external{

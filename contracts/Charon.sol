@@ -164,7 +164,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     }
 
     //is called from the CFC.  Either adds to the recordBalance or recordBalanceSynth. 
-    function addLPrewards(bool _isCHD, uint256 _amount) external{
+    function addLPrewards(uint256 _amount,bool _isCHD) external{
       if(_isCHD){
         recordBalanceSynth += _amount;
         require(chd.transferFrom(msg.sender,address(this),_amount));

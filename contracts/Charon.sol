@@ -98,6 +98,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     uint256 public userRewards;
+    uint256 public userRewardsCHD;
     mapping(bytes32 => uint256) public depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
 
@@ -505,6 +506,10 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      */
     function getSpotPrice() external view returns(uint256 _spotPrice){
       return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
+    }
+
+    function getTokens() external view returns(address _chd, address _token){
+      return (address(chd), address(token));
     }
 
     /**

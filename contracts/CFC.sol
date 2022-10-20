@@ -4,11 +4,12 @@ pragma solidity 0.8.4;
 import "./interfaces/IOracle.sol";
 import "./interfaces/ICharon.sol";
 import "./helpers/MerkleTree.sol";
+import "./interfaces/IERC20.sol";
 /**
  @title MockMath
  @dev testing contract for the math contract contains amm math functions for the charon system
 **/
-contract CFC {
+contract CFC is MerkleTree{
 
     struct FeePeriod{
         uint256 endDate;
@@ -26,47 +27,49 @@ contract CFC {
     uint256 public toDistributeCHD;
     uint256[] public feePeriods;
     mapping(uint256 => FeePeriod) feePeriodByTimestamp; //gov token balance
-    address public charon;
+    ICharon public charon;
     IOracle public oracle;
     address public oraclePayment;
+    IERC20 token;
+    IERC20 chd;
 
+    event FeeRoundEnded(uint256 _endDate, uint256 _baseTokenrRewardsPerToken, uint256 _chdRewardsPerToken);
 
     constructor(address _charon, address _oracle, address _oraclePayment, uint256 _toOracle, uint256 _toLPs, uint256 _toHolders, uint256 _toUsers){
-        charon = _charon;
+        charon = ICharon(_charon);
         oracle = IOracle(_oracle);
         oraclePayment = _oraclePayment;
         toOracle = _toOracle;
         toLPs = _toLPs;
         toHolders = _toHolders;
         toUsers = _toUsers;
-        _endDate = block.timestamp + 30 days;
+        uint256 _endDate = block.timestamp + 30 days;
         feePeriods.push(_endDate);
         feePeriodByTimestamp[_endDate].endDate = _endDate;
+        (address _a, address _b) = charon.getTokens();
+        token = IERC20(_b);
+        chd = IERC20(_a);
     }
 
     //to be called onceAMonth
-    function endFeeRound(){
-        FeePeriod _f = feePeriodByTimestamp[feePeriods[feePeriods.length - 1]];
+    function endFeeRound() external{
+        FeePeriod storage _f = feePeriodByTimestamp[feePeriods[feePeriods.length - 1]];
         require(block.timestamp > _f.endDate, "round should be over");
-        bytes _val = oracle.getRootHashAndSupply(_f.endDate);
+        bytes memory _val = oracle.getRootHashAndSupply(_f.endDate);
         (bytes32 _rootHash, uint256 _totalSupply) = abi.decode(_val,(bytes32,uint256));
-        _endDate = block.timestamp + 30 days;
+        uint256 _endDate = block.timestamp + 30 days;
         feePeriods.push(_endDate);
         feePeriodByTimestamp[_endDate].endDate = _endDate;
-
         _f.baseTokenRewardsPerToken = toDistributeToken * toHolders/100e18 / _totalSupply;
         _f.chdRewardsPerToken = toDistributeCHD * toHolders/100e18 / _totalSupply;
-
         //CHD transfers
         uint256 _toOracle = toDistributeCHD * toOracle / 100e18;
         chd.transfer(oraclePayment,_toOracle);
         _toOracle = toDistributeToken * toOracle / 100e18;
         token.transfer(oraclePayment, _toOracle);
-
         toDistributeToken = 0;
         toDistributeCHD = 0;
-
-        FeeRoundEnded(_f.endDate, _f.baseTokenRewardsPerToken, _f.chdRewardsPerToken);
+        emit FeeRoundEnded(_f.endDate, _f.baseTokenRewardsPerToken, _f.chdRewardsPerToken);
     }
 
     function addFees(uint256 _amount, bool _isCHD) external{
@@ -75,13 +78,13 @@ contract CFC {
         uint256 _toUsers = _amount * toUsers / 100e18;
         _amount = _amount - _toLPs - _toUsers;
         if(_isCHD){
-            require(chd.transferFrom(msg.sender, _amount), "should transfer amount");
+            require(chd.transferFrom(msg.sender,address(this), _amount), "should transfer amount");
             toDistributeCHD += _amount;
             charon.addUserRewards(_toUsers,true);
             charon.addLPRewards(_toLPs, true);
         }
         else{
-            require(token.transferFrom(msg.sender, _amount), "should transfer amount");
+            require(token.transferFrom(msg.sender,address(this), _amount), "should transfer amount");
             toDistributeToken += _amount;
             charon.addUserRewards(_toUsers,false);
             charon.addLPRewards(_toLPs, false);

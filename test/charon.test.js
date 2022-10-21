@@ -50,7 +50,7 @@ async function getTellorSubmission(args,extData){
 
 describe("charon tests", function () {
     let accounts;
-    let verifier2,verifier16,token,charon,hasher,token2,charon2;
+    let verifier2,verifier16,token,charon,hasher,token2,charon2,oracle, oracle2;
     let fee = 0;
     let HEIGHT = 5;
     beforeEach(async function () {
@@ -68,11 +68,13 @@ describe("charon tests", function () {
         tellor2 = await TellorOracle.deploy();
         await tellor2.deployed();
         await tellor.deployed();
-        charon = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token.address,fee,tellor.address,HEIGHT,1,"Charon Pool Token","CPT")
+        oracle = await deploy('Oracle',tellor.address)
+        oracle2 = await deploy('Oracle',tellor2.address)
+        charon = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token.address,fee,oracle.address,HEIGHT,1,"Charon Pool Token","CPT")
         //now deploy on other chain (same chain, but we pretend w/ oracles)
         token2 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
-        charon2 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,tellor2.address,HEIGHT,2,"Charon Pool Token2","CPT2");
+        charon2 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,oracle2.address,HEIGHT,2,"Charon Pool Token2","CPT2");
         chd = await deploy("MockERC20",charon.address,"charon dollar","chd")
         chd2 = await deploy("MockERC20",charon2.address,"charon dollar2","chd2")
         //now set both of them. 
@@ -87,7 +89,7 @@ describe("charon tests", function () {
         assert(res - res2 == 0, "should be the same hash");
     }).timeout(500000);
     it("Test Constructor", async function() {
-        assert(await charon.tellor() == tellor.address, "oracle  address should be set")
+        assert(await charon.oracle() == oracle.address, "oracle  address should be set")
         assert(await charon.levels() == HEIGHT, "merkle Tree height should be set")
         assert(await charon.hasher() == hasher.address, "hasher should be set")
         assert(await charon.verifier2() == verifier2.address, "verifier2 should be set")
@@ -101,7 +103,31 @@ describe("charon tests", function () {
         await charon.changeController(accounts[1].address)
         assert(await charon.controller() == accounts[1].address, "controller should change")
       });
-
+      it("Test getTokens()", async function() {
+        let toks = await charon.getTokens()
+        assert(toks[0] == chd.address, "chd should be slot 0")
+        assert(toks[1] == token.address, "token should be slot 1")
+      });
+      it("Test addUserRewards()", async function() {
+        await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
+        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),true);
+        assert(await charon.userRewardsCHD() == web3.utils.toWei("50"))
+        await token.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
+        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),false);
+        assert(await charon.userRewards() == web3.utils.toWei("50"))
+      });
+      it("Test addLPRewards()", async function() {
+        await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
+        await charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),true);
+        assert(await charon.recordBalanceSynth() == web3.utils.toWei("1050"))
+        await token.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
+        await charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),false);
+        assert(await charon.recordBalance() == web3.utils.toWei("150"))
+      });
       it("Test depositToOtherChain", async function() {
         let _depositAmount = web3.utils.toWei("10");
         await token.mint(accounts[1].address,web3.utils.toWei("100"))

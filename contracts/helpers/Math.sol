@@ -110,8 +110,6 @@ contract Math{
         }
     }
 
-
-
     function _bpow(uint256 _base, uint256 _exp) internal pure returns (uint256){
         require(_base >= 1 wei, "ERR_POW_BASE_TOO_LOW");
         require(_base <= ((2 * BONE) - 1 wei), "ERR_POW_BASE_TOO_HIGH");

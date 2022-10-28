@@ -2,9 +2,17 @@
 const crypto = require('crypto')
 const { ethers } = require('hardhat')
 const BigNumber = ethers.BigNumber
-const { poseidon } = require('circomlib')
+//const { poseidon } = require('circomlib')
+//const buildPoseidon = require( "../node_modules/circomlibjs/src/poseidon_wasm.js";
+const { buildPoseidon } = require("circomlibjs");
 
-const poseidonHash = (items) => BigNumber.from(poseidon(items).toString())
+//const poseidonHash = (items) => BigNumber.from(poseidon(items).toString())
+const poseidonHash = async (items) => {
+  poseidon = await buildPoseidon()
+  let val = poseidon(items)
+  return poseidon.F.toString(val)
+};
+
 const poseidonHash2 = (a, b) => poseidonHash([a, b])
 
 const FIELD_SIZE = BigNumber.from(

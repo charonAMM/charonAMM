@@ -6,7 +6,7 @@ require('@nomiclabs/hardhat-etherscan')
 require('dotenv').config()
 
 task('hasher', 'Compile Poseidon hasher', () => {
-  require('./scripts/compileHasher')
+  require('./scripts/compilePoseidon')
 })
 
 const config = {

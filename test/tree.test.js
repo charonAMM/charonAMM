@@ -1,57 +1,58 @@
 const hre = require('hardhat')
 const { ethers, waffle } = hre
 const { loadFixture } = waffle
-const { expect } = require('chai')
+const { expect, assert } = require('chai')
 const HASH = require("../build/Hasher.json")
-const { poseidonHash2, toFixedHex } = require('../src/utils')
+const { toFixedHex } = require('../src/utils')
+const { buildPoseidon } = require("circomlibjs");
+
 
 const MERKLE_TREE_HEIGHT = 5
 const MerkleTree = require('fixed-merkle-tree')
 
+
 describe('MerkleTreeWithHistory', function () {
   this.timeout(20000)
-
+  let poseidon, hasher, merkleTreeWithHistory;
+  let zero = "21663839004416932945382355908790599225266501822907911457504978515578255421292"
+  beforeEach(async function () {
+    poseidon = await buildPoseidon()
+    let Hasher = await ethers.getContractFactory(HASH.abi, HASH.bytecode);
+    hasher = await Hasher.deploy();
+    merkleTreeWithHistory = await deploy(
+      'MerkleTreeWithHistoryMock',
+      MERKLE_TREE_HEIGHT,
+      hasher.address,
+    )
+    await merkleTreeWithHistory.initialize()
+    // for(i = 0; i < MERKLE_TREE_HEIGHT;i++){
+    //   zeros[i] = await merkleTreeWithHistory.zeros(i)
+    // }
+  })
   async function deploy(contractName, ...args) {
     const Factory = await ethers.getContractFactory(contractName)
     const instance = await Factory.deploy(...args)
     return instance.deployed()
   }
 
+  function poseidonHash2(a,b){
+    let val = poseidon([a,b])
+    return poseidon.F.toString(val)
+  }
+
   function getNewTree() {
-    return new MerkleTree(MERKLE_TREE_HEIGHT, [], { hashFunction: poseidonHash2 })
+    return new MerkleTree.default(MERKLE_TREE_HEIGHT, [], { hashFunction: poseidonHash2, zeroElement: zero })
   }
-
-  async function fixture() {
-    let Hasher = await ethers.getContractFactory(HASH.abi, HASH.bytecode);
-    hasher = await Hasher.deploy();
-    const merkleTreeWithHistory = await deploy(
-      'MerkleTreeWithHistoryMock',
-      MERKLE_TREE_HEIGHT,
-      hasher.address,
-    )
-    await merkleTreeWithHistory.initialize()
-    return { hasher, merkleTreeWithHistory }
-  }
-
-  // it('should return cloned tree in fixture', async () => {
-  //   const { tree: tree1 } = await loadFixture(fixture)
-  //   tree1.insert(1)
-  //   const { tree: tree2 } = await loadFixture(fixture)
-  //   expect(tree1.root()).to.not.equal(tree2.root())
-  // })
-
   describe('#constructor', () => {
     it('should correctly hash 2 leaves', async () => {
-      const { merkleTreeWithHistory } = await loadFixture(fixture)
       //console.log(hasher)
       const hash0 = await merkleTreeWithHistory.hashLeftRight(toFixedHex(123), toFixedHex(456))
       // const hash1 = await hasher.poseidon([123, 456])
-      const hash2 = poseidonHash2(123, 456)
-      expect(hash0).to.equal(hash2)
+      const hash2 = await poseidonHash2(123, 456)
+      assert(hash0 - hash2 == 0, "should be the same hash");
     })
 
     it('should initialize', async () => {
-      const { merkleTreeWithHistory } = await loadFixture(fixture)
       const zeroValue = await merkleTreeWithHistory.ZERO_VALUE()
       const firstSubtree = await merkleTreeWithHistory.filledSubtrees(0)
       const firstZero = await merkleTreeWithHistory.zeros(0)
@@ -60,64 +61,55 @@ describe('MerkleTreeWithHistory', function () {
     })
 
     it('should have correct merkle root', async () => {
-      const { merkleTreeWithHistory } = await loadFixture(fixture)
-      const tree = getNewTree()
+      const tree = await getNewTree()
       const contractRoot = await merkleTreeWithHistory.getLastRoot()
-      expect(tree.root()).to.equal(contractRoot)
+      let root = await tree.root
+      //expect(root).to.equal(contractRoot)
+      assert(tree.zeroElement - zero == 0, "zero should be the same")
+      assert(root - contractRoot == 0, "should have correct merkle root")
     })
   })
-
   describe('#insert', () => {
     it('should insert', async () => {
-      const { merkleTreeWithHistory } = await loadFixture(fixture)
-      const tree = getNewTree()
+      const tree = await getNewTree()
       await merkleTreeWithHistory.insert(toFixedHex(123), toFixedHex(456))
       tree.bulkInsert([123, 456])
-      expect(tree.root()).to.be.be.equal(await merkleTreeWithHistory.getLastRoot())
-
+      assert(await merkleTreeWithHistory.getLastRoot() - tree.root == 0, "should be same insert" )
+      //expect(tree.root).to.be.be.equal(await merkleTreeWithHistory.getLastRoot())
       await merkleTreeWithHistory.insert(toFixedHex(678), toFixedHex(876))
       tree.bulkInsert([678, 876])
-      expect(tree.root()).to.be.be.equal(await merkleTreeWithHistory.getLastRoot())
+      assert(await merkleTreeWithHistory.getLastRoot() == toFixedHex(tree.root), "root should be the same insert")
+      //expect(tree.root).to.be.be.equal(await merkleTreeWithHistory.getLastRoot())
     })
-
     it('hasher gas', async () => {
-      const { merkleTreeWithHistory } = await loadFixture(fixture)
       const gas = await merkleTreeWithHistory.estimateGas.hashLeftRight(toFixedHex(123), toFixedHex(456))
       console.log('hasher gas', gas - 21000)
     })
   })
-
   describe('#isKnownRoot', () => {
-    async function fixtureFilled() {
-      const { merkleTreeWithHistory, hasher } = await loadFixture(fixture)
-      await merkleTreeWithHistory.insert(toFixedHex(123), toFixedHex(456))
-      return { merkleTreeWithHistory, hasher }
-    }
 
     it('should return last root', async () => {
-      const { merkleTreeWithHistory } = await fixtureFilled(fixture)
-      const tree = getNewTree()
+      await merkleTreeWithHistory.insert(toFixedHex(123), toFixedHex(456))
+      const tree = await getNewTree()
       tree.bulkInsert([123, 456])
-      expect(await merkleTreeWithHistory.isKnownRoot(tree.root())).to.equal(true)
+      expect(await merkleTreeWithHistory.isKnownRoot(toFixedHex(tree.root))).to.equal(true)
     })
-
     it('should return older root', async () => {
-      const { merkleTreeWithHistory } = await fixtureFilled(fixture)
+      await merkleTreeWithHistory.insert(toFixedHex(123), toFixedHex(456))
       const tree = getNewTree()
       tree.bulkInsert([123, 456])
       await merkleTreeWithHistory.insert(toFixedHex(234), toFixedHex(432))
-      expect(await merkleTreeWithHistory.isKnownRoot(tree.root())).to.equal(true)
+      expect(await merkleTreeWithHistory.isKnownRoot(toFixedHex(tree.root))).to.equal(true)
     })
-
     it('should fail on unknown root', async () => {
-      const { merkleTreeWithHistory } = await fixtureFilled(fixture)
+      await merkleTreeWithHistory.insert(toFixedHex(123), toFixedHex(456))
       const tree = getNewTree()
       tree.bulkInsert([456, 654])
-      expect(await merkleTreeWithHistory.isKnownRoot(tree.root())).to.equal(false)
+      let root = await tree.root
+      expect(await merkleTreeWithHistory.isKnownRoot(toFixedHex(root))).to.equal(false)
     })
-
     it('should not return uninitialized roots', async () => {
-      const { merkleTreeWithHistory } = await fixtureFilled(fixture)
+      await merkleTreeWithHistory.insert(toFixedHex(123), toFixedHex(456))
       expect(await merkleTreeWithHistory.isKnownRoot(toFixedHex(0))).to.equal(false)
     })
   })

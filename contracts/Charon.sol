@@ -374,7 +374,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         Proof memory _proof;
         ExtData memory _extData;
         bytes memory _value;
-        bytes memory _iv;
         require(_chain.length == _depositId.length, "must be same length");
         for(uint256 _i; _i< _chain.length; _i++){
           _value = oracle.getCommitment(_chain[_i], _depositId[_i]);

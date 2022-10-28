@@ -11,9 +11,8 @@ const { toFixedHex, poseidonHash } = require('../src/utils')
 const { Keypair } = require('../src/keypair')
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
 const HASH = require("../build/Hasher.json")
-//const { hAbi, hbytecode } = require("../artifacts/contracts/Hasher.sol/Hasher.json")
 const h = require("usingtellor/test/helpers/helpers.js");
-require('../scripts/compileHasher')
+
 
 async function deploy(contractName, ...args) {
     const Factory = await ethers.getContractFactory(contractName)
@@ -57,9 +56,9 @@ describe("charon tests", function () {
         accounts = await ethers.getSigners();
         verifier2 = await deploy('Verifier2')
         verifier16 = await deploy('Verifier16')
-        //hasher = await deploy('Hasher')
         let Hasher = await ethers.getContractFactory(HASH.abi, HASH.bytecode);
         hasher = await Hasher.deploy();
+        await hasher.deployed()
         token = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey","DSM")
         await token.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
         //deploy tellor
@@ -85,7 +84,8 @@ describe("charon tests", function () {
     });
     it("generates same poseidon hash", async function () {
         const res = await hasher["poseidon(bytes32[2])"]([toFixedHex(1,32), toFixedHex(1,32)]);
-        const res2 = poseidonHash([toFixedHex(1,32), toFixedHex(1,32)]);
+        const res2 = await poseidonHash([toFixedHex(1,32), toFixedHex(1,32)]);
+        console.log(res,res2)
         assert(res - res2 == 0, "should be the same hash");
     }).timeout(500000);
     it("Test Constructor", async function() {

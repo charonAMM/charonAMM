@@ -1,4 +1,4 @@
-const { encrypt, decrypt, getEncryptionPublicKey } = require('eth-sig-util')
+const { encrypt, decrypt, getEncryptionPublicKey } = require('@metamask/eth-sig-util')
 const { ethers } = require('hardhat')
 const { BigNumber } = ethers
 const { poseidonHash, toFixedHex } = require('./utils')

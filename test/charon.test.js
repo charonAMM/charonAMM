@@ -12,6 +12,7 @@ const { Keypair } = require('../src/keypair')
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
 const HASH = require("../build/Hasher.json")
 const h = require("usingtellor/test/helpers/helpers.js");
+const { buildPoseidon } = require("circomlibjs");
 
 
 async function deploy(contractName, ...args) {
@@ -52,7 +53,9 @@ describe("charon tests", function () {
     let verifier2,verifier16,token,charon,hasher,token2,charon2,oracle, oracle2;
     let fee = 0;
     let HEIGHT = 5;
+    let builtPoseidon;
     beforeEach(async function () {
+        builtPoseidon = await buildPoseidon()
         accounts = await ethers.getSigners();
         verifier2 = await deploy('Verifier2')
         verifier16 = await deploy('Verifier16')
@@ -82,10 +85,20 @@ describe("charon tests", function () {
         await charon.finalize([2],[charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd.address);
         await charon2.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd2.address);
     });
+
+    function poseidon(inputs){
+      let val = builtPoseidon(inputs)
+      return builtPoseidon.F.toString(val)
+    }
+
+
+    function poseidon2(a,b){
+      return poseidon([a,b])
+    }
+
     it("generates same poseidon hash", async function () {
         const res = await hasher["poseidon(bytes32[2])"]([toFixedHex(1,32), toFixedHex(1,32)]);
         const res2 = await poseidonHash([toFixedHex(1,32), toFixedHex(1,32)]);
-        console.log(res,res2)
         assert(res - res2 == 0, "should be the same hash");
     }).timeout(500000);
     it("Test Constructor", async function() {
@@ -138,7 +151,7 @@ describe("charon tests", function () {
         
         await token.connect(accounts[1]).approve(charon.address,_amount)
         const sender = accounts[0]
-        const aliceDepositUtxo = new Utxo({ amount: _depositAmount })
+        const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
         charon = charon.connect(sender)
         let inputData = await prepareTransaction({
           charon,
@@ -148,7 +161,9 @@ describe("charon tests", function () {
             owner: sender.address,
             publicKey: aliceDepositUtxo.keypair.address(),
           },
-          privateChainID: 2
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
         })
         let args = inputData.args
         let extData = inputData.extData
@@ -238,7 +253,7 @@ describe("charon tests", function () {
                                                   0)
         await token.connect(accounts[1]).approve(charon.address,_amount)
         const sender = accounts[0]
-        const aliceDepositUtxo = new Utxo({ amount: _depositAmount })
+        const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon })
         charon = charon.connect(sender)
         let inputData = await prepareTransaction({
           charon,
@@ -248,7 +263,9 @@ describe("charon tests", function () {
             owner: sender.address,
             publicKey: aliceDepositUtxo.keypair.address(),
           },
-          privateChainID: 2
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
         })
         let args = inputData.args
         let extData = inputData.extData
@@ -277,7 +294,7 @@ describe("charon tests", function () {
             
             await token.connect(accounts[1]).approve(charon.address,_amount)
             const sender = accounts[0]
-            const aliceDepositUtxo = new Utxo({ amount: _depositAmount })
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon })
             charon = charon.connect(sender)
             let inputData = await prepareTransaction({
               charon,
@@ -287,7 +304,9 @@ describe("charon tests", function () {
                 owner: sender.address,
                 publicKey: aliceDepositUtxo.keypair.address(),
               },
-              privateChainID: 2
+              privateChainID: 2,
+              myHasherFunc: poseidon,
+              myHasherFunc2: poseidon2
             })
             let args = inputData.args
             let extData = inputData.extData
@@ -304,19 +323,22 @@ describe("charon tests", function () {
             let tx = await charon2.oracleDeposit([1],[1]);  
             // Alice sends some funds to withdraw (ignore bob)
             let bobSendAmount = utils.parseEther('4')
-            const bobKeypair = new Keypair() // contains private and public keys
+            const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
  // contains private and public keys
             const bobAddress = bobKeypair.address() // contains only public key
-            const bobSendUtxo = new Utxo({ amount: bobSendAmount, keypair: Keypair.fromString(bobAddress) })
+            const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon) })
             let aliceChangeUtxo = new Utxo({
                 amount: _depositAmount.sub(bobSendAmount),
+                myHashFunc: poseidon,
                 keypair: aliceDepositUtxo.keypair,
             })
             inputData = await prepareTransaction({
                 charon: charon2,
                 inputs:[aliceDepositUtxo],
                 outputs: [bobSendUtxo, aliceChangeUtxo],
-                privateChainID: 2
+                privateChainID: 2,
+                myHasherFunc: poseidon,
+                myHasherFunc2: poseidon2
               })
             args = inputData.args
             extData = inputData.extData
@@ -344,7 +366,7 @@ describe("charon tests", function () {
                                                       0)
             await token.connect(accounts[1]).approve(charon.address,_amount)
             const sender = accounts[0]
-            const aliceDepositUtxo = new Utxo({ amount: _depositAmount })
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
             charon = charon.connect(sender)
             let inputData = await prepareTransaction({
               charon,
@@ -354,7 +376,9 @@ describe("charon tests", function () {
                 owner: sender.address,
                 publicKey: aliceDepositUtxo.keypair.address(),
               },
-              privateChainID: 2
+              privateChainID: 2,
+              myHasherFunc: poseidon,
+              myHasherFunc2: poseidon2
             })
             let args = inputData.args
             let extData = inputData.extData
@@ -375,7 +399,9 @@ describe("charon tests", function () {
                 inputs: [aliceDepositUtxo],
                 outputs: [],
                 recipient: accounts[1].address,
-                privateChainID: 2
+                privateChainID: 2,
+                myHasherFunc: poseidon,
+                myHasherFunc2: poseidon2
             })
             await charon2.transact(inputData.args,inputData.extData)
             assert(await chd2.balanceOf(accounts[1].address) - _depositAmount == 0, "should mint CHD");

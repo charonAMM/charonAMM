@@ -33,20 +33,26 @@ function unpackEncryptedMessage(encryptedMessage) {
   }
 }
 
+async function dPoseidon(input){
+  return await poseidonHash(input);
+}
+
 class Keypair {
   /**
    * Initialize a new keypair. Generates a random private key if not defined
    *
    * @param {string} privkey
    */
-  constructor(privkey = ethers.Wallet.createRandom().privateKey) {
+  constructor({privkey = ethers.Wallet.createRandom().privateKey, myHashFunc=poseidonHash}) {
     this.privkey = privkey
-    this.pubkey = poseidonHash([this.privkey])
+    console.log(privkey)
+    this.pubkey = myHashFunc([privkey])
     this.encryptionKey = getEncryptionPublicKey(privkey.slice(2))
   }
 
-  toString() {
-    return toFixedHex(this.pubkey) + Buffer.from(this.encryptionKey, 'base64').toString('hex')
+  async toString() {
+    let key = await this.pubkey
+    return toFixedHex(key) + Buffer.from(this.encryptionKey, 'base64').toString('hex')
   }
 
   /**
@@ -64,14 +70,14 @@ class Keypair {
    * @param str
    * @returns {Keypair}
    */
-  static fromString(str) {
+  static fromString(str,myHashFunc) {
     if (str.length === 130) {
       str = str.slice(2)
     }
     if (str.length !== 128) {
       throw new Error('Invalid key length')
     }
-    return Object.assign(new Keypair(), {
+    return Object.assign(new Keypair({myHashFunc: myHashFunc}), {
       privkey: null,
       pubkey: BigNumber.from('0x' + str.slice(0, 64)),
       encryptionKey: Buffer.from(str.slice(64, 128), 'hex').toString('base64'),
@@ -85,8 +91,8 @@ class Keypair {
    * @param {string|number|BigNumber} merklePath a hex string with merkle path
    * @returns {BigNumber} a hex string with signature
    */
-  sign(commitment, merklePath) {
-    return poseidonHash([this.privkey, commitment, merklePath])
+  sign({commitment, merklePath,hashFunc = poseidonHash}) {
+    return hashFunc([this.privkey, commitment, merklePath])
   }
 
   /**
@@ -97,7 +103,7 @@ class Keypair {
    */
   encrypt(bytes) {
     return packEncryptedMessage(
-      encrypt(this.encryptionKey, { data: bytes.toString('base64') }, 'x25519-xsalsa20-poly1305'),
+      encrypt({publicKey: this.encryptionKey, data: bytes.toString('base64'), version:'x25519-xsalsa20-poly1305'}),
     )
   }
 

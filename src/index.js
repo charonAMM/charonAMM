@@ -4,15 +4,18 @@ const { ethers } = require('hardhat')
 const { BigNumber } = ethers
 const { toFixedHex, poseidonHash2, getExtDataHash, FIELD_SIZE, shuffle } = require('./utils')
 const Utxo = require('./utxo')
-
+const zero = "21663839004416932945382355908790599225266501822907911457504978515578255421292"
 const { prove } = require('./prover')
 const MERKLE_TREE_HEIGHT = 5
 
-async function buildMerkleTree(charon) {
+
+async function buildMerkleTree(charon, hasherFunc) {
   let filter = charon.filters.NewCommitment()
   const events = await charon.queryFilter(filter, 0)
   const leaves = events.sort((a, b) => a.args._index - b.args._index).map((e) => toFixedHex(e.args._commitment))
-  return new MerkleTree(MERKLE_TREE_HEIGHT, leaves, { hashFunction: poseidonHash2 })
+  let tree = await new MerkleTree.default(MERKLE_TREE_HEIGHT, leaves, { hashFunction: hasherFunc, zeroElement: zero })
+  return tree
+  //return new MerkleTree(MERKLE_TREE_HEIGHT, leaves, { hashFunction: poseidonHash2 })
 }
 
 async function getProof({
@@ -23,7 +26,8 @@ async function getProof({
   fee,
   recipient,
   relayer,
-  privateChainID
+  privateChainID,
+  myHasherFunc
 }) {
   inputs = shuffle(inputs)
   outputs = shuffle(outputs)
@@ -33,9 +37,9 @@ async function getProof({
 
   for (const input of inputs) {
     if (input.amount > 0) {
-      input.index = tree.indexOf(toFixedHex(input.getCommitment()))
+      input.index = tree.indexOf(toFixedHex(input.getCommitment(myHasherFunc)))
       if (input.index < 0) {
-        throw new Error(`Input commitment ${toFixedHex(input.getCommitment())} was not found`)
+        throw new Error(`Input commitment ${toFixedHex(input.getCommitment(myHasherFunc))} was not found`)
       }
       inputMerklePathIndices.push(input.index)
       inputMerklePathElements.push(tree.path(input.index).pathElements)
@@ -55,13 +59,14 @@ async function getProof({
   }
 
   const extDataHash = getExtDataHash(extData)
+  console.log(inputs)
   let input = {
-    root: tree.root(),
+    root: await tree.root,
     chainID: privateChainID,
     publicAmount: BigNumber.from(extAmount).sub(fee).add(FIELD_SIZE).mod(FIELD_SIZE).toString(),
     extDataHash: extDataHash,
-    inputNullifier: inputs.map((x) => x.getNullifier()),
-    outputCommitment: outputs.map((x) => x.getCommitment()),
+    inputNullifier: await Promise.all(inputs.map((x) => x.getNullifier(myHasherFunc))),
+    outputCommitment: await Promise.all(outputs.map((x) => x.getCommitment(myHasherFunc))),
 
     // data for 2 transaction inputs
     privateChainID: privateChainID,
@@ -74,10 +79,10 @@ async function getProof({
     // data for 2 transaction outputs
     outAmount: outputs.map((x) => x.amount),
     outBlinding: outputs.map((x) => x.blinding),
-    outPubkey: outputs.map((x) => x.keypair.pubkey),
+    outPubkey: await Promise.all(outputs.map((x) => x.keypair.pubkey)),
   }
 
-  const proof = await prove(input, `./artifacts/circuits/transaction${inputs.length}`)
+  const proof = await prove(input, `./artifacts/circuits/transaction${inputs.length}_js/transaction${inputs.length}`, `./artifacts/circuits//transaction${inputs.length}`)
 
   const args = {
     proof,
@@ -87,7 +92,6 @@ async function getProof({
     publicAmount: toFixedHex(input.publicAmount),
     extDataHash: toFixedHex(extDataHash),
   }
-
   return {
     extData,
     args,
@@ -102,15 +106,17 @@ async function prepareTransaction({
   recipient = 0,
   relayer = 0,
   privateChainID = 2,
+  myHasherFunc,
+  myHasherFunc2
 }) {
   if (inputs.length > 16 || outputs.length > 2) {
     throw new Error('Incorrect inputs/outputs count')
   }
   while (inputs.length !== 2 && inputs.length < 16) {
-    inputs.push(new Utxo())
+    inputs.push(new Utxo({myHashFunc:myHasherFunc}))
   }
   while (outputs.length < 2) {
-    outputs.push(new Utxo())
+    outputs.push(new Utxo({myHashFunc:myHasherFunc}))
   }
   let extAmount = BigNumber.from(fee)
     .add(outputs.reduce((sum, x) => sum.add(x.amount), BigNumber.from(0)))
@@ -119,12 +125,13 @@ async function prepareTransaction({
   const { args, extData } = await getProof({
     inputs,
     outputs,
-    tree: await buildMerkleTree(charon),
+    tree: await buildMerkleTree(charon, myHasherFunc2),
     extAmount,
     fee,
     recipient,
     relayer,
     privateChainID,
+    myHasherFunc
   })
 
   return {

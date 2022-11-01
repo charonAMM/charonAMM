@@ -45,13 +45,12 @@ class Keypair {
    */
   constructor({privkey = ethers.Wallet.createRandom().privateKey, myHashFunc=poseidonHash}) {
     this.privkey = privkey
-    console.log(privkey)
     this.pubkey = myHashFunc([privkey])
     this.encryptionKey = getEncryptionPublicKey(privkey.slice(2))
   }
 
   async toString() {
-    let key = await this.pubkey
+    let key = this.pubkey
     return toFixedHex(key) + Buffer.from(this.encryptionKey, 'base64').toString('hex')
   }
 

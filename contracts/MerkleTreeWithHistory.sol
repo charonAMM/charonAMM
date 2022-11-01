@@ -27,7 +27,8 @@ contract MerkleTreeWithHistory {
     hasher = IHasher(_hasher);
   }
 
-  function _initialize() internal {
+  function initialize() public {
+    require(_zeros[0] == bytes32(0));
     _zeros[0] = bytes32(ZERO_VALUE);
     for(uint32 i =1; i<= 32; i++){
       _zeros[i] = hasher.poseidon([_zeros[i-1], _zeros[i-1]]);

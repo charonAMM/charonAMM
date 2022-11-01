@@ -73,10 +73,12 @@ describe("charon tests", function () {
         oracle = await deploy('Oracle',tellor.address)
         oracle2 = await deploy('Oracle',tellor2.address)
         charon = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token.address,fee,oracle.address,HEIGHT,1,"Charon Pool Token","CPT")
+        await charon.initialize()
         //now deploy on other chain (same chain, but we pretend w/ oracles)
         token2 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
         charon2 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,oracle2.address,HEIGHT,2,"Charon Pool Token2","CPT2");
+        await charon2.initialize()
         chd = await deploy("MockERC20",charon.address,"charon dollar","chd")
         chd2 = await deploy("MockERC20",charon2.address,"charon dollar2","chd2")
         //now set both of them. 
@@ -90,7 +92,6 @@ describe("charon tests", function () {
       let val = builtPoseidon(inputs)
       return builtPoseidon.F.toString(val)
     }
-
 
     function poseidon2(a,b){
       return poseidon([a,b])
@@ -320,12 +321,14 @@ describe("charon tests", function () {
             let commi = await getTellorSubmission(args,extData);
             await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
             await h.advanceTime(43200)//12 hours
+            console.log(await charon2.getLastRoot())
             let tx = await charon2.oracleDeposit([1],[1]);  
             // Alice sends some funds to withdraw (ignore bob)
             let bobSendAmount = utils.parseEther('4')
             const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
  // contains private and public keys
-            const bobAddress = bobKeypair.address() // contains only public key
+            const bobAddress = await bobKeypair.address() // contains only public key
+            console.log("a", bobAddress)
             const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon) })
             let aliceChangeUtxo = new Utxo({
                 amount: _depositAmount.sub(bobSendAmount),
@@ -342,6 +345,8 @@ describe("charon tests", function () {
               })
             args = inputData.args
             extData = inputData.extData
+            console.log("last root", await charon2.getLastRoot())
+            console.log("input root", inputData.args.root)
             assert(await charon2.isKnownRoot(inputData.args.root));
             await charon2.transact(args,extData)
                 // Bob parses chain to detect incoming funds
@@ -403,6 +408,8 @@ describe("charon tests", function () {
                 myHasherFunc: poseidon,
                 myHasherFunc2: poseidon2
             })
+            console.log("here")
+            console.log(inputData.args,inputData.extData)
             await charon2.transact(inputData.args,inputData.extData)
             assert(await chd2.balanceOf(accounts[1].address) - _depositAmount == 0, "should mint CHD");
         })

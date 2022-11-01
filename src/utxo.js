@@ -51,7 +51,6 @@ class Utxo {
         merklePath: this.index || 0,
         hashFunc: poseidonFunc
       }) : 0
-      console.log("h", this.getCommitment(poseidonFunc), this.index , 0, signature)
       this._nullifier = poseidonFunc([this.getCommitment(poseidonFunc), this.index || 0, signature])
     }
     return this._nullifier

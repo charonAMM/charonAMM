@@ -8,7 +8,7 @@ import "./helpers/Math.sol";
 import "./interfaces/IOracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
-
+import "hardhat/console.sol";
 
 /**
  @title charon
@@ -526,11 +526,43 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         nullifierHashes[_args.inputNullifiers[_i]] = true;
         emit NewNullifier(_args.inputNullifiers[_i]);
       }
+      console.log("h");
+      console.log(bytes32ToString(_args.outputCommitments[0]));
+      console.log(bytes32ToString(_args.outputCommitments[1]));
       _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
       emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
       emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
     }
-  
+    
+function bytes32ToString(bytes32 data) 
+    public
+    pure
+    returns (string memory result) 
+{
+    bytes memory temp = new bytes(65);
+    uint256 count;
+
+    for (uint256 i = 0; i < 32; i++) {
+        bytes1 currentByte = bytes1(data << (i * 8));
+        
+        uint8 c1 = uint8(
+            bytes1((currentByte << 4) >> 4)
+        );
+        
+        uint8 c2 = uint8(
+            bytes1((currentByte >> 4))
+        );
+    
+        if (c2 >= 0 && c2 <= 9) temp[++count] = bytes1(c2 + 48);
+        else temp[++count] = bytes1(c2 + 87);
+        
+        if (c1 >= 0 && c1 <= 9) temp[++count] = bytes1(c1 + 48);
+        else temp[++count] = bytes1(c1 + 87);
+    }
+    
+    result = string(temp);
+}
+
   function _verifyProof(Proof memory _args) internal view returns (bool) {
     uint[2] memory _a;
     uint[2][2] memory _b;

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 const MerkleTree = require('fixed-merkle-tree')
 const { ethers } = require('hardhat')
 const { BigNumber } = ethers
@@ -8,12 +7,13 @@ const zero = "216638390044169329453823559087905992252665018229079114575049785155
 const { prove } = require('./prover')
 const MERKLE_TREE_HEIGHT = 5
 
-
 async function buildMerkleTree(charon, hasherFunc) {
   let filter = charon.filters.NewCommitment()
   const events = await charon.queryFilter(filter, 0)
   const leaves = events.sort((a, b) => a.args._index - b.args._index).map((e) => toFixedHex(e.args._commitment))
-  let tree = await new MerkleTree.default(MERKLE_TREE_HEIGHT, leaves, { hashFunction: hasherFunc, zeroElement: zero })
+  console.log("leaves", leaves)
+  let tree = await new MerkleTree.default(MERKLE_TREE_HEIGHT,[], { hashFunction: hasherFunc, zeroElement: zero })
+  await tree.bulkInsert(leaves)
   return tree
   //return new MerkleTree(MERKLE_TREE_HEIGHT, leaves, { hashFunction: poseidonHash2 })
 }
@@ -59,7 +59,6 @@ async function getProof({
   }
 
   const extDataHash = getExtDataHash(extData)
-  console.log(inputs)
   let input = {
     root: await tree.root,
     chainID: privateChainID,

@@ -8,7 +8,6 @@ import "./helpers/Math.sol";
 import "./interfaces/IOracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
-import "hardhat/console.sol";
 
 /**
  @title charon
@@ -526,9 +525,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         nullifierHashes[_args.inputNullifiers[_i]] = true;
         emit NewNullifier(_args.inputNullifiers[_i]);
       }
-      console.log("h");
-      console.log(bytes32ToString(_args.outputCommitments[0]));
-      console.log(bytes32ToString(_args.outputCommitments[1]));
       _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
       emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
       emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);

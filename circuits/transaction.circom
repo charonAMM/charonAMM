@@ -1,6 +1,7 @@
+pragma circom 2.0.4;
 include "../node_modules/circomlib/circuits/poseidon.circom";
-include "./merkleProof.circom"
-include "./keypair.circom"
+include "./merkleProof.circom";
+include "./keypair.circom";
 
 /*
 Utxo structure:
@@ -25,19 +26,19 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
     signal input extDataHash;
 
     // data for transaction inputs
-    signal         input inputNullifier[nIns];
-    signal private input inAmount[nIns];
-    signal private input inPrivateKey[nIns];
-    signal private input inBlinding[nIns];
-    signal private input inPathIndices[nIns];
-    signal private input inPathElements[nIns][levels];
-    signal private input privateChainID;
+    signal input inputNullifier[nIns];
+    signal input inAmount[nIns];
+    signal input inPrivateKey[nIns];
+    signal input inBlinding[nIns];
+    signal input inPathIndices[nIns];
+    signal input inPathElements[nIns][levels];
+    signal input privateChainID;
 
     // data for transaction outputs
-    signal         input outputCommitment[nOuts];
-    signal private input outAmount[nOuts];
-    signal private input outPubkey[nOuts];
-    signal private input outBlinding[nOuts];
+    signal input outputCommitment[nOuts];
+    signal input outAmount[nOuts];
+    signal input outPubkey[nOuts];
+    signal input outBlinding[nOuts];
 
     component inKeypair[nIns];
     component inSignature[nIns];

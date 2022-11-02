@@ -11,7 +11,7 @@ class Utxo {
    * @param {Keypair} keypair
    * @param {number|null} index UTXO index in the merkle tree
    */
-  constructor({ amount = 0, keypair = new Keypair(), blinding = randomBN(), index = null } = {}) {
+  constructor({ amount = 0,myHashFunc = poseidonHash, keypair = new Keypair({myHashFunc:myHashFunc}), blinding = randomBN(), index = null } = {}) {
     this.amount = BigNumber.from(amount)
     this.blinding = BigNumber.from(blinding)
     this.keypair = keypair
@@ -23,9 +23,9 @@ class Utxo {
    *
    * @returns {BigNumber}
    */
-  getCommitment() {
+  getCommitment(poseidonFunc) {
     if (!this._commitment) {
-      this._commitment = poseidonHash([this.amount, this.keypair.pubkey, this.blinding])
+      this._commitment = poseidonFunc([this.amount, this.keypair.pubkey, this.blinding])
     }
     return this._commitment
   }
@@ -35,7 +35,7 @@ class Utxo {
    *
    * @returns {BigNumber}
    */
-  getNullifier() {
+  getNullifier(poseidonFunc) {
     if (!this._nullifier) {
       if (
         this.amount > 0 &&
@@ -46,8 +46,12 @@ class Utxo {
       ) {
         throw new Error('Can not compute nullifier without utxo index or private key')
       }
-      const signature = this.keypair.privkey ? this.keypair.sign(this.getCommitment(), this.index || 0) : 0
-      this._nullifier = poseidonHash([this.getCommitment(), this.index || 0, signature])
+      const signature = this.keypair.privkey ? this.keypair.sign({
+        commitment: this.getCommitment(poseidonFunc),
+        merklePath: this.index || 0,
+        hashFunc: poseidonFunc
+      }) : 0
+      this._nullifier = poseidonFunc([this.getCommitment(poseidonFunc), this.index || 0, signature])
     }
     return this._nullifier
   }

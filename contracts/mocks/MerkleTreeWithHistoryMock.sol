@@ -10,7 +10,7 @@ contract MerkleTreeWithHistoryMock is MerkleTreeWithHistory {
     return _insert(_leaf1, _leaf2);
   }
 
-  function initialize() external {
-    super._initialize();
-  }
+  // function initialize() external {
+  //   super._initialize();
+  // }
 }

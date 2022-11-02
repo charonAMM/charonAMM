@@ -12,7 +12,7 @@
         "changeTreeHeight": "./scripts/changeTreeHeight.sh",
         "compile:hasher": "npx hardhat hasher",
         "compile": "npx hardhat compile && yarn compile:hasher",
-        "build": "npm run circuit_build && npm run compile",
+        "build": "npm run circuit && npm run compile",
         "deploy": "npx hardhat run scripts/deploy.js --network optimism",
         "test": "npx hardhat test",
         "eslint": "eslint --ext .js --ignore-path .gitignore .",

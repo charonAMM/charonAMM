@@ -13,7 +13,7 @@ The build step compiles the circuit, does untrusted setup, generates verifier co
 
 ```sh
 npm i
-yarn build
+npm run build
 npx hardhat test
 ```
 

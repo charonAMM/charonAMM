@@ -114,14 +114,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
 
     //modifiers
     /**
-     * @dev prevents reentrancy in function
-    */
-    modifier _lock_() {
-        require(!mutex|| msg.sender == address(verifier2) || msg.sender == address(verifier16));
-        mutex = true;_;mutex = false;
-    }
-
-    /**
      * @dev requires a function to be finalized or the caller to be the controlller
     */
     modifier _finalized_() {
@@ -231,7 +223,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
             _min = _tokenAmount / 50;
           }
           require(chd.transfer(msg.sender, _min));
-          userRewards -= _min;
+          userRewardsCHD -= _min;
         }
         recordBalance += _tokenAmount;
         emit DepositToOtherChain(_isCHD,msg.sender, block.timestamp, _tokenAmount);
@@ -250,7 +242,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                       uint256 _balance,
                       uint256 _synthBalance, 
                       address _chd) 
-                      external _lock_ {
+                      external{
         require(msg.sender == controller, "should be controller");
         require(!finalized, "should be finalized");
         finalized = true;
@@ -274,7 +266,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      */
     function lpDeposit(uint256 _poolAmountOut, uint256 _maxCHDIn, uint256 _maxBaseAssetIn)
         external
-        _lock_
         _finalized_
     {   
         uint256 _ratio = _bdiv(_poolAmountOut, supply);
@@ -298,7 +289,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @param _tokenAmountIn amount of CHD to deposit
      * @param _minPoolAmountOut minimum number of pool tokens you need out
      */
-    function lpSingleCHD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external _finalized_ _lock_{
+    function lpSingleCHD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external _finalized_{
         uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
                             recordBalanceSynth,//pool tokenIn balance
                             supply,
@@ -321,7 +312,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     function lpWithdraw(uint _poolAmountIn, uint256 _minCHDOut, uint256 _minBaseAssetOut)
         external
         _finalized_
-        _lock_
         returns (uint256 _tokenAmountOut)
     {
         uint256 _exitFee = _bmul(_poolAmountIn, fee);
@@ -348,7 +338,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @param _poolAmountIn amount of pool tokens to deposit
      * @param _minAmountOut minimum amount of CHD you need out
      */
-    function lpWithdrawSingleCHD(uint256 _poolAmountIn, uint256 _minAmountOut) external _finalized_ _lock_{
+    function lpWithdrawSingleCHD(uint256 _poolAmountIn, uint256 _minAmountOut) external _finalized_{
         uint256 _tokenAmountOut = calcSingleOutGivenPoolIn(
                             recordBalanceSynth,
                             supply,
@@ -396,7 +386,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         uint256 _minAmountOut,
         uint256 _maxPrice
     )
-        external _finalized_ _lock_
+        external _finalized_
         returns (uint256 _tokenAmountOut, uint256 _spotPriceAfter){
         uint256 _inRecordBal;
         uint256 _outRecordBal;
@@ -456,7 +446,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       }
 
   //lets you do secret transfers / withdraw + mintCHD
-  function transact(Proof memory _args, ExtData memory _extData) external _finalized_ _lock_{
+  function transact(Proof memory _args, ExtData memory _extData) external _finalized_{
       int256 _publicAmount = _extData.extAmount - int256(_extData.fee);
       if(_publicAmount < 0){
         _publicAmount = int256(FIELD_SIZE - uint256(-_publicAmount));

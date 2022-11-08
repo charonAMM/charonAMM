@@ -32,11 +32,11 @@ contract Math{
         public pure
         returns (uint256 tokenAmountOut)
     {
-        uint256 adjustedIn = BONE - swapFee;
-        adjustedIn = _bmul(tokenAmountIn, adjustedIn);
-        uint256 y = _bdiv(tokenBalanceIn, (tokenBalanceIn + adjustedIn));
-        uint256 bar = BONE - y;
-        tokenAmountOut = _bmul(tokenBalanceOut, bar);
+        uint256 _adjustedIn = BONE - swapFee;
+        _adjustedIn = _bmul(tokenAmountIn, _adjustedIn);
+        uint256 _y = _bdiv(tokenBalanceIn, (tokenBalanceIn + _adjustedIn));
+        uint256 _bar = BONE - _y;
+        tokenAmountOut = _bmul(tokenBalanceOut, _bar);
     }
 
     function calcInGivenOut(
@@ -48,11 +48,11 @@ contract Math{
         public pure
         returns (uint256 tokenAmountIn)
     {
-        uint256 diff = _bsub(tokenBalanceOut, tokenAmountOut);
-        uint256 y = _bdiv(tokenBalanceOut, diff);
-        uint256 foo = _bsub(y, BONE);
+        uint256 _diff = _bsub(tokenBalanceOut, tokenAmountOut);
+        uint256 _y = _bdiv(tokenBalanceOut, _diff);
+        uint256 _foo = _bsub(_y, BONE);
         tokenAmountIn = _bsub(BONE, swapFee);
-        tokenAmountIn = _bdiv(_bmul(tokenBalanceIn, foo), tokenAmountIn);
+        tokenAmountIn = _bdiv(_bmul(tokenBalanceIn, _foo), tokenAmountIn);
     }
 
     function calcPoolOutGivenSingleIn(

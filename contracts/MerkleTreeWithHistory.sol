@@ -71,7 +71,6 @@ contract MerkleTreeWithHistory {
       currentLevelHash = hashLeftRight(left, right);
       currentIndex /= 2;
     }
-
     uint32 newRootIndex = (currentRootIndex + 1) % ROOT_HISTORY_SIZE;
     currentRootIndex = newRootIndex;
     roots[newRootIndex] = currentLevelHash;

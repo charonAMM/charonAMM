@@ -96,8 +96,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     uint256 public fee;//fee when liquidity is withdrawn or trade happens
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
-    uint256 public userRewards;
-    uint256 public userRewardsCHD;
+    uint256 public userRewards;//amount of baseToken user rewards in contract
+    uint256 public userRewardsCHD;//amount of chd user rewards in contract
     mapping(bytes32 => uint256) public depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
 
@@ -519,35 +519,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
       emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
     }
-    
-function bytes32ToString(bytes32 data) 
-    public
-    pure
-    returns (string memory result) 
-{
-    bytes memory temp = new bytes(65);
-    uint256 count;
-
-    for (uint256 i = 0; i < 32; i++) {
-        bytes1 currentByte = bytes1(data << (i * 8));
-        
-        uint8 c1 = uint8(
-            bytes1((currentByte << 4) >> 4)
-        );
-        
-        uint8 c2 = uint8(
-            bytes1((currentByte >> 4))
-        );
-    
-        if (c2 >= 0 && c2 <= 9) temp[++count] = bytes1(c2 + 48);
-        else temp[++count] = bytes1(c2 + 87);
-        
-        if (c1 >= 0 && c1 <= 9) temp[++count] = bytes1(c1 + 48);
-        else temp[++count] = bytes1(c1 + 87);
-    }
-    
-    result = string(temp);
-}
 
   function _verifyProof(Proof memory _args) internal view returns (bool) {
     uint[2] memory _a;

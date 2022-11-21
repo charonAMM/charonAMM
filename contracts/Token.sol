@@ -119,16 +119,6 @@ contract Token{
     }
 
     /**Internal Functions */
-    /**
-     * @dev mints tokens
-     * @param _to address of recipient
-     * @param _amount amount of token to send
-     */
-    function _mint(address _to,uint256 _amount) internal {
-        balance[_to] = balance[_to] + _amount;
-        supply = supply + _amount;
-        emit Transfer(address(0), _to, _amount);
-    }
 
     /**
      * @dev burns tokens
@@ -139,6 +129,17 @@ contract Token{
         balance[_from] = balance[_from] - _amount;//will overflow if too big
         supply = supply - _amount;
         emit Transfer(_from, address(0), _amount);
+    }
+
+    /**
+     * @dev mints tokens
+     * @param _to address of recipient
+     * @param _amount amount of token to send
+     */
+    function _mint(address _to,uint256 _amount) internal {
+        balance[_to] = balance[_to] + _amount;
+        supply = supply + _amount;
+        emit Transfer(address(0), _to, _amount);
     }
 
     /**

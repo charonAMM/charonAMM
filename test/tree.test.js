@@ -56,8 +56,11 @@ describe('MerkleTreeWithHistory', function () {
       const zeroValue = await merkleTreeWithHistory.ZERO_VALUE()
       const firstSubtree = await merkleTreeWithHistory.filledSubtrees(0)
       const firstZero = await merkleTreeWithHistory.zeros(0)
+      assert(await merkleTreeWithHistory.hasher() == hasher.address, "hasher should be set")
+      assert(await merkleTreeWithHistory.levels() == MERKLE_TREE_HEIGHT, "height should be set")
       expect(firstSubtree).to.be.equal(zeroValue)
       expect(firstZero).to.be.equal(zeroValue)
+      await expect(merkleTreeWithHistory.initialize()).to.be.reverted;
     })
 
     it('should have correct merkle root', async () => {

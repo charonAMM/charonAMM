@@ -2,21 +2,31 @@ const { expect, assert } = require("chai");
 const { ethers } = require("hardhat");
 const web3 = require('web3');
 const h = require("usingtellor/test/helpers/helpers.js");
+const abiCoder = new ethers.utils.AbiCoder()
+const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
 
 describe("charon system - function tests", function() {
-    let token,math;
+    let token,math,chd,oracle,tellor;
     beforeEach(async function () {
         accounts = await ethers.getSigners();
         let fac = await ethers.getContractFactory("MockERC20");
         token = await fac.deploy(accounts[1].address,"mock token", "MT");
         await token.deployed();
-
         fac = await ethers.getContractFactory("MockMath")
         math = await fac.deploy()
         await math.deployed()
+        fac = await ethers.getContractFactory("CHD")
+        chd = await fac.deploy(accounts[1].address,"testchd","tc")
+        await chd.deployed()
+        let TellorOracle = await ethers.getContractFactory(abi, bytecode);
+        tellor = await TellorOracle.deploy();
+        await tellor.deployed();
+        fac = await ethers.getContractFactory("Oracle")
+        oracle = await fac.deploy(tellor.address)
+        await oracle.deployed();
     });
-    console.log("Token.sol")
     it("constructor()", async function() {
+        console.log("Token.sol")
             assert(await token.name() == "mock token")
             assert(await token.symbol() == "MT")
     });
@@ -56,8 +66,8 @@ describe("charon system - function tests", function() {
         assert(await token.balanceOf(accounts[2].address) == web3.utils.toWei("80"), "burn should work")
         await expect(token.connect(accounts[3]).burn(accounts[2].address,web3.utils.toWei("100"))).to.be.reverted;
         });
-    console.log("Math.sol")
     it("calcSpotPrice()", async function() {
+        console.log("Math.sol")
         assert(await math.calcSpotPrice(web3.utils.toWei("100"),web3.utils.toWei("10"),0) == web3.utils.toWei("10"), "spot price should be correct")
     });
     it("calcOutGivenIn()", async function() {
@@ -106,9 +116,33 @@ describe("charon system - function tests", function() {
     });
     console.log("Oracle.sol -- to write")
     it("constructor()", async function() {
+        assert(await oracle.tellor() == tellor.address, "tellor contract should be set properly")
     });
-    console.log("CHD.sol -- to write")
+    it("getCommitment()", async function(){
+        let _queryData = abiCoder.encode(
+            ['string', 'bytes'],
+            ['Charon', abiCoder.encode(
+                ['uint256','uint256'],
+                [1,1]
+            )]
+            );
+            _queryId = h.hash(_queryData)
+        let _value = 100
+        await tellor.submitValue(_queryId, _value,0, _queryData);
+        await h.advanceTime(86400)
+        assert(await oracle.getCommitment(1,1) == 100, "value should be correct")
+    })
     it("constructor()", async function() {
+        console.log("CHD.sol")
+        assert(await chd.charon() == accounts[1].address, "charon should be set")
+    });
+    it("burn() and mint()", async function() {
+        await chd.connect(accounts[1]).mintCHD(accounts[2].address,web3.utils.toWei("100"))
+        assert(await chd.balanceOf(accounts[2].address) == web3.utils.toWei("100"), "mint should work")
+        await expect(chd.connect(accounts[3]).burnCHD(accounts[2].address,web3.utils.toWei("10"))).to.be.reverted;
+        await chd.connect(accounts[1]).burnCHD(accounts[2].address,web3.utils.toWei("50"))
+        assert(await chd.balanceOf(accounts[2].address) == web3.utils.toWei("50"), "burn should work")
+        await expect(chd.connect(accounts[3]).mintCHD(accounts[3].address,web3.utils.toWei("10"))).to.be.reverted;
     });
     console.log("Verifier16.sol -- to write")
     it("constructor()", async function() {

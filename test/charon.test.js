@@ -113,34 +113,34 @@ describe("charon tests", function () {
         assert(await charon.controller() == accounts[0].address, "controller should be set")
         assert(await charon.chainID() == 1, "chainID should be correct")
       });
-      it("Test changeController", async function() {
-        await charon.changeController(accounts[1].address)
-        assert(await charon.controller() == accounts[1].address, "controller should change")
-      });
-      it("Test getTokens()", async function() {
-        let toks = await charon.getTokens()
-        assert(toks[0] == chd.address, "chd should be slot 0")
-        assert(toks[1] == token.address, "token should be slot 1")
-      });
-      it("Test addUserRewards()", async function() {
-        await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
-        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
-        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),true);
-        assert(await charon.userRewardsCHD() == web3.utils.toWei("50"))
-        await token.mint(accounts[1].address,web3.utils.toWei("1000"))
-        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
-        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),false);
-        assert(await charon.userRewards() == web3.utils.toWei("50"))
-      });
       it("Test addLPRewards()", async function() {
         await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await h.expectThrow(charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),true))
         await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
         await charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),true);
         assert(await charon.recordBalanceSynth() == web3.utils.toWei("1050"))
         await token.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await h.expectThrow(charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),false))
         await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
         await charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),false);
         assert(await charon.recordBalance() == web3.utils.toWei("150"))
+      });
+      it("Test addUserRewards()", async function() {
+        await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await h.expectThrow(charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),true))
+        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
+        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),true);
+        assert(await charon.userRewardsCHD() == web3.utils.toWei("50"))
+        await token.mint(accounts[1].address,web3.utils.toWei("1000"))
+        await h.expectThrow(charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),false))
+        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
+        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),false);
+        assert(await charon.userRewards() == web3.utils.toWei("50"))
+      });
+      it("Test changeController", async function() {
+        await h.expectThrow(charon.connect(accounts[2]).changeController(accounts[2].address))
+        await charon.changeController(accounts[1].address)
+        assert(await charon.controller() == accounts[1].address, "controller should change")
       });
       it("Test depositToOtherChain", async function() {
         let _depositAmount = web3.utils.toWei("10");
@@ -150,7 +150,6 @@ describe("charon tests", function () {
                                                   _depositAmount,
                                                   0)
         
-        await token.connect(accounts[1]).approve(charon.address,_amount)
         const sender = accounts[0]
         const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
         charon = charon.connect(sender)
@@ -168,6 +167,9 @@ describe("charon tests", function () {
         })
         let args = inputData.args
         let extData = inputData.extData
+        await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,false))
+        await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,true))
+        await token.connect(accounts[1]).approve(charon.address,_amount)
         await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
         let commi = await charon.getDepositCommitmentsById(1);
         assert(commi[1].proof == args.proof, "commitment a should be stored")
@@ -516,5 +518,10 @@ describe("charon tests", function () {
                        console.log('transact (16)', gas- 0)
                        await charon2.transact(args,extData)
         })
+        it("Test getTokens()", async function() {
+          let toks = await charon.getTokens()
+          assert(toks[0] == chd.address, "chd should be slot 0")
+          assert(toks[1] == token.address, "token should be slot 1")
+        });
   
 });

@@ -105,12 +105,13 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     event ControllerChanged(address _newController);
     event DepositToOtherChain(bool _isCHD, address _sender, uint256 _timestamp, uint256 _tokenAmount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
+    event LPRewardAdded(uint256 _amount,bool _isCHD);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
-    event LPWithdrawSingleCHD(address _lp,uint256 _tokenAmountOut);
     event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput);
     event NewNullifier(bytes32 _nullifier);
     event OracleDeposit(uint256[] _chain, uint256[] _depositId);
     event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
+    event UserRewardAdded(uint256 _amount,bool _isCHD);
 
     //modifiers
     /**
@@ -165,6 +166,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         recordBalance += _amount;
         require(token.transferFrom(msg.sender,address(this),_amount));
       }
+      emit LPRewardAdded(_amount, _isCHD);
     }
 
     function addUserRewards(uint256 _amount, bool _isCHD) external{
@@ -176,6 +178,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         require(token.transferFrom(msg.sender,address(this),_amount));
         userRewards += _amount;
       }
+      emit UserRewardAdded(_amount, _isCHD);
     }
 
     /**
@@ -299,7 +302,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         require(_poolAmountOut >= _minPoolAmountOut, "not enough squeeze");
         _mint(msg.sender,_poolAmountOut);
         require (chd.transferFrom(msg.sender,address(this), _tokenAmountIn));
-        emit LPDeposit(msg.sender,_tokenAmountIn);
+        emit LPDeposit(msg.sender,_poolAmountOut);
     }
 
     /**
@@ -351,7 +354,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         _burn(msg.sender,_poolAmountIn - _exitFee);
         _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
         require(chd.transfer(msg.sender, _tokenAmountOut));
-        emit LPWithdrawSingleCHD(msg.sender,_tokenAmountOut);
+        emit LPWithdrawal(msg.sender,_poolAmountIn);
     }
 
     /**

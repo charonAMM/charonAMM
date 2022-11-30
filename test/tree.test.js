@@ -25,9 +25,6 @@ describe('MerkleTreeWithHistory', function () {
       hasher.address,
     )
     await merkleTreeWithHistory.initialize()
-    // for(i = 0; i < MERKLE_TREE_HEIGHT;i++){
-    //   zeros[i] = await merkleTreeWithHistory.zeros(i)
-    // }
   })
   async function deploy(contractName, ...args) {
     const Factory = await ethers.getContractFactory(contractName)
@@ -55,7 +52,7 @@ describe('MerkleTreeWithHistory', function () {
     it('should initialize', async () => {
       const zeroValue = await merkleTreeWithHistory.ZERO_VALUE()
       const firstSubtree = await merkleTreeWithHistory.filledSubtrees(0)
-      const firstZero = await merkleTreeWithHistory.zeros(0)
+      const firstZero = await merkleTreeWithHistory.getZeros(0)
       assert(await merkleTreeWithHistory.hasher() == hasher.address, "hasher should be set")
       assert(await merkleTreeWithHistory.levels() == MERKLE_TREE_HEIGHT, "height should be set")
       expect(firstSubtree).to.be.equal(zeroValue)

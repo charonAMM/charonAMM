@@ -261,6 +261,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         } 
     }
 
+  //is this right??
     /**
      * @dev Allows a user to deposit as an LP on this side of the AMM
      * @param _poolAmountOut amount of pool tokens to recieve
@@ -283,7 +284,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         recordBalanceSynth = recordBalanceSynth + _CHDIn;
         _mint(msg.sender,_poolAmountOut);
         require (token.transferFrom(msg.sender,address(this), _baseAssetIn));
-        require (chd.transferFrom(msg.sender,address(this), _CHDIn));
+        require(chd.transferFrom(msg.sender, address(this),_CHDIn));
         emit LPDeposit(msg.sender,_poolAmountOut);
     }
 
@@ -298,7 +299,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                             supply,
                             _tokenAmountIn//amount of token In
                         );
-        recordBalance += _tokenAmountIn;
+        recordBalanceSynth += _tokenAmountIn;
         require(_poolAmountOut >= _minPoolAmountOut, "not enough squeeze");
         _mint(msg.sender,_poolAmountOut);
         require (chd.transferFrom(msg.sender,address(this), _tokenAmountIn));

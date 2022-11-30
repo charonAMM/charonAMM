@@ -12,11 +12,11 @@ contract MockERC20 is CHD{
     constructor(address _charon,string memory _name, string memory _symbol) CHD(_charon,_name,_symbol){
     }
 
-    function mint(address account, uint256 amount) external virtual {
-        _mint(account,amount);
-    }
-
     function burn(address account, uint256 amount) external virtual {
         _burn(account,amount);
+    }
+    
+    function mint(address account, uint256 amount) external virtual {
+        _mint(account,amount);
     }
 }

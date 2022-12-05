@@ -24,7 +24,7 @@ describe('MerkleTreeWithHistory', function () {
       MERKLE_TREE_HEIGHT,
       hasher.address,
     )
-    await merkleTreeWithHistory.initialize()
+    //await merkleTreeWithHistory.initialize()
   })
   async function deploy(contractName, ...args) {
     const Factory = await ethers.getContractFactory(contractName)
@@ -44,7 +44,7 @@ describe('MerkleTreeWithHistory', function () {
     it('should correctly hash 2 leaves', async () => {
       //console.log(hasher)
       const hash0 = await merkleTreeWithHistory.hashLeftRight(toFixedHex(123), toFixedHex(456))
-      // const hash1 = await hasher.poseidon([123, 456])
+      // const hash1 = await hasher.poseido n([123, 456])
       const hash2 = await poseidonHash2(123, 456)
       assert(hash0 - hash2 == 0, "should be the same hash");
     })
@@ -57,7 +57,6 @@ describe('MerkleTreeWithHistory', function () {
       assert(await merkleTreeWithHistory.levels() == MERKLE_TREE_HEIGHT, "height should be set")
       expect(firstSubtree).to.be.equal(zeroValue)
       expect(firstZero).to.be.equal(zeroValue)
-      await expect(merkleTreeWithHistory.initialize()).to.be.reverted;
     })
 
     it('should have correct merkle root', async () => {

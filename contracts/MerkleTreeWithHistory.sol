@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.17;
 
 import "./interfaces/IHasher.sol";
 
@@ -25,6 +25,15 @@ contract MerkleTreeWithHistory {
     require(_levels < 32, "_levels should be less than 32");
     levels = _levels;
     hasher = IHasher(_hasher);
+    zeros[0] = bytes32(ZERO_VALUE);
+    uint32 _i;
+    for(_i =1; _i<= 32; _i++){
+      zeros[_i] = IHasher(_hasher).poseidon([zeros[_i-1], zeros[_i-1]]);
+    }
+    for (_i=0; _i< _levels; _i++) {
+      filledSubtrees[_i] = zeros[_i];
+    }
+    roots[0] = zeros[_levels];
   }
 
   /**
@@ -39,23 +48,11 @@ contract MerkleTreeWithHistory {
     return hasher.poseidon(_input);
   }
 
-  function initialize() public {
-    require(zeros[0] == bytes32(0));
-    zeros[0] = bytes32(ZERO_VALUE);
-    uint32 _i;
-    for(_i =1; _i<= 32; _i++){
-      zeros[_i] = hasher.poseidon([zeros[_i-1], zeros[_i-1]]);
-    }
-    for (_i=0; _i< levels; _i++) {
-      filledSubtrees[_i] = zeros[_i];
-    }
-    roots[0] = zeros[levels];
-  }
   //getters
   /**
     @dev Returns the last root
   */
-  function getLastRoot() public view returns (bytes32) {
+  function getLastRoot() external view returns (bytes32) {
     return roots[currentRootIndex];
   }
 

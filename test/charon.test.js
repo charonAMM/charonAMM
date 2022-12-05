@@ -73,12 +73,10 @@ describe("charon tests", function () {
         oracle = await deploy('Oracle',tellor.address)
         oracle2 = await deploy('Oracle',tellor2.address)
         charon = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token.address,fee,oracle.address,HEIGHT,1,"Charon Pool Token","CPT")
-        await charon.initialize()
         //now deploy on other chain (same chain, but we pretend w/ oracles)
         token2 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
         charon2 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,oracle2.address,HEIGHT,2,"Charon Pool Token2","CPT2");
-        await charon2.initialize()
         chd = await deploy("MockERC20",charon.address,"charon dollar","chd")
         chd2 = await deploy("MockERC20",charon2.address,"charon dollar2","chd2")
         //now set both of them. 
@@ -219,7 +217,7 @@ describe("charon tests", function () {
           web3.utils.toWei("100"),//poolSupply
           web3.utils.toWei("10")//tokenamountIn
           )
-      await h.expectThrow(charon.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("100"),web3.utils.toWei("10")))
+      await h.expectThrow(charon.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("50"),web3.utils.toWei("5")))
       await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
       assert(minOut >= web3.utils.toWei("4.88"), "should be greater than this")
       await charon.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("100"),web3.utils.toWei("10"))
@@ -247,12 +245,10 @@ describe("charon tests", function () {
       assert(minOut - web3.utils.toWei(".498") > 0, "should be greater than this")
       await charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),minOut)
       assert(await charon.recordBalanceSynth() - web3.utils.toWei("1010") == 0, "record balancesynth should be correct")
-      console.log(minOut,await charon.balanceOf(accounts[1].address)*1)
       assert(await charon.balanceOf(accounts[1].address)*1 - web3.utils.toWei(".4987") > 0 , "mint of tokens should be correct")
       assert(await charon.balanceOf(accounts[1].address)*1 - web3.utils.toWei(".4987") < web3.utils.toWei(".01") , "mint of tokens should be correct")
       assert(await chd.balanceOf(accounts[1].address)*1 - web3.utils.toWei("990") == 0, "contractsynth should take tokens")
     });
-
     it("Test lpWithdraw", async function() {
         await token.mint(accounts[1].address,web3.utils.toWei("100"))
         await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
@@ -264,14 +260,40 @@ describe("charon tests", function () {
                                               )
         await charon.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("100"),web3.utils.toWei("10"))
         let poolSupply = await charon.totalSupply()
+        await h.expectThrow(charon.connect(accounts[1]).lpWithdraw(1, web3.utils.toWei("48.8"),web3.utils.toWei("4.88")) )
+        await h.expectThrow(charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei("4.88"), web3.utils.toWei("500"),web3.utils.toWei("4.88")) )
+        await h.expectThrow(charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei("4.88"), web3.utils.toWei("48.8"),web3.utils.toWei("500")) )
         await charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei("4.88"), web3.utils.toWei("48.8"),web3.utils.toWei("4.88"))
         assert((await charon.recordBalance()*1) - 1*web3.utils.toWei("99") > 0, "record balance should be back to correct" )
-        assert((await charon.recordBalance()*1) - 1*web3.utils.toWei("99.9") < 1*web3.utils.toWei("1"), "record balance should be back to correct" )
+        assert((await charon.recordBalanceSynth()*1) - 1*web3.utils.toWei("999") > 0, "record balance should be back to correct" )
+        assert((await charon.recordBalanceSynth()*1) - 1*web3.utils.toWei("999.9") < 1*web3.utils.toWei("1"), "record balance should be back to correct" )
         assert(await charon.balanceOf(accounts[1].address)*1 < web3.utils.toWei("0.01"), "all pool tokens should be gone")
         assert(await token.balanceOf(accounts[1].address)*1 - web3.utils.toWei("99") > 0, "token balance should be back to correct" )
+        assert(await chd.balanceOf(accounts[1].address)*1 - web3.utils.toWei("999") > 0, "token balance should be back to correct" )
         assert(web3.utils.toWei("101") - await token.balanceOf(accounts[1].address)*1 > 0, "token balance should be back to correct" )
-        });
-
+    });
+    it("Test lpWithdrawSingleCHD", async function() {
+        await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+        let minOut = await charon.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),//tokenBalanceIn
+            web3.utils.toWei("100"),//poolSupply
+            web3.utils.toWei("10")//tokenamountIn
+            )
+        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+        await charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),minOut)
+        let poolSupply = await charon.totalSupply()
+        await h.expectThrow(charon.connect(accounts[1]).lpWithdrawSingleCHD(1, web3.utils.toWei("9.9")))
+        await h.expectThrow(charon.connect(accounts[1]).lpWithdrawSingleCHD(web3.utils.toWei(".4987"), web3.utils.toWei("100")))
+        await charon.connect(accounts[1]).lpWithdrawSingleCHD(web3.utils.toWei(".4987"), web3.utils.toWei("9.9"))
+        let ps = web3.utils.toWei("100") + await charon.recordBalance()*1
+        minOut = await charon.calcSingleOutGivenPoolIn(web3.utils.toWei("1010"),ps,web3.utils.toWei(".4987"),0)
+        assert((await charon.recordBalance()*1) - 1*web3.utils.toWei("100") == 0, "record balance should not move" )
+        assert((await charon.recordBalanceSynth()*1) - 1*web3.utils.toWei("1000") > 0 , "record balance synth should be back to correct" )
+        assert((await charon.recordBalanceSynth()*1) - 1*web3.utils.toWei("1000") < web3.utils.toWei(".1") , "record balance synth should be back to correct" )
+        assert(await charon.balanceOf(accounts[1].address)*1 < web3.utils.toWei("0.01"), "all pool tokens should be gone")
+        assert(await token.balanceOf(accounts[1].address)*1 == 0, "token balance should not move" )
+        assert(await chd.balanceOf(accounts[1].address)*1 - web3.utils.toWei("999") > 0, "token balance should be back to correct" )
+        assert(web3.utils.toWei("101") - await token.balanceOf(accounts[1].address)*1 > 0, "token balance should be back to correct" )
+    });
     it("Test oracleDeposit", async function() {
         let _depositAmount = web3.utils.toWei("10");
         await token.mint(accounts[1].address,web3.utils.toWei("100"))
@@ -308,10 +330,30 @@ describe("charon tests", function () {
         await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
         await h.advanceTime(43200)//12 hours
         let tx = await charon2.oracleDeposit([1],[1]);
+        await h.expectThrow(charon2.oracleDeposit([1,2],[1]))
         assert(await charon2.isSpent(args.inputNullifiers[0]) == true ,"nullifierHash should be true")
         assert(await charon2.isSpent(args.inputNullifiers[1]) == true ,"nullifierHash should be true")
         });
 
+        it("swap", async function () {
+          await token.mint(accounts[1].address,web3.utils.toWei("100"))
+          let _minOut = await charon.calcOutGivenIn(web3.utils.toWei("100"),web3.utils.toWei("1000"),web3.utils.toWei("10"),0)
+          let _maxPrice = await charon.calcSpotPrice(web3.utils.toWei("110"),web3.utils.toWei("900"),0)
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut,_maxPrice))//transfer not approved
+          await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut,1))//bad max price
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("1"), _minOut,_maxPrice))//too little in
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut*2,_maxPrice))//too much out
+          await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice*2)
+          console.log(_minOut)
+          console.log(_maxPrice)
+          assert(await charon.recordBalance() == web3.utils.toWei("110"), "record Balance should be correct")
+          assert(await charon.recordBalanceSynth() > web3.utils.toWei("900"), "recordBalanceSynth should be correct")
+          assert(await charon.recordBalanceSynth() < web3.utils.toWei("910"), "recordBalanceSynth should be correct")
+          assert(await chd.balanceOf(accounts[1].address) == _minOut, "chd should transfer")
+          console.log(await charon.getSpotPrice())
+          assert(await charon.getSpotPrice() == web3.utils.toWei("1"))
+        });
         it("deposit and transact", async function () {
             let _depositAmount = utils.parseEther('10');
             await token.mint(accounts[1].address,web3.utils.toWei("100"))

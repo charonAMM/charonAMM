@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity 0.8.4;
+pragma solidity 0.8.17;
 
 import "./CHD.sol";
 import "./MerkleTreeWithHistory.sol";
@@ -273,7 +273,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         _finalized_
     {   
         uint256 _ratio = _bdiv(_poolAmountOut, supply);
-        require(_ratio != 0, "ERR_MATH_APPROX");
         uint256 _baseAssetIn = _bmul(_ratio, recordBalance);
         require(_baseAssetIn != 0, "ERR_MATH_APPROX");
         require(_baseAssetIn <= _maxBaseAssetIn, "ERR_LIMIT_IN");
@@ -321,7 +320,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         uint256 _exitFee = _bmul(_poolAmountIn, fee);
         uint256 _pAiAfterExitFee = _bsub(_poolAmountIn, _exitFee);
         uint256 _ratio = _bdiv(_pAiAfterExitFee, supply);
-        require(_ratio != 0, "ERR_MATH_APPROX");
         _burn(msg.sender,_poolAmountIn - _exitFee);
         _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
         _tokenAmountOut = _bmul(_ratio, recordBalance);
@@ -349,7 +347,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                             _poolAmountIn,
                             fee
                         );
-        recordBalance -= _tokenAmountOut;
+        recordBalanceSynth -= _tokenAmountOut;
         require(_tokenAmountOut >= _minAmountOut, "not enough squeeze");
         uint256 _exitFee = _bmul(_poolAmountIn, fee);
         _burn(msg.sender,_poolAmountIn - _exitFee);

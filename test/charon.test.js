@@ -343,16 +343,14 @@ describe("charon tests", function () {
           await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
           await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut,1))//bad max price
           await h.expectThrow(charon.swap(false,web3.utils.toWei("1"), _minOut,_maxPrice))//too little in
-          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut*2,_maxPrice))//too much out
-          await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice*2)
-          console.log(_minOut)
-          console.log(_maxPrice)
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"),web3.utils.toWei("50000"),_maxPrice))//too much out
+          await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
           assert(await charon.recordBalance() == web3.utils.toWei("110"), "record Balance should be correct")
           assert(await charon.recordBalanceSynth() > web3.utils.toWei("900"), "recordBalanceSynth should be correct")
           assert(await charon.recordBalanceSynth() < web3.utils.toWei("910"), "recordBalanceSynth should be correct")
-          assert(await chd.balanceOf(accounts[1].address) == _minOut, "chd should transfer")
-          console.log(await charon.getSpotPrice())
-          assert(await charon.getSpotPrice() == web3.utils.toWei("1"))
+          assert(await chd.balanceOf(accounts[1].address) - _minOut == 0, "chd should transfer")
+          assert(await charon.getSpotPrice() - web3.utils.toWei("8.2") > 0,"swap price should be correct")
+          assert(await charon.getSpotPrice() - web3.utils.toWei("8.2") < web3.utils.toWei("0.1"),"swap price should be correct2")
         });
         it("deposit and transact", async function () {
             let _depositAmount = utils.parseEther('10');

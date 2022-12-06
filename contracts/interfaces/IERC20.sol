@@ -2,8 +2,9 @@
 pragma solidity ^0.8.0;
 
 /**
- * @dev Interface of the ERC20 standard as defined in the EIP.
- */
+ @title IERC20
+ @dev Interface of the ERC20 standard as defined in the EIP.
+ **/
 interface IERC20 {
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
     event Transfer(address indexed _from, address indexed _to, uint256 _value);

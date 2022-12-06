@@ -19,6 +19,7 @@ contract Oracle is UsingTellor{
      * @dev grabs the oracle value from the tellor oracle
      * @param _chain chainID of ID with commitment deposit
      * @param _depositId depositId of the specific deposit
+     * @return _value bytes data returned from tellor
      */
     function getCommitment(uint256 _chain, uint256 _depositId) public view returns(bytes memory _value){
         bool _didGet;

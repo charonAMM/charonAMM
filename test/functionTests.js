@@ -109,10 +109,7 @@ describe("charon system - function tests", function() {
         assert(await math.bmul(web3.utils.toWei("2"),2) == 4, "bmul should work")
     });
     it("bdiv()", async function() {
-        assert(await math.bsub(web3.utils.toWei("4"),web3.utils.toWei("2")) == web3.utils.toWei("2"), "bdiv should work")
-    });
-    it("bsub()", async function() {
-        assert(await math.bsub(4,2) == 2, "bsub should work")
+        assert(await math.bdiv(web3.utils.toWei("4"),web3.utils.toWei("2")) == web3.utils.toWei("2"), "bdiv should work")
     });
     console.log("Oracle.sol -- to write")
     it("constructor()", async function() {

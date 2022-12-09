@@ -119,7 +119,6 @@ contract Token{
     }
 
     /**Internal Functions */
-
     /**
      * @dev burns tokens
      * @param _from address to burn tokens from

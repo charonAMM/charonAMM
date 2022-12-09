@@ -8,11 +8,12 @@ import "./interfaces/IHasher.sol";
  @dev a merkle tree contract that tracks historical roots
 **/  
 contract MerkleTreeWithHistory {
+  /*Storage*/
   uint256 public constant FIELD_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
   uint256 public constant ZERO_VALUE = 21663839004416932945382355908790599225266501822907911457504978515578255421292; // = keccak256("tornado") % FIELD_SIZE
 
-  IHasher public immutable hasher;
-  uint32 public immutable levels;
+  IHasher public immutable hasher;//implementation of hasher
+  uint32 public immutable levels;//levels in the merkle tree
 
   // make public for debugging, make all private for deployment
   // filledSubtrees and roots could be bytes32[size], but using mappings makes it cheaper because
@@ -24,6 +25,12 @@ contract MerkleTreeWithHistory {
   uint32 private currentRootIndex = 0; 
   uint32 nextIndex = 0;
 
+  /*functions*/
+  /**
+    * @dev constructor for initializing tree
+    * @param _levels uint32 merkle tree levels
+    * @param _hasher address of poseidon hasher
+    */
   constructor(uint32 _levels, address _hasher) {
     require(_levels > 0, "_levels should be greater than zero");
     require(_levels < 32, "_levels should be less than 32");
@@ -41,8 +48,11 @@ contract MerkleTreeWithHistory {
   }
 
   /**
-    @dev Hash 2 tree leaves, returns Poseidon(_left, _right)
-  */
+    * @dev hash 2 tree leaves, returns Poseidon(_left, _right)
+    * @param _left bytes32 to hash
+    * @param _right bytes32 to hash
+    * @return bytes32 hash of input
+    */
   function hashLeftRight(bytes32 _left, bytes32 _right) public view returns (bytes32) {
     require(uint256(_left) < FIELD_SIZE, "_left should be inside the field");
     require(uint256(_right) < FIELD_SIZE, "_right should be inside the field");
@@ -54,15 +64,18 @@ contract MerkleTreeWithHistory {
 
   //getters
   /**
-    @dev Returns the last root
-  */
+    * @dev gets last root of the merkle tree
+    * @return bytes32 root
+    */
   function getLastRoot() external view returns (bytes32) {
     return roots[currentRootIndex];
   }
 
   /**
-    @dev Whether the root is present in the root history
-  */
+    * @dev checks if inputted root is known historical root of tree
+    * @param _root bytes32 supposed historical root
+    * @return bool if root was ever made from merkleTree
+    */
   function isKnownRoot(bytes32 _root) public view returns (bool) {
     if (_root == 0) {
       return false;
@@ -81,7 +94,11 @@ contract MerkleTreeWithHistory {
     return false;
   }
 
-  /// @dev provides Zero (Empty) elements for a MiMC MerkleTree. Up to 32 levels
+  /**
+    * @dev provides zero (empty) elements for a poseidon MerkleTree. Up to 32 levels
+    * @param _i uint256 0-32 number of location of zero
+    * @return bytes32 zero element of tree at input location
+    */
   function getZeros(uint256 _i) public view returns (bytes32) {
     if(_i <= 32){
       return zeros[_i];
@@ -89,31 +106,35 @@ contract MerkleTreeWithHistory {
     else revert("Index out of bounds");
   }
 
-  //Internal funcs
-  // Modified to insert pairs of leaves for better efficiency
-  function _insert(bytes32 _leaf1, bytes32 _leaf2) internal returns (uint32 index) {
-    uint32 _nextIndex = nextIndex;
+  /*internal functions*/
+  /**
+    * @dev allows users to insert pairs of leaves into tree
+    * @param _leaf1 bytes32 first leaf to add
+    * @param _leaf2 bytes32 second leaf to add
+    * @return _nextIndex uint32 index of insertion
+    */
+  function _insert(bytes32 _leaf1, bytes32 _leaf2) internal returns (uint32 _nextIndex) {
+    _nextIndex = nextIndex;
     require(_nextIndex != uint32(2)**levels, "Merkle tree is full. No more leaves can be added");
-    uint32 currentIndex = _nextIndex / 2;
-    bytes32 currentLevelHash = hashLeftRight(_leaf1, _leaf2);
-    bytes32 left;
-    bytes32 right;
-    for (uint32 i = 1; i < levels; i++) {
-      if (currentIndex % 2 == 0) {
-        left = currentLevelHash;
-        right = zeros[i];
-        filledSubtrees[i] = currentLevelHash;
+    uint32 _currentIndex = _nextIndex / 2;
+    bytes32 _currentLevelHash = hashLeftRight(_leaf1, _leaf2);
+    bytes32 _left;
+    bytes32 _right;
+    for (uint32 _i = 1; _i < levels; _i++) {
+      if (_currentIndex % 2 == 0) {
+        _left = _currentLevelHash;
+        _right = zeros[_i];
+        filledSubtrees[_i] = _currentLevelHash;
       } else {
-        left = filledSubtrees[i];
-        right = currentLevelHash;
+        _left = filledSubtrees[_i];
+        _right = _currentLevelHash;
       }
-      currentLevelHash = hashLeftRight(left, right);
-      currentIndex /= 2;
+      _currentLevelHash = hashLeftRight(_left, _right);
+      _currentIndex /= 2;
     }
-    uint32 newRootIndex = (currentRootIndex + 1) % ROOT_HISTORY_SIZE;
-    currentRootIndex = newRootIndex;
-    roots[newRootIndex] = currentLevelHash;
+    uint32 _newRootIndex = (currentRootIndex + 1) % ROOT_HISTORY_SIZE;
+    currentRootIndex = _newRootIndex;
+    roots[_newRootIndex] = _currentLevelHash;
     nextIndex = _nextIndex + 2;
-    return _nextIndex;
   }
 }

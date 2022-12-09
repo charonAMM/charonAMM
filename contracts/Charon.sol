@@ -157,7 +157,11 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         oracle = IOracle(_oracle);
     }
 
-    //is called from the CFC.  Either adds to the recordBalance or recordBalanceSynth. 
+    /**
+     * @dev allows the cfc (or anyone) to add LPrewards to the system
+     * @param _amount uint256 of tokens to add
+     * @param _isCHD bool if the token is chd (baseToken if false)
+     */
     function addLPRewards(uint256 _amount,bool _isCHD) external{
       if(_isCHD){
         recordBalanceSynth += _amount;
@@ -170,6 +174,11 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       emit LPRewardAdded(_amount, _isCHD);
     }
 
+    /**
+     * @dev allows the cfc (or anyone) to add user rewards to the system
+     * @param _amount uint256 of tokens to add
+     * @param _isCHD bool if the token is chd (baseToken if false)
+     */
     function addUserRewards(uint256 _amount, bool _isCHD) external{
       if(_isCHD){
          require(chd.transferFrom(msg.sender,address(this),_amount));
@@ -262,7 +271,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         } 
     }
 
-  //is this right??
     /**
      * @dev Allows a user to deposit as an LP on this side of the AMM
      * @param _poolAmountOut amount of pool tokens to recieve
@@ -274,13 +282,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         _finalized_
     {   
         uint256 _ratio = _bdiv(_poolAmountOut, supply);
+        require(_ratio > 0, "should not be 0 for inputs");
         uint256 _baseAssetIn = _bmul(_ratio, recordBalance);
-        require(_baseAssetIn != 0, "ERR_MATH_APPROX");
-        require(_baseAssetIn <= _maxBaseAssetIn, "ERR_LIMIT_IN");
+        require(_baseAssetIn <= _maxBaseAssetIn, "too big baseDeposit required");
         recordBalance = recordBalance + _baseAssetIn;
         uint256 _CHDIn = _bmul(_ratio, recordBalanceSynth);
-        require(_CHDIn != 0, "ERR_MATH_APPROX");
-        require(_CHDIn <= _maxCHDIn, "ERR_LIMIT_IN");
+        require(_CHDIn <= _maxCHDIn, "too big chd deposit required");
         recordBalanceSynth = recordBalanceSynth + _CHDIn;
         _mint(msg.sender,_poolAmountOut);
         require (token.transferFrom(msg.sender,address(this), _baseAssetIn));
@@ -447,24 +454,28 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         emit Swap(msg.sender,_inIsCHD,_tokenAmountIn,_tokenAmountOut);
       }
 
-  //lets you do secret transfers / withdraw + mintCHD
-  function transact(Proof memory _args, ExtData memory _extData) external _finalized_{
-      int256 _publicAmount = _extData.extAmount - int256(_extData.fee);
-      if(_publicAmount < 0){
-        _publicAmount = int256(FIELD_SIZE - uint256(-_publicAmount));
-      } 
-      require(_args.publicAmount == uint256(_publicAmount), "Invalid public amount");
-      require(isKnownRoot(_args.root), "Invalid merkle root");
-      require(_verifyProof(_args), "Invalid transaction proof");
-      require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
-       if (_extData.extAmount < 0){
-        require(chd.mintCHD(_extData.recipient, uint256(-_extData.extAmount)));
-      }
-      if(_extData.fee > 0){
-        require(token.transfer(_extData.relayer,_extData.fee));
-      }
-      _transact(_args, _extData);
-  }
+      /**
+      * @dev allows users to send chd anonymously
+      * @param _args proof data for sneding tokens
+      * @param _extData external (visible data) to verify proof and pay relayer fee
+      */
+      function transact(Proof memory _args, ExtData memory _extData) external _finalized_{
+        int256 _publicAmount = _extData.extAmount - int256(_extData.fee);
+        if(_publicAmount < 0){
+          _publicAmount = int256(FIELD_SIZE - uint256(-_publicAmount));
+        } 
+        require(_args.publicAmount == uint256(_publicAmount), "Invalid public amount");
+        require(isKnownRoot(_args.root), "Invalid merkle root");
+        require(_verifyProof(_args), "Invalid transaction proof");
+        require(uint256(_args.extDataHash) == uint256(keccak256(abi.encode(_extData))) % FIELD_SIZE, "Incorrect external data hash");
+        if (_extData.extAmount < 0){
+          require(chd.mintCHD(_extData.recipient, uint256(-_extData.extAmount)));
+        }
+        if(_extData.fee > 0){
+          require(chd.mintCHD(_extData.relayer,_extData.fee));
+        }
+        _transact(_args, _extData);
+    }
 
     //getters
     /**
@@ -498,6 +509,11 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
     }
 
+    /**
+     * @dev allows you to check the token pair addresses of the pool
+     * @return _chd address of chd token
+     * @return _token address of baseToken
+     */
     function getTokens() external view returns(address _chd, address _token){
       return (address(chd), address(token));
     }
@@ -510,7 +526,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       return nullifierHashes[_nullifierHash];
     }
 
-  //internal functions
+    //internal functions
+    /**
+     * @dev internal logic of secret transfers and chd mints
+     * @param _args proof data for sneding tokens
+     * @param _extData external (visible data) to verify proof and pay relayer fee
+     */
     function _transact(Proof memory _args, ExtData memory _extData) internal{
       for (uint256 _i = 0; _i < _args.inputNullifiers.length; _i++) {
         require(!nullifierHashes[_args.inputNullifiers[_i]], "Input is already spent");
@@ -522,57 +543,62 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
     }
 
-  function _verifyProof(Proof memory _args) internal view returns (bool) {
-    uint[2] memory _a;
-    uint[2][2] memory _b;
-    uint[2] memory _c;
-    (_a,_b,_c) = abi.decode(_args.proof,(uint[2],uint[2][2],uint[2]));
-    if (_args.inputNullifiers.length == 2) {
-      return
-        verifier2.verifyProof(
-          _a,_b,_c,
-          [
-            uint256(_args.root),
-            _args.publicAmount,
-            chainID,
-            uint256(_args.extDataHash),
-            uint256(_args.inputNullifiers[0]),
-            uint256(_args.inputNullifiers[1]),
-            uint256(_args.outputCommitments[0]),
-            uint256(_args.outputCommitments[1])
-          ]
-        );
-    } else if (_args.inputNullifiers.length == 16) {
-      return
-        verifier16.verifyProof(
-          _a,_b,_c,
-          [
-            uint256(_args.root),
-            _args.publicAmount,
-            chainID,
-            uint256(_args.extDataHash),
-            uint256(_args.inputNullifiers[0]),
-            uint256(_args.inputNullifiers[1]),
-            uint256(_args.inputNullifiers[2]),
-            uint256(_args.inputNullifiers[3]),
-            uint256(_args.inputNullifiers[4]),
-            uint256(_args.inputNullifiers[5]),
-            uint256(_args.inputNullifiers[6]),
-            uint256(_args.inputNullifiers[7]),
-            uint256(_args.inputNullifiers[8]),
-            uint256(_args.inputNullifiers[9]),
-            uint256(_args.inputNullifiers[10]),
-            uint256(_args.inputNullifiers[11]),
-            uint256(_args.inputNullifiers[12]),
-            uint256(_args.inputNullifiers[13]),
-            uint256(_args.inputNullifiers[14]),
-            uint256(_args.inputNullifiers[15]),
-            uint256(_args.outputCommitments[0]),
-            uint256(_args.outputCommitments[1])
-          ]
-        );
-    } else {
-      revert("unsupported input count");
-    }
+    /**
+     * @dev internal fucntion for verifying proof's for secret txns
+     * @param _args proof data for seending tokens
+     * @return bool of whether proof is verified
+     */
+    function _verifyProof(Proof memory _args) internal view returns (bool) {
+      uint[2] memory _a;
+      uint[2][2] memory _b;
+      uint[2] memory _c;
+      (_a,_b,_c) = abi.decode(_args.proof,(uint[2],uint[2][2],uint[2]));
+      if (_args.inputNullifiers.length == 2) {
+        return
+          verifier2.verifyProof(
+            _a,_b,_c,
+            [
+              uint256(_args.root),
+              _args.publicAmount,
+              chainID,
+              uint256(_args.extDataHash),
+              uint256(_args.inputNullifiers[0]),
+              uint256(_args.inputNullifiers[1]),
+              uint256(_args.outputCommitments[0]),
+              uint256(_args.outputCommitments[1])
+            ]
+          );
+      } else if (_args.inputNullifiers.length == 16) {
+        return
+          verifier16.verifyProof(
+            _a,_b,_c,
+            [
+              uint256(_args.root),
+              _args.publicAmount,
+              chainID,
+              uint256(_args.extDataHash),
+              uint256(_args.inputNullifiers[0]),
+              uint256(_args.inputNullifiers[1]),
+              uint256(_args.inputNullifiers[2]),
+              uint256(_args.inputNullifiers[3]),
+              uint256(_args.inputNullifiers[4]),
+              uint256(_args.inputNullifiers[5]),
+              uint256(_args.inputNullifiers[6]),
+              uint256(_args.inputNullifiers[7]),
+              uint256(_args.inputNullifiers[8]),
+              uint256(_args.inputNullifiers[9]),
+              uint256(_args.inputNullifiers[10]),
+              uint256(_args.inputNullifiers[11]),
+              uint256(_args.inputNullifiers[12]),
+              uint256(_args.inputNullifiers[13]),
+              uint256(_args.inputNullifiers[14]),
+              uint256(_args.inputNullifiers[15]),
+              uint256(_args.outputCommitments[0]),
+              uint256(_args.outputCommitments[1])
+            ]
+          );
+      } else {
+        revert("unsupported input count");
+      }
   }
 }

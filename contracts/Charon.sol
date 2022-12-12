@@ -83,18 +83,16 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     }
 
     CHD public chd;//address/implementation of chd token
-    IERC20 public token;//base token address/implementation for the charonAMM
-    IOracle public oracle;//address of the oracle to use for the system
-    IVerifier public verifier2; //implementation/address of the two input veriifier contract
-    IVerifier public verifier16;//implementation/address of the sixteen input veriifier contract
+    IERC20 public immutable token;//base token address/implementation for the charonAMM
+    IOracle public immutable oracle;//address of the oracle to use for the system
+    IVerifier public immutable verifier2; //implementation/address of the two input veriifier contract
+    IVerifier public immutable verifier16;//implementation/address of the sixteen input veriifier contract
     Commitment[] depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
     PartnerContract[] partnerContracts;//list of connected contracts for this deployment
     address public controller;//controller adddress (used for initializing contracts, then should be CFC for accepting fees)
     bool public finalized;//bool if contracts are initialized
-    bool private mutex;//used for reentrancy protection
-    uint32 public merkleTreeHeight;//height of merkleTree
-    uint256 public chainID; //chainID of this charon instance
-    uint256 public fee;//fee when liquidity is withdrawn or trade happens
+    uint256 public immutable chainID; //chainID of this charon instance
+    uint256 public immutable fee;//fee when liquidity is withdrawn or trade happens
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     uint256 public userRewards;//amount of baseToken user rewards in contract
@@ -214,7 +212,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         _depositId = depositCommitments.length;
         bytes32 _hashedCommitment = keccak256(abi.encode(_proofArgs.proof,_proofArgs.publicAmount,_proofArgs.root));
         depositIdByCommitmentHash[_hashedCommitment] = _depositId;
-        uint256 _tokenAmount;
+        uint256 _tokenAmount = 0;
         if (_isCHD){
           chd.burnCHD(msg.sender,uint256(_extData.extAmount));
         }

@@ -99,7 +99,7 @@ contract MerkleTreeWithHistory {
     * @param _i uint256 0-32 number of location of zero
     * @return bytes32 zero element of tree at input location
     */
-  function getZeros(uint256 _i) public view returns (bytes32) {
+  function getZeros(uint256 _i) external view returns (bytes32) {
     if(_i <= 32){
       return zeros[_i];
     }

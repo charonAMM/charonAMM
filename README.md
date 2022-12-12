@@ -1,3 +1,5 @@
+[![Tests](https://github.com/charonAMM/charonAMM/actions/workflows/tests.yml/badge.svg)](https://github.com/charonAMM/charonAMM/actions/workflows/tests.ymli)
+
 <p align="center">
     <img src= './public/charonLogo.png' height="275"/>
 </p>

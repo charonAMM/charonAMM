@@ -22,9 +22,18 @@ contract Oracle is UsingTellor{
      * @return _value bytes data returned from tellor
      */
     function getCommitment(uint256 _chain, uint256 _depositId) public view returns(bytes memory _value){
-        bool _didGet;
         bytes32 _queryId = keccak256(abi.encode("Charon",abi.encode(_chain,_depositId)));
-        (_didGet,_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
-        require(_didGet);
+        (_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
+    }
+
+    /**
+     * @dev grabs the oracle value from the tellor oracle
+     * @param _timestamp timestamp to grab
+     * @param _address address of the CIT token on mainnet Ethereum
+     */
+    function getRootHashAndSupply(uint256 _timestamp,address _address) public view returns(bytes memory _value){
+        bytes32 _queryId = keccak256(abi.encode("CrossChainBalance",abi.encode(1,_address,_timestamp)));
+        (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
+        require(_timestamp > 0, "timestamp must be present");
     }
 }

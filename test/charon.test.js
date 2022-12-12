@@ -410,6 +410,19 @@ describe("charon tests", function () {
               })
             args = inputData.args
             extData = inputData.extData
+            let badArg1,badExtData,badArg2,badExtData2
+            badArg1 = Object.assign({},args);
+            badArg1.root = h.hash("badroot")
+            badExtData = Object.assign({},extData)
+            badExtData.extAmount = '0x00000000055000000000000000000000000000000000000000000000000000000'
+            badArg2 = Object.assign({},args);
+            badArg2.proof = h.hash("badproof")
+            badExtData2 = Object.assign({},extData)
+            badExtData2.recipient = accounts[2].address
+            await h.expectThrow(charon2.transact(badArg1,extData))//bad root
+            await h.expectThrow(charon2.transact(badArg2,extData))//bad proof
+            await h.expectThrow(charon2.transact(args,badExtData))//bad public amount
+            await h.expectThrow(charon2.transact(args,badExtData2))// bad extData hash (changed recipient)
             assert(await charon2.isKnownRoot(inputData.args.root));
             await charon2.transact(args,extData)
                 // Bob parses chain to detect incoming funds

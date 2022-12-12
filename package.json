@@ -35,7 +35,7 @@
         "fixed-merkle-tree": "^0.7.3",
         "snarkjs": "^0.5.0",
         "tmp-promise": "^3.0.3",
-        "usingtellor": "^4.0.7"
+        "usingtellor": "^5.0.3"
     },
     "devDependencies": {
         "hardhat": "^2.12.0"

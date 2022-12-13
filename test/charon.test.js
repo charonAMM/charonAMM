@@ -601,5 +601,49 @@ describe("charon tests", function () {
           assert(toks[0] == chd.address, "chd should be slot 0")
           assert(toks[1] == token.address, "token should be slot 1")
         });
+        it("Test getDepositCommitmentsById()", async function() {
+          let _depositAmount = web3.utils.toWei("10");
+          await token.mint(accounts[4].address,web3.utils.toWei("100"))
+          let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                    web3.utils.toWei("1000"),
+                                                    _depositAmount,
+                                                    0)
+          
+          const sender = accounts[4]
+          const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
+          charon = charon.connect(sender)
+          let inputData = await prepareTransaction({
+            charon,
+            inputs:[],
+            outputs: [aliceDepositUtxo],
+            account: {
+              owner: sender.address,
+              publicKey: aliceDepositUtxo.keypair.address(),
+            },
+            privateChainID: 2,
+            myHasherFunc: poseidon,
+            myHasherFunc2: poseidon2
+          })
+          let args = inputData.args
+          let extData = inputData.extData
+          await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,false))
+          await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,true))
+          await token.connect(accounts[4]).approve(charon.address,_amount)
+          await charon.connect(accounts[4]).depositToOtherChain(args,extData,false);
+          let commi = await charon.getDepositCommitmentsById(1);
+          assert(commi[1].proof == args.proof, "commitment a should be stored")
+          assert(commi[1].publicAmount - args.publicAmount == 0, "commitment publicAmount should be stored")
+          assert(commi[1].root == args.root, "commitment root should be stored")
+          assert(commi[1].inputNullifiers[0] == args.inputNullifiers[0], "commitment inputNullifiers should be stored")
+          assert(commi[1].inputNullifiers[1] == args.inputNullifiers[1], "commitment inputNullifiers should be stored")
+          assert(commi[1].outputCommitments[0] == args.outputCommitments[0], "commitment outputCommitments should be stored")
+          assert(commi[1].outputCommitments[1] == args.outputCommitments[1], "commitment outputCommitments should be stored")
+          assert(commi[1].extDataHash - args.extDataHash == 0, "commitment extDataHash should be stored")
+          assert(commi[0].recipient == extData.recipient, "extData should be correct");
+          assert(commi[0].extAmount - extData.extAmount == 0, "extDataAmount should be correct");
+          assert(commi[0].relayer == extData.relayer, "extData should be correct");
+          assert(commi[0].fee - extData.fee == 0, "extData fee should be correct");
+        });
+        
   
 });

@@ -38,6 +38,7 @@
         "usingtellor": "^5.0.3"
     },
     "devDependencies": {
+        "ethers": "^5.7.2",
         "hardhat": "^2.12.0"
     }
 }

@@ -116,18 +116,22 @@ describe("charon system - function tests", function() {
         assert(await oracle.tellor() == tellor.address, "tellor contract should be set properly")
     });
     it("getCommitment()", async function(){
-        let _queryData = abiCoder.encode(
-            ['string', 'bytes'],
-            ['Charon', abiCoder.encode(
-                ['uint256','uint256'],
-                [1,1]
-            )]
-            );
-            _queryId = h.hash(_queryData)
+        let ABI = ["function getOracleSubmission(uint256 _depositId)"];
+        let iface = new ethers.utils.Interface(ABI);
+        let funcSelector = iface.encodeFunctionData("getOracleSubmission", [1])
+        
+        _queryData = abiCoder.encode(
+        ['string', 'bytes'],
+        ['EVMCall', abiCoder.encode(
+            ['uint256','address','bytes'],
+            [1,accounts[1].address,funcSelector]
+        )]
+        );
+        let _queryId = h.hash(_queryData)
         let _value = 100
         await tellor.submitValue(_queryId, _value,0, _queryData);
         await h.advanceTime(86400)
-        assert(await oracle.getCommitment(1,1) == 100, "value should be correct")
+        assert(await oracle.getCommitment(1,accounts[1].address,1) == 100, "value should be correct")
     })
     it("constructor()", async function() {
         console.log("CHD.sol")

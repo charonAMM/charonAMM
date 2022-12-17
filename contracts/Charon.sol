@@ -108,7 +108,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
     event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput);
     event NewNullifier(bytes32 _nullifier);
-    event OracleDeposit(uint256[] _chain, uint256[] _depositId);
+    event OracleDeposit(uint256 _chain,address _contract, uint256[] _depositId);
     event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
     event UserRewardAdded(uint256 _amount,bool _isCHD);
 
@@ -364,21 +364,21 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
 
     /**
      * @dev reads tellor commitments to allow you to withdraw on this chain
-     * @param _chain chain you're requesting your commitment from
      * @param _depositId depositId of deposit on that chain
+    * @param _partnerIndex index of contract in partnerContracts array
      */
-    function oracleDeposit(uint256[] memory _chain, uint256[] memory _depositId) external{
+    function oracleDeposit(uint256[] memory _depositId,uint256 _partnerIndex) external{
         Proof memory _proof;
         ExtData memory _extData;
         bytes memory _value;
-        require(_chain.length == _depositId.length, "must be same length");
-        for(uint256 _i; _i< _chain.length; _i++){
-          _value = oracle.getCommitment(_chain[_i], _depositId[_i]);
+        PartnerContract storage _p = partnerContracts[_partnerIndex];
+        for(uint256 _i; _i< _depositId.length; _i++){
+          _value = oracle.getCommitment(_p.chainID, _p.contractAddress, _depositId[_i]);
           _proof.inputNullifiers = new bytes32[](2);
           (_proof.inputNullifiers[0], _proof.inputNullifiers[1], _proof.outputCommitments[0], _proof.outputCommitments[1], _proof.proof) = abi.decode(_value,(bytes32,bytes32,bytes32,bytes32,bytes));
           _transact(_proof, _extData);
         }
-        emit OracleDeposit(_chain,_depositId);
+        emit OracleDeposit(_p.chainID,_p.contractAddress,_depositId);
     }
 
     /**
@@ -490,6 +490,19 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      */
     function getDepositIdByCommitmentHash(bytes32 _commitment) external view returns(uint256){
       return depositIdByCommitmentHash[_commitment];
+    }
+
+    /**
+     * @dev returns the data for an oracle submission on another chain given a depositId
+     */
+    function getOracleSubmission(uint256 _depositId) external view returns(bytes memory _value){
+      Proof memory _p = depositCommitments[_depositId-1].proof;
+      _value = abi.encode(
+        _p.inputNullifiers[0],
+        _p.inputNullifiers[1],
+        _p.outputCommitments[0],
+        _p.outputCommitments[1],
+        _p.proof);
     }
 
     /**

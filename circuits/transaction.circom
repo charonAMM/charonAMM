@@ -105,7 +105,6 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
         // Check that amount fits into 248 bits to prevent overflow
         outAmountCheck[tx] = Num2Bits(248);
         outAmountCheck[tx].in <== outAmount[tx];
-
         sumOuts += outAmount[tx];
     }
 

@@ -82,7 +82,6 @@ describe("charon tests", function () {
     function poseidon2(a,b){
       return poseidon([a,b])
     }
-
     it("generates same poseidon hash", async function () {
         const res = await hasher["poseidon(bytes32[2])"]([toFixedHex(1,32), toFixedHex(1,32)]);
         const res2 = await poseidonHash([toFixedHex(1,32), toFixedHex(1,32)]);
@@ -137,7 +136,7 @@ describe("charon tests", function () {
                                                   0)
         
         const sender = accounts[0]
-        const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
+        const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon , chainID: 2})
         charon = charon.connect(sender)
         let inputData = await prepareTransaction({
           charon,
@@ -291,7 +290,7 @@ describe("charon tests", function () {
                                                   0)
         await token.connect(accounts[1]).approve(charon.address,_amount)
         const sender = accounts[0]
-        const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon })
+        const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon, chainID: 2 })
         charon = charon.connect(sender)
         let inputData = await prepareTransaction({
           charon,
@@ -350,7 +349,7 @@ describe("charon tests", function () {
             
             await token.connect(accounts[1]).approve(charon.address,_amount)
             const sender = accounts[0]
-            const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon })
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon, chainID: 2 })
             charon = charon.connect(sender)
             let inputData = await prepareTransaction({
               charon,
@@ -382,11 +381,12 @@ describe("charon tests", function () {
             const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
  // contains private and public keys
             const bobAddress = await bobKeypair.address() // contains only public key
-            const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon) })
+            const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon), chainID: 2 })
             let aliceChangeUtxo = new Utxo({
                 amount: _depositAmount.sub(bobSendAmount),
                 myHashFunc: poseidon,
                 keypair: aliceDepositUtxo.keypair,
+                chainID: 2
             })
             inputData = await prepareTransaction({
                 charon: charon2,
@@ -435,7 +435,7 @@ describe("charon tests", function () {
                                                       0)
             await token.connect(accounts[1]).approve(charon.address,_amount)
             const sender = accounts[0]
-            const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 2 })
             charon = charon.connect(sender)
             let inputData = await prepareTransaction({
               charon,
@@ -485,7 +485,7 @@ describe("charon tests", function () {
             
             await token.connect(accounts[1]).approve(charon.address,_amount)
             const sender = accounts[0]
-            const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon })
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon, chainID: 2 })
             charon = charon.connect(sender)
             let inputData = await prepareTransaction({
               charon,
@@ -521,11 +521,12 @@ describe("charon tests", function () {
             const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
  // contains private and public keys
             const bobAddress = await bobKeypair.address() // contains only public key
-            const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair })
+            const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair, chainID: 2 })
             let aliceChangeUtxo = new Utxo({
                 amount: _depositAmount.sub(bobSendAmount),
                 myHashFunc: poseidon,
                 keypair: aliceDepositUtxo.keypair,
+                chainID: 2
             })
             inputData = await prepareTransaction({
                 charon: charon2,
@@ -541,11 +542,12 @@ describe("charon tests", function () {
             console.log('transact (2)', gas- 0)
             await charon2.transact(args,extData)
             //add transact16
-            const bobSendUtxo2 = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair })
+            const bobSendUtxo2 = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair , chainID: 2})
             let aliceChangeUtxo2 = new Utxo({
                 amount: _depositAmount.sub(bobSendAmount),
                 myHashFunc: poseidon,
                 keypair: aliceChangeUtxo.keypair,
+                chainID: 2
             })
             inputData = await prepareTransaction({
                 charon: charon2,
@@ -564,11 +566,12 @@ describe("charon tests", function () {
             const charlieKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
             // contains private and public keys
                        const charlieAddress = await charlieKeypair.address() // contains only public key
-                       const charlieSendUtxo = new Utxo({ amount: charlieSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(charlieAddress,poseidon) })
+                       const charlieSendUtxo = new Utxo({ amount: charlieSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(charlieAddress,poseidon),chainID: 2 })
                        let bobChangeUtxo = new Utxo({
                            amount: utils.parseEther('1'),
                            myHashFunc: poseidon,
                            keypair: bobSendUtxo.keypair,
+                           chainID: 2
                        })
                        inputData = await prepareTransaction({
                            charon: charon2,
@@ -593,7 +596,7 @@ describe("charon tests", function () {
                                                     0)
           
           const sender = accounts[4]
-          const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
+          const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon , chainID: 2})
           charon = charon.connect(sender)
           let inputData = await prepareTransaction({
             charon,
@@ -635,7 +638,7 @@ describe("charon tests", function () {
                                                     web3.utils.toWei("1000"),
                                                     _depositAmount,
                                                     0)
-          let aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
+          let aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 2 })
           charon = charon.connect(sender)
           let inputData = await prepareTransaction({
             charon,
@@ -662,7 +665,7 @@ describe("charon tests", function () {
                 web3.utils.toWei("1000"),
                 _depositAmount,
                 0)
-          aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
+          aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 2 })
           inputData = await prepareTransaction({
             charon,
             inputs:[],
@@ -693,7 +696,7 @@ describe("charon tests", function () {
                                                     web3.utils.toWei("1000"),
                                                     _depositAmount,
                                                     0)
-          let aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon })
+          let aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 2 })
           charon = charon.connect(sender)
           let inputData = await prepareTransaction({
             charon,
@@ -725,8 +728,240 @@ describe("charon tests", function () {
           assert(toks[0] == chd.address, "chd should be slot 0")
           assert(toks[1] == token.address, "token should be slot 1")
         });
-
-
+        it("Test getSpotPrice()", async function() {
+          let sprice = await charon.getSpotPrice();
+          assert(sprice == web3.utils.toWei("10"), "chd spot price should be correct 10eth per chd")
+          //lp some more
+          await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+          let minOut = await charon.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),//tokenBalanceIn
+              web3.utils.toWei("100"),//poolSupply
+              web3.utils.toWei("100")//tokenamountIn
+              )
+          await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+          await charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("100"),minOut)
+          //check spot price again
+          sprice = await charon.getSpotPrice();
+          assert(sprice == web3.utils.toWei("11"), "chd should be slot 0")
+        });
+        it("Test isSpent()", async function() {
+          let _depositAmount = utils.parseEther('10');
+            await token.mint(accounts[1].address,web3.utils.toWei("100"))
+            let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                      web3.utils.toWei("1000"),
+                                                      _depositAmount,
+                                                      0)
+            
+            await token.connect(accounts[1]).approve(charon.address,_amount)
+            const sender = accounts[0]
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon, chainID: 2 })
+            charon = charon.connect(sender)
+            let inputData = await prepareTransaction({
+              charon,
+              inputs:[],
+              outputs: [aliceDepositUtxo],
+              account: {
+                owner: sender.address,
+                publicKey: aliceDepositUtxo.keypair.address(),
+              },
+              privateChainID: 2,
+              myHasherFunc: poseidon,
+              myHasherFunc2: poseidon2
+            })
+            let args = inputData.args
+            let extData = inputData.extData
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+            ['bytes','uint256','bytes32'],
+            [args.proof,args.publicAmount,args.root]
+            );
+            let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+            let tellorData = await getTellorData(tellor2,charon.address,1,depositId) 
+            let commi = await getTellorSubmission(args,extData);
+            await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+            await h.advanceTime(43200)//12 hours
+            await charon2.oracleDeposit([1],0);
+            let bobSendAmount = utils.parseEther('4')
+            const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
+ // contains private and public keys
+            const bobAddress = await bobKeypair.address() // contains only public key
+            const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair, chainID: 2 })
+            let aliceChangeUtxo = new Utxo({
+                amount: _depositAmount.sub(bobSendAmount),
+                myHashFunc: poseidon,
+                keypair: aliceDepositUtxo.keypair,
+                chainID: 2
+            })
+            inputData = await prepareTransaction({
+                charon: charon2,
+                inputs:[aliceDepositUtxo],
+                outputs: [bobSendUtxo, aliceChangeUtxo],
+                privateChainID: 2,
+                myHasherFunc: poseidon,
+                myHasherFunc2: poseidon2
+              })
+            args = inputData.args
+            extData = inputData.extData
+            assert(await charon2.isSpent(args.inputNullifiers[0]) == false, "should not have spent nulifier")
+            await charon2.transact(args,extData)
+            assert(await charon2.isSpent(args.inputNullifiers[0]) == true, "should have spent nulifier")
+        });
+        it("Test _transact and _verify", async function() {
+          //can't transact twice on same input, can't use a bogus proof
+        let _depositAmount = utils.parseEther('10');
+        await token.mint(accounts[1].address,web3.utils.toWei("100"))
+        let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                  web3.utils.toWei("1000"),
+                                                  _depositAmount,
+                                                  0)
+        
+        await token.connect(accounts[1]).approve(charon.address,_amount)
+        const sender = accounts[0]
+        const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon, chainID: 2 })
+        const fakeDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon, chainID: 3 })
+        charon = charon.connect(sender)
+        let inputData = await prepareTransaction({
+          charon,
+          inputs:[],
+          outputs: [aliceDepositUtxo],
+          account: {
+            owner: sender.address,
+            publicKey: aliceDepositUtxo.keypair.address(),
+          },
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+        })
+        charon = charon.connect(sender)
+        let inputDataFake = await prepareTransaction({
+          charon,
+          inputs:[],
+          outputs: [fakeDepositUtxo],
+          account: {
+            owner: sender.address,
+            publicKey: fakeDepositUtxo.keypair.address(),
+          },
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+        })
+        let args = inputData.args
+        let extData = inputData.extData
+        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10000"))
+        await charon.connect(accounts[1]).estimateGas.depositToOtherChain(inputDataFake.args,inputDataFake.extData,false);
+        const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+        ['bytes','uint256','bytes32'],
+        [args.proof,args.publicAmount,args.root]
+        );
+        let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+        let tellorData = await getTellorData(tellor2,charon.address,1,depositId) 
+        let commi = await getTellorSubmission(args,extData);
+        await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+        tellorData = await getTellorData(tellor2,charon.address,1,2) 
+        commi = await getTellorSubmission(inputDataFake.args,inputDataFake.extData);
+        await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+        await h.advanceTime(43200)//12 hours
+        await charon2.oracleDeposit([1,2],0);//should get both 
+        // Alice sends some funds to withdraw (ignore bob)
+        let bobSendAmount = utils.parseEther('4')
+        const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
+// contains private and public keys
+        const bobAddress = await bobKeypair.address() // contains only public key
+        const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair, chainID: 2})
+        let aliceChangeUtxo = new Utxo({
+            amount: _depositAmount.sub(bobSendAmount),
+            myHashFunc: poseidon,
+            keypair: aliceDepositUtxo.keypair,
+            chainID: 2
+        })
+        inputData = await prepareTransaction({
+            charon: charon2,
+            inputs:[aliceDepositUtxo],
+            outputs: [bobSendUtxo, aliceChangeUtxo],
+            privateChainID: 2,
+            myHasherFunc: poseidon,
+            myHasherFunc2: poseidon2
+          })
+          let failVar = 0;
+          try{
+            await prepareTransaction({
+            charon: charon2,
+            inputs:[fakeDepositUtxo],
+            outputs: [bobSendUtxo, aliceChangeUtxo],
+            privateChainID: 2,
+            myHasherFunc: poseidon,
+            myHasherFunc2: poseidon2
+          })
+          failVar = 1;
+        }
+        catch{
+          console.log("failing as expected for fake deposit")
+        }
+        assert(failVar == 0, "should not allow you to use fake deposit")
+        args = inputData.args
+        extData = inputData.extData
+        await charon2.transact(args,extData)
+        await h.expectThrow(charon2.transact(args,extData))
+        //add transact16
+        const bobSendUtxo2 = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair , chainID: 2})
+        let aliceChangeUtxo2 = new Utxo({
+            amount: _depositAmount.sub(bobSendAmount),
+            myHashFunc: poseidon,
+            keypair: aliceChangeUtxo.keypair,
+            chainID: 2
+        })
+        inputData = await prepareTransaction({
+            charon: charon2,
+            inputs:[aliceChangeUtxo],
+            outputs: [bobSendUtxo2, aliceChangeUtxo2],
+            privateChainID: 2,
+            myHasherFunc: poseidon,
+            myHasherFunc2: poseidon2
+          })
+        args = inputData.args
+        extData = inputData.extData
+        await charon2.transact(args,extData)
+        //second w/ more
+        let charlieSendAmount = utils.parseEther('7')
+        const charlieKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
+        // contains private and public keys
+                   const charlieAddress = await charlieKeypair.address() // contains only public key
+                   const charlieSendUtxo = new Utxo({ amount: charlieSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(charlieAddress,poseidon), chainID: 2 })
+                   let bobChangeUtxo = new Utxo({
+                       amount: utils.parseEther('1'),
+                       myHashFunc: poseidon,
+                       keypair: bobSendUtxo.keypair,
+                       chainID: 2
+                   })
+                   inputData = await prepareTransaction({
+                       charon: charon2,
+                       inputs:[bobSendUtxo, bobSendUtxo2],
+                       outputs: [bobChangeUtxo,charlieSendUtxo],
+                       privateChainID: 2,
+                       myHasherFunc: poseidon,
+                       myHasherFunc2: poseidon2
+                     })
+                    try{
+                      inputDataFake = await prepareTransaction({
+                      charon: charon2,
+                      inputs:[bobSendUtxo, bobSendUtxo2],
+                      outputs: [bobChangeUtxo,charlieSendUtxo],
+                      privateChainID: 3,
+                      myHasherFunc: poseidon,
+                      myHasherFunc2: poseidon2
+                    })
+                    failVar = 1
+                  }
+                  catch{
+                    console.log("failing as expected for wrong chain")
+                  }
+                  assert(failVar == 0, "should fail on wrong chain prep")
+                   args = inputData.args
+                   extData = inputData.extData
+                   await charon2.transact(args,extData)
+                   await h.expectThrow(charon2.transact(inputDataFake.args,inputDataFake.extData))
+                   await h.expectThrow(charon2.transact(args,extData))
+    })
 async function getTellorSubmission(args,extData){
   const dataEncoded = abiCoder.encode(
     ['bytes32','bytes32','bytes32','bytes32','bytes'],

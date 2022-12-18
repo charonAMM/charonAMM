@@ -372,7 +372,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         ExtData memory _extData;
         bytes memory _value;
         PartnerContract storage _p = partnerContracts[_partnerIndex];
-        for(uint256 _i; _i< _depositId.length; _i++){
+        for(uint256 _i; _i<=_depositId.length-1; _i++){
           _value = oracle.getCommitment(_p.chainID, _p.contractAddress, _depositId[_i]);
           _proof.inputNullifiers = new bytes32[](2);
           (_proof.inputNullifiers[0], _proof.inputNullifiers[1], _proof.outputCommitments[0], _proof.outputCommitments[1], _proof.proof) = abi.decode(_value,(bytes32,bytes32,bytes32,bytes32,bytes));

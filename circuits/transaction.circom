@@ -64,10 +64,11 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
         inSignature[tx].commitment <== inCommitmentHasher[tx].out;
         inSignature[tx].merklePath <== inPathIndices[tx];
 
-        inNullifierHasher[tx] = Poseidon(3);
+        inNullifierHasher[tx] = Poseidon(4);
         inNullifierHasher[tx].inputs[0] <== inCommitmentHasher[tx].out;
         inNullifierHasher[tx].inputs[1] <== inPathIndices[tx];
         inNullifierHasher[tx].inputs[2] <== inSignature[tx].out;
+        inNullifierHasher[tx].inputs[3] <== chainID;
         inNullifierHasher[tx].out === inputNullifier[tx];
 
         inTree[tx] = MerkleProof(levels);

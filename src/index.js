@@ -111,10 +111,10 @@ async function prepareTransaction({
     throw new Error('Incorrect inputs/outputs count')
   }
   while (inputs.length !== 2 && inputs.length < 16) {
-    inputs.push(new Utxo({myHashFunc:myHasherFunc}))
+    inputs.push(new Utxo({myHashFunc:myHasherFunc, chainID: privateChainID}))
   }
   while (outputs.length < 2) {
-    outputs.push(new Utxo({myHashFunc:myHasherFunc}))
+    outputs.push(new Utxo({myHashFunc:myHasherFunc, chainID: privateChainID}))
   }
   let extAmount = BigNumber.from(fee)
     .add(outputs.reduce((sum, x) => sum.add(x.amount), BigNumber.from(0)))

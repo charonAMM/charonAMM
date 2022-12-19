@@ -162,12 +162,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      */
     function addLPRewards(uint256 _amount,bool _isCHD) external{
       if(_isCHD){
-        recordBalanceSynth += _amount;
         require(chd.transferFrom(msg.sender,address(this),_amount));
+        recordBalanceSynth += _amount;
       }
       else{
-        recordBalance += _amount;
         require(token.transferFrom(msg.sender,address(this),_amount));
+        recordBalance += _amount;
       }
       emit LPRewardAdded(_amount, _isCHD);
     }
@@ -318,7 +318,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @param _minBaseAssetOut min amount of base token you need out
      * @return _tokenAmountOut amount of tokens recieved
      */
-    function lpWithdraw(uint _poolAmountIn, uint256 _minCHDOut, uint256 _minBaseAssetOut)
+    function lpWithdraw(uint256 _poolAmountIn, uint256 _minCHDOut, uint256 _minBaseAssetOut)
         external
         _finalized_
         returns (uint256 _tokenAmountOut)

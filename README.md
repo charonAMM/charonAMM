@@ -12,11 +12,9 @@ For more information, check out the [whitepaper](https://github.com/charonAMM/wr
 The build step compiles the circuit, does untrusted setup, generates verifier contract, and compiles all the contracts. It could take a while at the build step.
 
 
-First install circom
+First install circom:
 
-```sh
 [https://docs.circom.io/getting-started/installation/#installing-circom](https://docs.circom.io/getting-started/installation/#installing-circom)
-```
 
 
 ```sh

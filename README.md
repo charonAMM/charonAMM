@@ -17,6 +17,8 @@ First install circom:
 [https://docs.circom.io/getting-started/installation/#installing-circom](https://docs.circom.io/getting-started/installation/#installing-circom)
 
 
+then:
+
 ```sh
 npm i
 npm run build

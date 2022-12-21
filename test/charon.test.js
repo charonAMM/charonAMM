@@ -38,7 +38,7 @@ async function getTellorData(tInstance,cAddress,chain,depositID){
 }
 describe("charon tests", function () {
     let accounts;
-    let verifier2,verifier16,token,charon,hasher,token2,charon2,oracle, oracle2;
+    let verifier2,verifier16,token,charon,hasher,token2,charon2,oracle, oracle2,cfc;
     let fee = 0;
     let HEIGHT = 5;
     let builtPoseidon;

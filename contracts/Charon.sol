@@ -5,6 +5,7 @@ import "./CHD.sol";
 import "./MerkleTreeWithHistory.sol";
 import "./Token.sol";
 import "./helpers/Math.sol";
+import "./interfaces/ICFC.sol";
 import "./interfaces/IOracle.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IVerifier.sol";
@@ -346,8 +347,10 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           recordBalance = recordBalance - _tokenAmountOut;
           _CHDOut = _bmul(_ratio, recordBalanceSynth);
            recordBalanceSynth = recordBalanceSynth - _CHDOut;
-          require(token.transfer(controller, _tokenAmountOut));
-          require(chd.transfer(controller, _CHDOut));
+          token.approve(address(controller),_tokenAmountOut);
+          ICFC(controller).addFees(_tokenAmountOut,false);
+          chd.approve(address(controller),_CHDOut);
+          ICFC(controller).addFees(_CHDOut,true);
         }
     }
 
@@ -378,7 +381,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                             fee
                         );
           recordBalanceSynth = recordBalanceSynth - _CHDOut;
-          require(chd.transfer(controller, _CHDOut));
+          chd.approve(address(controller),_CHDOut);
+          ICFC(controller).addFees(_CHDOut,true);
         }
     }
 
@@ -448,8 +452,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
            require(token.transfer(msg.sender,_tokenAmountOut));
            recordBalance -= _tokenAmountOut;
            if(_exitFee > 0){
-             recordBalance -= _exitFee;
-             require(token.transfer(controller, _exitFee));
+            chd.approve(address(controller),_exitFee);
+            ICFC(controller).addFees(_exitFee,true);
            }
         } 
         else{
@@ -459,8 +463,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           recordBalance += _tokenAmountIn;
           recordBalanceSynth -= _tokenAmountOut;
           if(fee > 0){
-             recordBalanceSynth -= _exitFee;//this captures the 50% to LP's
-             require(chd.transfer(controller, _exitFee));
+            token.approve(address(controller),_exitFee);
+            ICFC(controller).addFees(_exitFee,false);
           }
         }
         _spotPriceAfter = calcSpotPrice(

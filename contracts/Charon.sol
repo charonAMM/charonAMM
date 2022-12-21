@@ -92,7 +92,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     address public controller;//controller adddress (used for initializing contracts, then should be CFC for accepting fees)
     bool public finalized;//bool if contracts are initialized
     uint256 public immutable chainID; //chainID of this charon instance
-    uint256 public immutable fee;//fee when liquidity is withdrawn or trade happens
+    uint256 public immutable fee;//fee when liquidity is withdrawn or trade happens (1e18 = 100% fee)
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     uint256 public userRewards;//amount of baseToken user rewards in contract
@@ -326,8 +326,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         uint256 _exitFee = _bmul(_poolAmountIn, fee);
         uint256 _pAiAfterExitFee = _poolAmountIn - _exitFee;
         uint256 _ratio = _bdiv(_pAiAfterExitFee, supply);
-        _burn(msg.sender,_poolAmountIn - _exitFee);
-        _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
+        _burn(msg.sender,_pAiAfterExitFee);//burning the total amount, but not taking out the tokens that are fees paid to the LP
         _tokenAmountOut = _bmul(_ratio, recordBalance);
         require(_tokenAmountOut != 0, "ERR_MATH_APPROX");
         require(_tokenAmountOut >= _minBaseAssetOut, "ERR_LIMIT_OUT");
@@ -339,6 +338,17 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         require(token.transfer(msg.sender, _tokenAmountOut));
         require(chd.transfer(msg.sender, _CHDOut));
         emit LPWithdrawal(msg.sender, _poolAmountIn);
+        //now transfer exit fee to CFC
+        if(_exitFee > 0){
+          _ratio = _bdiv(_exitFee, supply);
+          _burn(msg.sender,_exitFee);//burning the total amount, but not taking out the tokens that are fees paid to the LP
+          _tokenAmountOut = _bmul(_ratio, recordBalance);
+          recordBalance = recordBalance - _tokenAmountOut;
+          _CHDOut = _bmul(_ratio, recordBalanceSynth);
+           recordBalanceSynth = recordBalanceSynth - _CHDOut;
+          require(token.transfer(controller, _tokenAmountOut));
+          require(chd.transfer(controller, _CHDOut));
+        }
     }
 
    /**
@@ -357,9 +367,19 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         require(_tokenAmountOut >= _minAmountOut, "not enough squeeze");
         uint256 _exitFee = _bmul(_poolAmountIn, fee);
         _burn(msg.sender,_poolAmountIn - _exitFee);
-        _move(address(this),controller, _exitFee);//we need the fees to go to the LP's!!
         require(chd.transfer(msg.sender, _tokenAmountOut));
         emit LPWithdrawal(msg.sender,_poolAmountIn);
+        if(_exitFee > 0){
+          _burn(msg.sender,_exitFee);//burning the total amount, but not taking out the tokens that are fees paid to the LP
+          uint256 _CHDOut =calcSingleOutGivenPoolIn(
+                            recordBalanceSynth,
+                            supply,
+                            _exitFee,
+                            fee
+                        );
+          recordBalanceSynth = recordBalanceSynth - _CHDOut;
+          require(chd.transfer(controller, _CHDOut));
+        }
     }
 
     /**
@@ -398,6 +418,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         returns (uint256 _tokenAmountOut, uint256 _spotPriceAfter){
         uint256 _inRecordBal;
         uint256 _outRecordBal;
+        uint256 _exitFee = _bmul(_tokenAmountIn, fee);
         if(_inIsCHD){
            _inRecordBal = recordBalanceSynth;
            _outRecordBal = recordBalance;
@@ -426,9 +447,9 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
            require(chd.burnCHD(msg.sender,_tokenAmountIn));
            require(token.transfer(msg.sender,_tokenAmountOut));
            recordBalance -= _tokenAmountOut;
-           if(fee > 0){
-             recordBalance -= _tokenAmountOut * fee/2;//this captures the 50% to LP's
-             require(token.transfer(controller, fee/2));
+           if(_exitFee > 0){
+             recordBalance -= _exitFee;
+             require(token.transfer(controller, _exitFee));
            }
         } 
         else{
@@ -438,8 +459,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           recordBalance += _tokenAmountIn;
           recordBalanceSynth -= _tokenAmountOut;
           if(fee > 0){
-             recordBalanceSynth -= _tokenAmountOut * fee/2;//this captures the 50% to LP's
-             require(chd.transfer(controller, fee/2));
+             recordBalanceSynth -= _exitFee;//this captures the 50% to LP's
+             require(chd.transfer(controller, _exitFee));
           }
         }
         _spotPriceAfter = calcSpotPrice(

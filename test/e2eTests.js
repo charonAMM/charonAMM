@@ -115,4 +115,6 @@ describe("e2e charon tests", function () {
     })
     it("Add User rewards and have them distribute correctly", async function() {
     })
+    it("Test distribution of base fee", async function() {
+    })
 });

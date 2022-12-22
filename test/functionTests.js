@@ -129,9 +129,11 @@ describe("charon system - function tests", function() {
         );
         let _queryId = h.hash(_queryData)
         let _value = 100
-        await tellor.submitValue(_queryId, _value,0, _queryData);
+        await tellor.connect(accounts[1]).submitValue(_queryId, _value,0, _queryData);
         await h.advanceTime(86400)
-        assert(await oracle.getCommitment(1,accounts[1].address,1) == 100, "value should be correct")
+        let vals = await oracle.getCommitment(1,accounts[1].address,1)
+        assert(vals[0] == 100, "value should be correct")
+        assert(vals[1] == accounts[1].address, "reporter should be correct")
     })
     it("constructor()", async function() {
         console.log("CHD.sol")

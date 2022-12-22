@@ -98,29 +98,21 @@ describe("charon tests", function () {
         assert(await charon.controller() == accounts[0].address, "controller should be set")
         assert(await charon.chainID() == 1, "chainID should be correct")
       });
-      it("Test addLPRewards()", async function() {
+      it("Test addRewards()", async function() {
         await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
-        await h.expectThrow(charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),true))
-        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
-        await charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),true);
-        assert(await charon.recordBalanceSynth() == web3.utils.toWei("1050"))
-        await token.mint(accounts[1].address,web3.utils.toWei("1000"))
-        await h.expectThrow(charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),false))
-        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
-        await charon.connect(accounts[1]).addLPRewards(web3.utils.toWei("50"),false);
-        assert(await charon.recordBalance() == web3.utils.toWei("150"))
-      });
-      it("Test addUserRewards()", async function() {
-        await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
-        await h.expectThrow(charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),true))
-        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
-        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),true);
+        await h.expectThrow(charon.connect(accounts[1]).addRewards(web3.utils.toWei("50"),web3.utils.toWei("50"),web3.utils.toWei("50"),true))
+        await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("150"))
+        await charon.connect(accounts[1]).addRewards(web3.utils.toWei("50"),web3.utils.toWei("50"),web3.utils.toWei("50"),true);
         assert(await charon.userRewardsCHD() == web3.utils.toWei("50"))
         await token.mint(accounts[1].address,web3.utils.toWei("1000"))
-        await h.expectThrow(charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),false))
-        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("50"))
-        await charon.connect(accounts[1]).addUserRewards(web3.utils.toWei("50"),false);
+        await h.expectThrow(charon.connect(accounts[1]).addRewards(web3.utils.toWei("50"),web3.utils.toWei("50"),web3.utils.toWei("50"),false))
+        await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("150"))
+        await charon.connect(accounts[1]).addRewards(web3.utils.toWei("50"),web3.utils.toWei("50"),web3.utils.toWei("50"),false);
         assert(await charon.userRewards() == web3.utils.toWei("50"))
+        assert(await charon.recordBalanceSynth() == web3.utils.toWei("1050"))
+        assert(await charon.recordBalance() == web3.utils.toWei("150"))
+        assert(await charon.oracleCHDFunds() == web3.utils.toWei("50"))
+        assert(await charon.oracleTokenFunds() == web3.utils.toWei("50"))
       });
       it("Test changeController", async function() {
         await h.expectThrow(charon.connect(accounts[2]).changeController(accounts[2].address))

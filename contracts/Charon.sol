@@ -98,20 +98,20 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     uint256 public userRewards;//amount of baseToken user rewards in contract
     uint256 public userRewardsCHD;//amount of chd user rewards in contract
+    uint256 public oracleTokenFunds;//amount of token funds to be paid to reporters
+    uint256 public oracleCHDFunds;//amount of chd funds to be paid to reporters
     mapping(bytes32 => uint256) public depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
     mapping(bytes32 => bool) public nullifierHashes;//zk proof hashes to tell whether someone withdrew
 
     //events
-    event ControllerChanged(address _newController);
     event DepositToOtherChain(bool _isCHD, address _sender, uint256 _timestamp, uint256 _tokenAmount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
-    event LPRewardAdded(uint256 _amount,bool _isCHD);
+    event RewardAdded(uint256 _amount,bool _isCHD);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
     event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput);
     event NewNullifier(bytes32 _nullifier);
     event OracleDeposit(uint256 _chain,address _contract, uint256[] _depositId);
     event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
-    event UserRewardAdded(uint256 _amount,bool _isCHD);
 
     //modifiers
     /**
@@ -158,46 +158,34 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
 
     /**
      * @dev allows the cfc (or anyone) to add LPrewards to the system
-     * @param _amount uint256 of tokens to add
+     * @param _toUsers uint256 of tokens to add to Users
+     * @param _toLPs uint256 of tokens to add to LPs
+     * @param _toOracle uint256 of tokens to add to Oracle
      * @param _isCHD bool if the token is chd (baseToken if false)
      */
-    function addLPRewards(uint256 _amount,bool _isCHD) external{
+    function addRewards(uint256 _toUsers, uint256 _toLPs, uint256 _toOracle,bool _isCHD) external{
       if(_isCHD){
-        require(chd.transferFrom(msg.sender,address(this),_amount));
-        recordBalanceSynth += _amount;
+        require(chd.transferFrom(msg.sender,address(this),_toUsers + _toLPs + _toOracle));
+        recordBalanceSynth += _toLPs;
+        oracleCHDFunds += _toOracle;
+        userRewardsCHD += _toUsers;
       }
       else{
-        require(token.transferFrom(msg.sender,address(this),_amount));
-        recordBalance += _amount;
+        require(token.transferFrom(msg.sender,address(this),_toUsers + _toLPs + _toOracle));
+        recordBalance += _toLPs;
+        oracleTokenFunds += _toOracle;
+        userRewards += _toUsers;
       }
-      emit LPRewardAdded(_amount, _isCHD);
-    }
-
-    /**
-     * @dev allows the cfc (or anyone) to add user rewards to the system
-     * @param _amount uint256 of tokens to add
-     * @param _isCHD bool if the token is chd (baseToken if false)
-     */
-    function addUserRewards(uint256 _amount, bool _isCHD) external{
-      if(_isCHD){
-         require(chd.transferFrom(msg.sender,address(this),_amount));
-         userRewardsCHD += _amount;
-      }
-      else{
-        require(token.transferFrom(msg.sender,address(this),_amount));
-        userRewards += _amount;
-      }
-      emit UserRewardAdded(_amount, _isCHD);
+      emit RewardAdded(_toUsers + _toLPs + _toOracle,_isCHD);
     }
 
     /**
      * @dev Allows the controller to change their address
-     * @param _newController new controller.  Should be DAO for recieving fees
+     * @param _newController new controller.  Should be CFC
      */
     function changeController(address _newController) external{
       require(msg.sender == controller,"should be controller");
       controller = _newController;
-      emit ControllerChanged(_newController);
     }
 
     /**
@@ -395,12 +383,20 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         Proof memory _proof;
         ExtData memory _extData;
         bytes memory _value;
+        address _reporter;
         PartnerContract storage _p = partnerContracts[_partnerIndex];
         for(uint256 _i; _i<=_depositId.length-1; _i++){
-          _value = oracle.getCommitment(_p.chainID, _p.contractAddress, _depositId[_i]);
+          (_value,_reporter) = oracle.getCommitment(_p.chainID, _p.contractAddress, _depositId[_i]);
           _proof.inputNullifiers = new bytes32[](2);
           (_proof.inputNullifiers[0], _proof.inputNullifiers[1], _proof.outputCommitments[0], _proof.outputCommitments[1], _proof.proof) = abi.decode(_value,(bytes32,bytes32,bytes32,bytes32,bytes));
           _transact(_proof, _extData);
+          //you need this amount to be less than the stake amount, but if this is greater than the gas price to deposit and then report, you don't need to worry about it
+          if(oracleCHDFunds > 1000){
+            chd.transfer(_reporter,oracleCHDFunds/1000);
+          }
+          if(oracleTokenFunds > 1000){
+            token.transfer(_reporter,oracleTokenFunds/1000);
+          }
         }
         emit OracleDeposit(_p.chainID,_p.contractAddress,_depositId);
     }

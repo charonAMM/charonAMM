@@ -21,10 +21,12 @@ contract Oracle is UsingTellor{
      * @param _depositId depositId of the specific deposit
      * @return _value bytes data returned from tellor
      */
-    function getCommitment(uint256 _chain, address _partnerContract, uint256 _depositId) public view returns(bytes memory _value){
+    function getCommitment(uint256 _chain, address _partnerContract, uint256 _depositId) public view returns(bytes memory _value,address _reporter){
         bytes memory _data = abi.encodeWithSelector(bytes4(keccak256("getOracleSubmission(uint256)")),_depositId);
         bytes32 _queryId = keccak256(abi.encode("EVMCall",abi.encode(_chain,_partnerContract,_data)));
-        (_value,) = getDataBefore(_queryId,block.timestamp - 12 hours);
+        uint256 _timestamp;
+        (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
+        _reporter = getReporterByTimestamp(_queryId, _timestamp);
     }
 
     /**

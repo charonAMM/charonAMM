@@ -166,7 +166,6 @@ contract Math{
         uint256 _c0 = _a * _b;
         require(_a == 0 || _c0 / _a == _b, "ERR_MUL_OVERFLOW");
         uint256 _c1 = _c0 + (BONE / 2);
-        require(_c1 >= _c0, "ERR_MUL_OVERFLOW");
         _c2 = _c1 / BONE;
     }
 

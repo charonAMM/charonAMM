@@ -38,7 +38,7 @@ async function getTellorData(tInstance,cAddress,chain,depositID){
 }
 describe("charon tests", function () {
     let accounts;
-    let verifier2,verifier16,token,charon,hasher,token2,charon2,oracle, oracle2,cfc;
+    let verifier2,verifier16,token,charon,hasher,token2,charon2,oracle, oracle2,cfc,cfc2;
     let fee = 0;
     let HEIGHT = 5;
     let builtPoseidon;
@@ -70,8 +70,10 @@ describe("charon tests", function () {
         //now set both of them. 
         await token.approve(charon.address,web3.utils.toWei("100"))//100
         await token2.approve(charon2.address,web3.utils.toWei("100"))//100
-        await charon.finalize([2],[charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd.address);
-        await charon2.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd2.address);
+        cfc = await deploy('MockCFC',token.address,chd.address)
+        cfc2 = await deploy('MockCFC',token2.address,chd2.address)
+        await charon.finalize([2],[charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd.address,cfc.address);
+        await charon2.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd2.address, cfc2.address);
     });
 
     function poseidon(inputs){
@@ -95,7 +97,7 @@ describe("charon tests", function () {
         assert(await charon.verifier16() == verifier16.address, "verifier16 should be set")
         assert(await charon.token() == token.address, "token should be set")
         assert(await charon.fee() == fee, "fee should be set")
-        assert(await charon.controller() == accounts[0].address, "controller should be set")
+        assert(await charon.controller() == cfc.address, "controller should be set")
         assert(await charon.chainID() == 1, "chainID should be correct")
       });
       it("Test addRewards()", async function() {
@@ -113,11 +115,6 @@ describe("charon tests", function () {
         assert(await charon.recordBalance() == web3.utils.toWei("150"))
         assert(await charon.oracleCHDFunds() == web3.utils.toWei("50"))
         assert(await charon.oracleTokenFunds() == web3.utils.toWei("50"))
-      });
-      it("Test changeController", async function() {
-        await h.expectThrow(charon.connect(accounts[2]).changeController(accounts[2].address))
-        await charon.changeController(accounts[1].address)
-        assert(await charon.controller() == accounts[1].address, "controller should change")
       });
       it("Test depositToOtherChain", async function() {
         let _depositAmount = web3.utils.toWei("10");
@@ -172,12 +169,12 @@ describe("charon tests", function () {
       it("Test finalize", async function() {
         let testCharon = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,tellor2.address,HEIGHT,2,"Charon Pool Token2","CPT2");
         let chd3 = await deploy("MockERC20",testCharon.address,"charon dollar3","chd3")
-        await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address));//must transfer token
+        await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address));//must transfer token
         await token2.approve(testCharon.address,web3.utils.toWei("100"))//100
-        await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address))//must be controller
-        await h.expectThrow(testCharon.finalize([1,2],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address))//length should be same
-        await testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address);
-        await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address))//already finalized
+        await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//must be controller
+        await h.expectThrow(testCharon.finalize([1,2],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//length should be same
+        await testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address);
+        await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//already finalized
         assert(await testCharon.finalized(), "should be finalized")
         assert(await testCharon.balanceOf(accounts[0].address) - web3.utils.toWei("100") == 0, "should have full balance")
         assert(await testCharon.recordBalance() == web3.utils.toWei("100"), "record Balance should be set")
@@ -186,6 +183,7 @@ describe("charon tests", function () {
         let pC = await testCharon.getPartnerContracts();
         assert(pC[0][0] == 1, "partner chain should be correct")
         assert(pC[0][1] == charon.address, "partner address should be correct")
+        assert(await testCharon.controller() == cfc.address, "controller should be cfc")
       });
     it("Test lpDeposit", async function() {
       await h.expectThrow(charon.lpDeposit(2,0,0));//cannot put zero in

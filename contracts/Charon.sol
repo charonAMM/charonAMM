@@ -343,11 +343,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @param _minAmountOut minimum amount of CHD you need out
      */
     function lpWithdrawSingleCHD(uint256 _poolAmountIn, uint256 _minAmountOut) external _finalized_{
-        uint256 _tokenAmountOut = calcSingleOutGivenPoolIn(
+        uint256 _tokenAmountOut = calcSingleOutGivenIn(
                             recordBalanceSynth,
                             supply,
                             _poolAmountIn,
-                            0
+                            0,
+                            true
                         );
         recordBalanceSynth -= _tokenAmountOut;
         require(_tokenAmountOut >= _minAmountOut, "not enough squeeze");
@@ -408,6 +409,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         uint256 _inRecordBal;
         uint256 _outRecordBal;
         uint256 _exitFee = _bmul(_tokenAmountIn, fee);
+        uint256 _adjustedIn = _tokenAmountIn - _exitFee;
         if(_inIsCHD){
            _inRecordBal = recordBalanceSynth;
            _outRecordBal = recordBalance;
@@ -420,20 +422,31 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         uint256 _spotPriceBefore = calcSpotPrice(
                                     _inRecordBal,
                                     _outRecordBal,
-                                    fee
+                                    0
                                 );
         require(_spotPriceBefore <= _maxPrice, "ERR_BAD_LIMIT_PRICE");
-        _tokenAmountOut = calcOutGivenIn(
+        if(_inIsCHD){ //this is because we burn CHD on swaps (can't leave system w/o burning it)
+          _tokenAmountOut = calcSingleOutGivenIn(
+                  _outRecordBal,
+                  _inRecordBal,
+                  _adjustedIn,
+                  0,
+                  false
+              );
+        }
+        else{
+          _tokenAmountOut = calcOutGivenIn(
                             _inRecordBal,
                             _outRecordBal,
-                            _tokenAmountIn,
-                            fee
+                            _adjustedIn,
+                           0
                         );
+        }
         require(_tokenAmountOut >= _minAmountOut, "ERR_LIMIT_OUT");
-        require(_spotPriceBefore <= _bdiv(_tokenAmountIn, _tokenAmountOut), "ERR_MATH_APPROX");
-        _outRecordBal = _outRecordBal - _tokenAmountOut;
+        require(_spotPriceBefore <= _bdiv(_adjustedIn, _tokenAmountOut), "ERR_MATH_APPROX");
+        _outRecordBal -= _tokenAmountOut;
         if(_inIsCHD){
-           require(chd.burnCHD(msg.sender,_tokenAmountIn));
+           require(chd.burnCHD(msg.sender,_adjustedIn));
            require(token.transfer(msg.sender,_tokenAmountOut));
            recordBalance -= _tokenAmountOut;
            if(_exitFee > 0){
@@ -442,10 +455,10 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
            }
         } 
         else{
-          _inRecordBal = _inRecordBal + _tokenAmountIn;
+          _inRecordBal += _adjustedIn;
           require(token.transferFrom(msg.sender,address(this), _tokenAmountIn));
           require(chd.transfer(msg.sender,_tokenAmountOut));
-          recordBalance += _tokenAmountIn;
+          recordBalance += _adjustedIn;
           recordBalanceSynth -= _tokenAmountOut;
           if(fee > 0){
             token.approve(address(controller),_exitFee);
@@ -455,7 +468,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         _spotPriceAfter = calcSpotPrice(
                                 _inRecordBal,
                                 _outRecordBal,
-                                fee
+                                0
                             );
         require(_spotPriceAfter >= _spotPriceBefore, "ERR_MATH_APPROX");     
         require(_spotPriceAfter <= _maxPrice, "ERR_LIMIT_PRICE");

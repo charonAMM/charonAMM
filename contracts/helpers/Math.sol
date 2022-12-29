@@ -84,31 +84,43 @@ contract Math{
     }
 
     /**
-     * @dev calculates an in amount of a token you get out when sending in a given amount of pool tokens
+     * @dev calculates an in amount of a token you get out when sending in a given amount of tokens
      * @param _tokenBalanceOut uint256 amount of token balance in the out token's pool
-     * @param _poolSupply uint256 total supply of pool tokens
-     * @param _poolAmountIn amount of pool tokens your sending in
+     * @param _inSupply uint256 total supply of in tokens
+     * @param _amountIn amount of in tokens your sending in
      * @param _swapFee uint256 fee on top of swap
      * @return _tokenAmountOut is the uint256 amount of token out
      */
-    function calcSingleOutGivenPoolIn(
+    function calcSingleOutGivenIn(
         uint256 _tokenBalanceOut,
-        uint256 _poolSupply,
-        uint256 _poolAmountIn,
-        uint256 _swapFee
+        uint256 _inSupply,
+        uint256 _amountIn,
+        uint256 _swapFee,
+        bool _isPool
     )
         public pure
         returns (uint256 _tokenAmountOut)
     {
-        uint256 _normalizedWeight = _bdiv(1 ether,2 ether);
-        uint256 _poolAmountInAfterExitFee = _bmul(_poolAmountIn, (BONE));
-        uint256 _newPoolSupply = _poolSupply - _poolAmountInAfterExitFee;
-        uint256 _poolRatio = _bdiv(_newPoolSupply, _poolSupply);
-        uint256 _tokenOutRatio = _bpow(_poolRatio, _bdiv(BONE, _normalizedWeight));
-        uint256 _newTokenBalanceOut = _bmul(_tokenOutRatio, _tokenBalanceOut);
-        uint256 _tokenAmountOutBeforeSwapFee = _tokenBalanceOut - _newTokenBalanceOut;
-        uint256 _zaz = _bmul((BONE - _normalizedWeight), _swapFee); 
-        _tokenAmountOut = _bmul(_tokenAmountOutBeforeSwapFee,(BONE - _zaz));
+        uint256 _normalizedWeight;
+        if(_isPool){
+            _normalizedWeight = _bdiv(1 ether,2 ether);
+            uint256 _amountInAfterExitFee = _bmul(_amountIn, (BONE));
+            uint256 _newSupply = _inSupply - _amountInAfterExitFee;
+            uint256 _ratio = _bdiv(_newSupply, _inSupply);
+            uint256 _tokenOutRatio = _bpow(_ratio, _bdiv(BONE, _normalizedWeight));
+            uint256 _newTokenBalanceOut = _bmul(_tokenOutRatio, _tokenBalanceOut);
+            uint256 _tokenAmountOutBeforeSwapFee = _tokenBalanceOut - _newTokenBalanceOut;
+            uint256 _zaz = _bmul((BONE - _normalizedWeight), _swapFee); 
+            _tokenAmountOut = _bmul(_tokenAmountOutBeforeSwapFee,(BONE - _zaz));
+        }
+        else{
+            uint256 _adjustedIn = BONE - _swapFee;
+            _adjustedIn = _bmul(_amountIn, _adjustedIn);
+            uint256 _y = _bdiv(BONE, (_inSupply));
+            uint256 _bar = _bpow((BONE - _y),_amountIn);
+            _tokenAmountOut = _tokenBalanceOut - _bmul(_tokenBalanceOut, _bar);
+        }
+
     }
 
     /**

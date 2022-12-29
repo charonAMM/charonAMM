@@ -79,8 +79,8 @@ describe("charon system - function tests", function() {
     it("calcPoolOutGivenSingleIn(()", async function() {
         assert(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("100")) == web3.utils.toWei(".488088481710052490"), "pool out should be correct")
     });
-    it("calcSingleOutGivenPoolIn()", async function() {
-        assert(await math.calcSingleOutGivenPoolIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("1"),0) == web3.utils.toWei("190"), "single out should be correct")
+    it("calcSingleOutGivenIn()", async function() {
+        assert(await math.calcSingleOutGivenIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("1"),0,true) == web3.utils.toWei("190"), "single out should be correct")
     });
     it("btoi()", async function() {
         assert( await math.btoi(web3.utils.toWei("55")) == 55,"btoi should work")

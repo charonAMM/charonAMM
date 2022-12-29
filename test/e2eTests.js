@@ -123,6 +123,15 @@ describe("e2e charon tests", function () {
     // })
     // it("No way to withdraw more than you put in", async function() {
     // })
+    it("Attempt to swap out of massive position", async function() {
+      //try to do more than in the pool, assert fail
+      //do slightly less (find break point)
+
+
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+      await charon.connect(accounts[1]).swap(false,web3.utils.toWei("30"),0,web3.utils.toWei("50000"))
+    })
     it("Add rewards and pay them out", async function() {
       //mint chd and token on both chains
       await token.mint(accounts[1].address,web3.utils.toWei("1000000"))//1M

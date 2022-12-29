@@ -262,7 +262,7 @@ describe("charon tests", function () {
         await h.expectThrow(charon.connect(accounts[1]).lpWithdrawSingleCHD(web3.utils.toWei(".4987"), web3.utils.toWei("100")))
         await charon.connect(accounts[1]).lpWithdrawSingleCHD(web3.utils.toWei(".4987"), web3.utils.toWei("9.9"))
         let ps = web3.utils.toWei("100") + await charon.recordBalance()*1
-        minOut = await charon.calcSingleOutGivenPoolIn(web3.utils.toWei("1010"),ps,web3.utils.toWei(".4987"),0)
+        minOut = await charon.calcSingleOutGivenIn(web3.utils.toWei("1010"),ps,web3.utils.toWei(".4987"),0,true)
         assert((await charon.recordBalance()*1) - 1*web3.utils.toWei("100") == 0, "record balance should not move" )
         assert((await charon.recordBalanceSynth()*1) - 1*web3.utils.toWei("1000") > 0 , "record balance synth should be back to correct" )
         assert((await charon.recordBalanceSynth()*1) - 1*web3.utils.toWei("1000") < web3.utils.toWei(".1") , "record balance synth should be back to correct" )

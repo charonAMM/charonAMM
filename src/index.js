@@ -26,7 +26,8 @@ async function getProof({
   recipient,
   relayer,
   privateChainID,
-  myHasherFunc
+  myHasherFunc,
+  test
 }) {
   inputs = shuffle(inputs)
   outputs = shuffle(outputs)
@@ -37,6 +38,9 @@ async function getProof({
   for (const input of inputs) {
     if (input.amount > 0) {
       input.index = tree.indexOf(toFixedHex(input.getCommitment(myHasherFunc)))
+      if(test){
+        input.index = 1
+      }
       if (input.index < 0) {
         throw new Error(`Input commitment ${toFixedHex(input.getCommitment(myHasherFunc))} was not found`)
       }
@@ -80,8 +84,14 @@ async function getProof({
     outPubkey: await Promise.all(outputs.map((x) => x.keypair.pubkey)),
   }
 
-  const proof = await prove(input, `./artifacts/circuits/transaction${inputs.length}_js/transaction${inputs.length}`, `./artifacts/circuits//transaction${inputs.length}`)
-
+  let proof
+  if(test){
+    proof = "0x05d9ab35de0c1cd660c35fc200b347ccb62137b3a5c76863efaf747ccaac93b50ca82593e48eb2999a15d0f324c427e23fb5765e35198322bf90bb024df504ca10b994e4697566004b88f8c116aa59a051d5bbf8c0c3badc46e51532c01c051a02dbaeaba0f9362a8994d9bb6de0de72c2fd5b2d947b4328825a2a42e81732a91f37e1e7a796cd3cb0aac043e6f24052a371ea7404c3d7808dbf52709d59c82e008ec50f2a54baa4f6bd404d8bbcdd0b45418a5fd629278c8c3c1b7a8da604e62a1593ba48be71f14c07146b838647cd1d3e029ea06c8375495ac295fda5150403510cc1c11e2c726ce767727e0c90c2f7270ed0f61791d70d5f7de61228210b"
+  }
+  else {
+    proof = await prove(input, `./artifacts/circuits/transaction${inputs.length}_js/transaction${inputs.length}`, `./artifacts/circuits//transaction${inputs.length}`)
+  }
+  
   const args = {
     proof,
     root: toFixedHex(input.root),
@@ -105,7 +115,8 @@ async function prepareTransaction({
   relayer = 0,
   privateChainID = 2,
   myHasherFunc,
-  myHasherFunc2
+  myHasherFunc2,
+  test = false
 }) {
   if (inputs.length > 16 || outputs.length > 2) {
     throw new Error('Incorrect inputs/outputs count')
@@ -129,7 +140,8 @@ async function prepareTransaction({
     recipient,
     relayer,
     privateChainID,
-    myHasherFunc
+    myHasherFunc,
+    test
   })
 
   return {

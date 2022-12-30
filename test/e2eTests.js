@@ -99,35 +99,334 @@ describe("e2e charon tests", function () {
       return poseidon([a,b])
     }
 
-    // it("can you oracleDeposit same id twice", async function() {
-    // })
-    // it("Oracle Attack (censors)", async function() {
-    // })
-    // it("Oracle attack (bad value pushed through, liquidity drain properly before 12 hours)", async function() {
-    // })
-    // it("Flash loan scenario", async function() {
-    // })
-    // it("rug pull (either side pulls all liquidity)", async function() {
-    // })
+    it("can you oracleDeposit same id twice", async function() {
+      let _depositAmount = web3.utils.toWei("10");
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                web3.utils.toWei("1000"),
+                                                _depositAmount,
+                                                0)
+      await token.connect(accounts[1]).approve(charon.address,_amount)
+      const sender = accounts[0]
+      const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon, chainID: 2 })
+      charon = charon.connect(sender)
+      let inputData = await prepareTransaction({
+        charon,
+        inputs:[],
+        outputs: [aliceDepositUtxo],
+        account: {
+          owner: sender.address,
+          publicKey: aliceDepositUtxo.keypair.address(),
+        },
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      let args = inputData.args
+      let extData = inputData.extData
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+      ['bytes','uint256','bytes32'],
+      [args.proof,args.publicAmount,args.root]
+      );
+      let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+      let tellorData = await getTellorData(tellor2,charon.address,1,depositId) 
+      let commi = await getTellorSubmission(args,extData);
+      await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+      await h.advanceTime(43200)//12 hours
+      let tx = await charon2.oracleDeposit([1],0);
+      await h.expectThrow(charon2.oracleDeposit([1],0))
+    })
+    it("Oracle attack (bad value pushed through, it can break it if oracle fails!!", async function() {
+
+      let _depositAmount = utils.parseEther('10');
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                web3.utils.toWei("1000"),
+                                                _depositAmount,
+                                                0)
+      await token.connect(accounts[1]).approve(charon.address,_amount)
+      const sender = accounts[0]
+      const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 2 })
+      charon = charon.connect(sender)
+      let inputData = await prepareTransaction({
+        charon,
+        inputs:[],
+        outputs: [aliceDepositUtxo],
+        account: {
+          owner: sender.address,
+          publicKey: aliceDepositUtxo.keypair.address(),
+        },
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      let args = inputData.args
+      let extData = inputData.extData
+      //await charon.connect(accounts[1]).depositToOtherChain(args,extData,false); (comment out the deposit part)
+      const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+      ['bytes','uint256','bytes32'],
+      [args.proof,args.publicAmount,args.root]
+      );
+      let depositId = 1
+      let tellorData = await getTellorData(tellor2,charon.address,1,depositId) 
+      let commi = await getTellorSubmission(args,extData);
+      await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+      await h.advanceTime(43200)//12 hours
+      let tx = await charon2.oracleDeposit([1],0);  
+      //alice withdraws
+      inputData = await prepareTransaction({
+          charon: charon2,
+          inputs: [aliceDepositUtxo],
+          outputs: [],
+          recipient: accounts[1].address,
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+      })
+      await charon2.transact(inputData.args,inputData.extData)
+      assert(await chd2.balanceOf(accounts[1].address) - _depositAmount == 0, "should mint CHD");
+    })
+    it("pulls all liquidity", async function() {
+      let _depositAmount = utils.parseEther('10');
+            await token.mint(accounts[1].address,web3.utils.toWei("100"))
+            let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                      web3.utils.toWei("1000"),
+                                                      _depositAmount,
+                                                      0)
+            
+            await token.connect(accounts[1]).approve(charon.address,_amount)
+            const sender = accounts[0]
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon, chainID: 2 })
+            charon = charon.connect(sender)
+            let inputData = await prepareTransaction({
+              charon,
+              inputs:[],
+              outputs: [aliceDepositUtxo],
+              account: {
+                owner: sender.address,
+                publicKey: aliceDepositUtxo.keypair.address(),
+              },
+              privateChainID: 2,
+              myHasherFunc: poseidon,
+              myHasherFunc2: poseidon2
+            })
+            let args = inputData.args
+            let extData = inputData.extData
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+            ['bytes','uint256','bytes32'],
+            [args.proof,args.publicAmount,args.root]
+            );
+            let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+            let tellorData = await getTellorData(tellor2,charon.address,1,depositId) 
+            let commi = await getTellorSubmission(args,extData);
+            await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+            await h.advanceTime(43200)//12 hours
+            let tx = await charon2.oracleDeposit([1],0);  
+            // Alice sends some funds to withdraw (ignore bob)
+            let bobSendAmount = utils.parseEther('4')
+            const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
+ // contains private and public keys
+            const bobAddress = await bobKeypair.address() // contains only public key
+            const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon), chainID: 2 })
+            let aliceChangeUtxo = new Utxo({
+                amount: _depositAmount.sub(bobSendAmount),
+                myHashFunc: poseidon,
+                keypair: aliceDepositUtxo.keypair,
+                chainID: 2
+            })
+            inputData = await prepareTransaction({
+                charon: charon2,
+                inputs:[aliceDepositUtxo],
+                outputs: [bobSendUtxo, aliceChangeUtxo],
+                privateChainID: 2,
+                myHasherFunc: poseidon,
+                myHasherFunc2: poseidon2
+              })
+            args = inputData.args
+            extData = inputData.extData
+            await charon2.transact(args,extData)
+            let bal1 = await token2.balanceOf(accounts[0].address);
+            let chdbal1 = await chd2.balanceOf(accounts[0].address)
+            await charon2.lpWithdraw(web3.utils.toWei("100"), web3.utils.toWei("999"),web3.utils.toWei("99"))
+            assert(web3.utils.toWei("1000000") - await token2.balanceOf(accounts[0].address)*1 <web3.utils.toWei(".01"), "should withdraw all tokens")
+            assert(web3.utils.toWei("1000") - 1*await chd2.balanceOf(accounts[0].address)*1  < web3.utils.toWei(".01") , "should withdraw all chd")
+            assert(await charon2.totalSupply() == 0, "all pool tokens should be gone")
+    })
     // it("underlying token freezes (tellor upgrade example), allow single sided withdraw", async function() {
-    // })
-    // it("Add a new chain", async function() {
-    // })
-    // it("Remove a chain", async function() {
     // })
     // it("Multiple back and forths (oracle deposits on 3 different chains and withdrawals and trades)", async function() {
     // })
     // it("Lots of chains, lots of privacy transactioins, lots of withdrawals", async function() {
     // })
-    // it("No way to send money and then withdraw on old UTXO", async function() {
-    // })
-    // it("No way to withdraw more than you put in", async function() {
-    // })
+    it("No way to send money and then withdraw on old UTXO", async function() {
+      let _depositAmount = utils.parseEther('10');
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                web3.utils.toWei("1000"),
+                                                _depositAmount,
+                                                0)
+      
+      await token.connect(accounts[1]).approve(charon.address,_amount)
+      const sender = accounts[0]
+      const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc: poseidon, chainID: 2 })
+      charon = charon.connect(sender)
+      let inputData = await prepareTransaction({
+        charon,
+        inputs:[],
+        outputs: [aliceDepositUtxo],
+        account: {
+          owner: sender.address,
+          publicKey: aliceDepositUtxo.keypair.address(),
+        },
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      let args = inputData.args
+      let extData = inputData.extData
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+      ['bytes','uint256','bytes32'],
+      [args.proof,args.publicAmount,args.root]
+      );
+      let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+      let tellorData = await getTellorData(tellor2,charon.address,1,depositId) 
+      let commi = await getTellorSubmission(args,extData);
+      await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+      await h.advanceTime(43200)//12 hours
+      let tx = await charon2.oracleDeposit([1],0);  
+      // Alice sends some funds to withdraw (ignore bob)
+      let bobSendAmount = utils.parseEther('4')
+      const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
+// contains private and public keys
+      const bobAddress = await bobKeypair.address() // contains only public key
+      const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon), chainID: 2 })
+      let aliceChangeUtxo = new Utxo({
+          amount: _depositAmount.sub(bobSendAmount),
+          myHashFunc: poseidon,
+          keypair: aliceDepositUtxo.keypair,
+          chainID: 2
+      })
+      inputData = await prepareTransaction({
+          charon: charon2,
+          inputs:[aliceDepositUtxo],
+          outputs: [bobSendUtxo, aliceChangeUtxo],
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+        })
+      args = inputData.args
+      extData = inputData.extData
+      let badArg1,badExtData,badArg2,badExtData2
+      badArg1 = Object.assign({},args);
+      badArg1.root = h.hash("badroot")
+      badExtData = Object.assign({},extData)
+      badExtData.extAmount = '0x00000000055000000000000000000000000000000000000000000000000000000'
+      badArg2 = Object.assign({},args);
+      badArg2.proof = h.hash("badproof")
+      badExtData2 = Object.assign({},extData)
+      badExtData2.recipient = accounts[2].address
+      await h.expectThrow(charon2.transact(badArg1,extData))//bad root
+      await h.expectThrow(charon2.transact(badArg2,extData))//bad proof
+      await h.expectThrow(charon2.transact(args,badExtData))//bad public amount
+      await h.expectThrow(charon2.transact(args,badExtData2))// bad extData hash (changed recipient)
+      assert(await charon2.isKnownRoot(inputData.args.root));
+      await charon2.transact(args,extData)
+          // Bob parses chain to detect incoming funds
+      const filter = charon2.filters.NewCommitment()
+      const fromBlock = await ethers.provider.getBlock()
+      const events = await charon2.queryFilter(filter, fromBlock.number)
+      let bobReceiveUtxo
+      try {
+          bobReceiveUtxo = Utxo.decrypt(bobKeypair, events[0].args._encryptedOutput, events[0].args._index)
+      } catch (e) {
+      // we try to decrypt another output here because it shuffles outputs before sending to blockchain
+          bobReceiveUtxo = Utxo.decrypt(bobKeypair, events[1].args._encryptedOutput, events[1].args._index)
+      }
+      expect(bobReceiveUtxo.amount).to.be.equal(bobSendAmount)
+      oldInputData = await prepareTransaction({
+        charon: charon2,
+        inputs: [aliceDepositUtxo],
+        outputs: [],
+        recipient: accounts[1].address,
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+    })
+    await h.expectThrow(charon2.transact(oldInputData.args,oldInputData.extData))
+    })
+    it("No way to withdraw more than you put in", async function() {
+      let _depositAmount = utils.parseEther('10');
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                web3.utils.toWei("1000"),
+                                                _depositAmount,
+                                                0)
+      await token.connect(accounts[1]).approve(charon.address,_amount)
+      const sender = accounts[0]
+      const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 2 })
+      charon = charon.connect(sender)
+      let inputData = await prepareTransaction({
+        charon,
+        inputs:[],
+        outputs: [aliceDepositUtxo],
+        account: {
+          owner: sender.address,
+          publicKey: aliceDepositUtxo.keypair.address(),
+        },
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      let args = inputData.args
+      let extData = inputData.extData
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+      ['bytes','uint256','bytes32'],
+      [args.proof,args.publicAmount,args.root]
+      );
+      let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+      let tellorData = await getTellorData(tellor2,charon.address,1,depositId) 
+      let commi = await getTellorSubmission(args,extData);
+      await tellor2.submitValue(tellorData.queryId,commi,tellorData.nonce,tellorData.queryData)
+      await h.advanceTime(43200)//12 hours
+      let tx = await charon2.oracleDeposit([1],0);  
+      //alice withdraws
+      inputData = await prepareTransaction({
+          charon: charon2,
+          inputs: [aliceDepositUtxo],
+          outputs: [],
+          recipient: accounts[1].address,
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+      })
+      let fakeUTXO = new Utxo({ amount: web3.utils.toWei("500"),myHashFunc: poseidon, keypair: aliceDepositUtxo.keypair, chainID: 2 })
+      let fakeInputData = await prepareTransaction({
+        charon: charon2,
+        inputs: [fakeUTXO],
+        outputs: [],
+        recipient: accounts[1].address,
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2,
+        test: true
+      })
+      await h.expectThrow(charon2.transact(fakeInputData.args,fakeInputData.extData))
+      await charon2.transact(inputData.args,inputData.extData)
+      await h.expectThrow(charon2.transact(inputData.args,inputData.extData))
+      assert(await chd2.balanceOf(accounts[1].address) - _depositAmount == 0, "should mint CHD");
+    })
     it("Attempt to swap out of massive position", async function() {
       //try to do more than in the pool, assert fail
+      await token.mint(accounts[1].address,web3.utils.toWei("1000"))
+      await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("1000"))
+      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("1000"),0,web3.utils.toWei("50000")))
       //do slightly less (find break point)
-
-
+      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("100"),0,web3.utils.toWei("50000")))
+      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("80"),0,web3.utils.toWei("50000")))
       await token.mint(accounts[1].address,web3.utils.toWei("100"))
       await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
       await charon.connect(accounts[1]).swap(false,web3.utils.toWei("30"),0,web3.utils.toWei("50000"))

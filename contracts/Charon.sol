@@ -390,7 +390,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         }
         emit OracleDeposit(_p.chainID,_p.contractAddress,_depositId);
     }
-
+  
     /**
      * @dev withdraw your tokens from deposit on alternate chain
      * @param _inIsCHD bool if token sending in is CHD

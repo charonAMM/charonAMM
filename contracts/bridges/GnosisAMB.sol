@@ -8,10 +8,10 @@ import "../interfaces/IAMB.sol";
  @title Oracle
  @dev oracle contract for use in the charon system implementing tellor
  **/
-contract ETHtoGNOBridge is UsingTellor{
-
+contract GnosisAMB is UsingTellor{
 
     IAMB public ambBridge;
+    bytes32[] public messageIds;
     mapping(bytes32=> bytes) public messageIdToData;
     mapping(bytes32=> bool) public didPush;
     bytes32 public constant _requestSelector = 0x88b6c755140efe88bff94bfafa4a7fdffe226d27d92bd45385bb0cfa90986650; //ethCall
@@ -26,11 +26,13 @@ contract ETHtoGNOBridge is UsingTellor{
     }
 
     function getInfo(bytes calldata _data)  external returns (bytes32){
-           return ambBridge.requireToGetInformation(_requestSelector,_data);
+        return ambBridge.requireToGetInformation(_requestSelector,_data);
     }
 
     function onInformationReceived(bytes32 messageId,bool status,bytes calldata result) external{
+        require(msg.sender == address(ambBridge));
         messageIdToData[messageId] = result;
+        messageIds.push(messageId);
         emit InfoRecieved(messageId,status);
     }
 
@@ -55,16 +57,14 @@ contract ETHtoGNOBridge is UsingTellor{
         //don't need to do anything, all on the read side
     }
 
-    function _bytesToUint(bytes memory _b) internal pure returns (uint256 _n){
-        for(uint256 _i=0;_i<_b.length;_i++){
-            _n = _n + uint(uint8(_b[_i]))*(2**(8*(_b.length-(_i+1))));
-        }
-    }
-
     function _bytesToBytes32(bytes memory _b) internal pure returns (bytes32 _out) {
         for (uint256 _i = 0; _i < 32; _i++) {
             _out |= bytes32(_b[_i] & 0xFF) >> (_i * 8);
         }
+    }
+
+    function getMessageIds() external view returns(bytes32[] memory){
+        return messageIds;
     }
 
 }

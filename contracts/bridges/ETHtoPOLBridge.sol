@@ -11,6 +11,8 @@ import "./extensions/FxBaseRootTunnel.sol";
 contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
 
     address public reciever; //addrss on polygon to get message
+    uint256 public id;
+    mapping(uint256 => bytes) idToData;
 
     /**
      * @dev constructor to launch contract 
@@ -23,24 +25,13 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
             reciever = _reciever; 
         }
 
-    /**
-     * @notice receive message from  L2 to L1, validated by proof
-     * @dev This function verifies if the transaction actually happened on child chain
-    * @param _inputData RLP encoded data of the reference tx containing following list of fields
-     *  0 - headerNumber - Checkpoint header block number containing the reference tx
-     *  1 - blockProof - Proof that the block header (in the child chain) is a leaf in the submitted merkle root
-     *  2 - blockNumber - Block number containing the reference tx on child chain
-     *  3 - blockTime - Reference tx block time
-     *  4 - txRoot - Transactions root of block
-     *  5 - receiptRoot - Receipts root of block
-     *  6 - receipt - Receipt of the reference transaction
-     *  7 - receiptProof - Merkle proof of the reference receipt
-     *  8 - branchMask - 32 bits denoting the path of receipt in merkle tree
-     *  9 - receiptLogIndex - Log Index to read from the receipt
-     * @return _value bytes data returned from bridge
-     */
-    function getCommitment(bytes memory _inputData) external returns(bytes memory _value){
-        return _validateAndExtractMessage(_inputData);
+    function _processMessageFromChild(bytes memory _data) internal override {
+        id++;
+        idToData[id] = _data;
+    }
+
+    function getCommitment(bytes memory _inputData) external view returns(bytes memory _value){
+        return idToData[_bytesToUint(_inputData)];
     }
 
     /**

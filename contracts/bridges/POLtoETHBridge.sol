@@ -24,7 +24,7 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
     constructor(address payable _tellor, address _fxChild) UsingTellor(_tellor) FxBaseChildTunnel(_fxChild){}
 
     /**
-     * @notice Process message received from Root Tunnel
+     * @notice Process message received from Child Tunnel
      * @dev function needs to be implemented to handle message as per requirement
      * This is called by onStateReceive function.
      * Since it is called via a system call, any event will not be emitted during its execution.

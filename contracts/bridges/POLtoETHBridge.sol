@@ -23,6 +23,10 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
      */
     constructor(address payable _tellor, address _fxChild) UsingTellor(_tellor) FxBaseChildTunnel(_fxChild){}
 
+    function setCharon(address _charon) external{
+        require(charon == address(0));
+        charon = _charon;
+    }
     /**
      * @notice Process message received from Child Tunnel
      * @dev function needs to be implemented to handle message as per requirement
@@ -36,7 +40,7 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
         uint256 stateId,
         address sender,
         bytes memory data
-    ) internal override validateSender(sender) {
+    ) internal virtual override validateSender(sender) {
         latestStateId = stateId;
         stateIdToData[stateId] = data;
         latestRootMessageSender = sender;
@@ -67,6 +71,7 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
     }
 
     function sendCommitment(bytes memory _data) external{
+        require(msg.sender == charon);
         _sendMessageToRoot(_data);
     }
 

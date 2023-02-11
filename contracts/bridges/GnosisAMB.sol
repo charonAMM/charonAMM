@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import "usingtellor/contracts/UsingTellor.sol";
 import "../interfaces/IAMB.sol";
-
 /**
  @title Oracle
  @dev oracle contract for use in the charon system implementing tellor
@@ -41,6 +40,7 @@ contract GnosisAMB is UsingTellor{
         didPush[_messageId] = true;
         return messageIdToData[_messageId];
     }
+
     /**
      * @dev grabs the oracle value from the tellor oracle
      * @param _timestamp timestamp to grab

@@ -10,7 +10,7 @@ import "./extensions/FxBaseRootTunnel.sol";
  **/
 contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
 
-    address public reciever; //addrss on polygon to get message
+    address public charon;
     uint256 public id;
     mapping(uint256 => bytes) idToData;
 
@@ -18,13 +18,16 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
      * @dev constructor to launch contract 
      * @param _tellor address of tellor oracle contract on this chain
      */
-    constructor(address payable _tellor, address _checkpointManager, address _fxRoot, address _fxChildTunnel, address _reciever) 
+    constructor(address payable _tellor, address _checkpointManager, address _fxRoot, address _fxChildTunnel) 
         UsingTellor(_tellor)
         FxBaseRootTunnel(_checkpointManager, _fxRoot){
             fxChildTunnel = _fxChildTunnel;
-            reciever = _reciever; 
         }
 
+    function setCharon(address _charon) external{
+        require(charon == address(0));
+        charon = _charon;
+    }
     function _processMessageFromChild(bytes memory _data) internal override {
         id++;
         idToData[id] = _data;
@@ -47,6 +50,7 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
     }
 
     function sendCommitment(bytes memory _data) external{
+        require(msg.sender == charon, "must be charon");
         _sendMessageToChild(_data);
     }
 

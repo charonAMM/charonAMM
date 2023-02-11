@@ -516,6 +516,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     }
 
     /**
+     * @dev allows you to get the oracles for the contract
+     */
+    function getOracles() external view returns(address[] memory){
+      return oracles;
+    }
+    /**
      * @dev returns the data for an oracle submission on another chain given a depositId
      */
     function getOracleSubmission(uint256 _depositId) public view returns(bytes memory _value){

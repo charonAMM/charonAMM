@@ -791,7 +791,7 @@ abstract contract FxBaseRootTunnel {
         uint256 headerNumber,
         bytes memory blockProof
     ) private view {
-        (bytes32 headerRoot, uint256 startBlock, , , ) = checkpointManager.headerBlocks(headerNumber);
+        (bytes32 headerRoot, uint256 startBlock, ,, ) = checkpointManager.headerBlocks(headerNumber);
 
         require(
             keccak256(abi.encodePacked(blockNumber, blockTime, txRoot, receiptRoot)).checkMembership(

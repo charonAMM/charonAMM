@@ -85,7 +85,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
 
     CHD public chd;//address/implementation of chd token
     IERC20 public immutable token;//base token address/implementation for the charonAMM
-    IOracle public immutable oracle;//address of the oracle to use for the system
+    address[] public oracles;//address of the oracle to use for the system
     IVerifier public immutable verifier2; //implementation/address of the two input veriifier contract
     IVerifier public immutable verifier16;//implementation/address of the sixteen input veriifier contract
     Commitment[] depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
@@ -110,7 +110,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
     event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput);
     event NewNullifier(bytes32 _nullifier);
-    event OracleDeposit(uint256 _chain,address _contract, uint256[] _depositId);
+    event OracleDeposit(uint256 _oracleIndex,bytes _inputData);
     event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
 
     //modifiers
@@ -128,7 +128,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @param _hasher address of the hasher contract (mimC precompile)
      * @param _token address of token on this chain of the system
      * @param _fee fee when withdrawing liquidity or trading (pct of tokens)
-     * @param _oracle address of oracle contract
+     * @param _oracles address array of oracle contracts
      * @param _merkleTreeHeight merkleTreeHeight (should match that of circom compile)
      * @param _chainID chainID of this chain
      * @param _name name of pool token
@@ -139,7 +139,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                 address _hasher,
                 address _token,
                 uint256 _fee,
-                address _oracle,
+                address[] memory _oracles,
                 uint32 _merkleTreeHeight,
                 uint256 _chainID,
                 string memory _name,
@@ -153,7 +153,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         fee = _fee;
         controller = msg.sender;
         chainID = _chainID;
-        oracle = IOracle(_oracle);
+        oracles = _oracles;
     }
 
     /**
@@ -217,6 +217,10 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           chd.transfer(msg.sender, _min);
           userRewardsCHD -= _min;
         }
+        for(uint256 _i = 0; _i<=oracles.length-1; _i++){
+          IOracle(oracles[_i]).sendCommitment(getOracleSubmission(_depositId));
+        }
+        _transact(_proofArgs, _extData);//automatically adds your deposit to this chain (improve anonymity set)
         recordBalance += _tokenAmount;
         emit DepositToOtherChain(_isCHD,msg.sender, block.timestamp, _tokenAmount);
     }
@@ -364,31 +368,27 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
 
     /**
      * @dev reads tellor commitments to allow you to withdraw on this chain
-     * @param _depositId depositId of deposit on that chain
-    * @param _partnerIndex index of contract in partnerContracts array
+     * @param _oracleIndex index of oracle in oracle array
+    * @param _inputData depending on the bridge, it might be needed and lets you specify what you're pulling
      */
-    function oracleDeposit(uint256[] memory _depositId,uint256 _partnerIndex) external{
+    function oracleDeposit(uint256 _oracleIndex, bytes memory _inputData) external{
         Proof memory _proof;
         ExtData memory _extData;
         bytes memory _value;
-        address _reporter;
-        PartnerContract storage _p = partnerContracts[_partnerIndex];
-        for(uint256 _i; _i<=_depositId.length-1; _i++){
-          (_value,_reporter) = oracle.getCommitment(_p.chainID, _p.contractAddress, _depositId[_i]);
-          _proof.inputNullifiers = new bytes32[](2);
-          (_proof.inputNullifiers[0], _proof.inputNullifiers[1], _proof.outputCommitments[0], _proof.outputCommitments[1], _proof.proof) = abi.decode(_value,(bytes32,bytes32,bytes32,bytes32,bytes));
-          _transact(_proof, _extData);
-          //you need this amount to be less than the stake amount, but if this is greater than the gas price to deposit and then report, you don't need to worry about it
-          if(oracleCHDFunds > 1000){
-            chd.transfer(_reporter,oracleCHDFunds/1000);
-            oracleCHDFunds -= oracleCHDFunds/1000;
-          }
-          if(oracleTokenFunds > 1000){
-            token.transfer(_reporter,oracleTokenFunds/1000);
-            oracleTokenFunds -= oracleTokenFunds/1000;
-          }
+        _value = IOracle(oracles[_oracleIndex]).getCommitment(_inputData);
+        _proof.inputNullifiers = new bytes32[](2);
+        (_proof.inputNullifiers[0], _proof.inputNullifiers[1], _proof.outputCommitments[0], _proof.outputCommitments[1], _proof.proof) = abi.decode(_value,(bytes32,bytes32,bytes32,bytes32,bytes));
+        _transact(_proof, _extData);
+        //you need this amount to be less than the stake amount, but if this is greater than the gas price to deposit and then report, you don't need to worry about it
+        if(oracleCHDFunds > 1000){
+          chd.transfer(msg.sender,oracleCHDFunds/1000);
+          oracleCHDFunds -= oracleCHDFunds/1000;
         }
-        emit OracleDeposit(_p.chainID,_p.contractAddress,_depositId);
+        if(oracleTokenFunds > 1000){
+          token.transfer(msg.sender,oracleTokenFunds/1000);
+          oracleTokenFunds -= oracleTokenFunds/1000;
+        }
+        emit OracleDeposit(_oracleIndex, _inputData);
     }
   
     /**
@@ -516,9 +516,15 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     }
 
     /**
+     * @dev allows you to get the oracles for the contract
+     */
+    function getOracles() external view returns(address[] memory){
+      return oracles;
+    }
+    /**
      * @dev returns the data for an oracle submission on another chain given a depositId
      */
-    function getOracleSubmission(uint256 _depositId) external view returns(bytes memory _value){
+    function getOracleSubmission(uint256 _depositId) public view returns(bytes memory _value){
       Proof memory _p = depositCommitments[_depositId-1].proof;
       _value = abi.encode(
         _p.inputNullifiers[0],

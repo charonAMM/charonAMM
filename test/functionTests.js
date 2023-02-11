@@ -6,24 +6,27 @@ const abiCoder = new ethers.utils.AbiCoder()
 const { abi, bytecode } = require("usingtellor/artifacts/contracts/TellorPlayground.sol/TellorPlayground.json")
 
 describe("charon system - function tests", function() {
+
+    async function deploy(contractName, ...args) {
+        const Factory = await ethers.getContractFactory(contractName)
+        const instance = await Factory.deploy(...args)
+        return instance.deployed()
+      }
+
     let token,math,chd,oracle,tellor;
     beforeEach(async function () {
         accounts = await ethers.getSigners();
-        let fac = await ethers.getContractFactory("MockERC20");
-        token = await fac.deploy(accounts[1].address,"mock token", "MT");
-        await token.deployed();
-        fac = await ethers.getContractFactory("MockMath")
-        math = await fac.deploy()
-        await math.deployed()
-        fac = await ethers.getContractFactory("CHD")
-        chd = await fac.deploy(accounts[1].address,"testchd","tc")
-        await chd.deployed()
+        token = await deploy("MockERC20",accounts[1].address,"mock token", "MT");
+        math = await deploy("MockMath")
         let TellorOracle = await ethers.getContractFactory(abi, bytecode);
         tellor = await TellorOracle.deploy();
         await tellor.deployed();
-        fac = await ethers.getContractFactory("Oracle")
-        oracle = await fac.deploy(tellor.address)
-        await oracle.deployed();
+        chd = await deploy("CHD",accounts[1].address,"testchd","tc")
+        mockNative = await deploy("MockNativeBridge")
+        gnosisAMB = await deploy("GnosisAMB", mockNative.address, tellor.address)
+        p2e = await deploy("MockPOLtoETHBridge", tellor.address, mockNative.address)
+        e2p = await deploy("MockETHtoPOLBridge", tellor.address,mockNative.address, mockNative.address,mockNative.address)
+        await mockNative.setUsers(gnosisAMB.address, p2e.address, e2p.address)
     });
     it("constructor()", async function() {
         console.log("Token.sol")
@@ -111,30 +114,30 @@ describe("charon system - function tests", function() {
     it("bdiv()", async function() {
         assert(await math.bdiv(web3.utils.toWei("4"),web3.utils.toWei("2")) == web3.utils.toWei("2"), "bdiv should work")
     });
-    console.log("Oracle.sol -- to write")
-    it("constructor()", async function() {
-        assert(await oracle.tellor() == tellor.address, "tellor contract should be set properly")
-    });
-    it("getCommitment()", async function(){
-        let ABI = ["function getOracleSubmission(uint256 _depositId)"];
-        let iface = new ethers.utils.Interface(ABI);
-        let funcSelector = iface.encodeFunctionData("getOracleSubmission", [1])
+    console.log("All the bridges ...need to write these function tests .sol -- to write")
+    // it("constructor()", async function() {
+    //     assert(await oracle.tellor() == tellor.address, "tellor contract should be set properly")
+    // });
+    // it("getCommitment()", async function(){
+    //     let ABI = ["function getOracleSubmission(uint256 _depositId)"];
+    //     let iface = new ethers.utils.Interface(ABI);
+    //     let funcSelector = iface.encodeFunctionData("getOracleSubmission", [1])
         
-        _queryData = abiCoder.encode(
-        ['string', 'bytes'],
-        ['EVMCall', abiCoder.encode(
-            ['uint256','address','bytes'],
-            [1,accounts[1].address,funcSelector]
-        )]
-        );
-        let _queryId = h.hash(_queryData)
-        let _value = 100
-        await tellor.connect(accounts[1]).submitValue(_queryId, _value,0, _queryData);
-        await h.advanceTime(86400)
-        let vals = await oracle.getCommitment(1,accounts[1].address,1)
-        assert(vals[0] == 100, "value should be correct")
-        assert(vals[1] == accounts[1].address, "reporter should be correct")
-    })
+    //     _queryData = abiCoder.encode(
+    //     ['string', 'bytes'],
+    //     ['EVMCall', abiCoder.encode(
+    //         ['uint256','address','bytes'],
+    //         [1,accounts[1].address,funcSelector]
+    //     )]
+    //     );
+    //     let _queryId = h.hash(_queryData)
+    //     let _value = 100
+    //     await tellor.connect(accounts[1]).submitValue(_queryId, _value,0, _queryData);
+    //     await h.advanceTime(86400)
+    //     let vals = await oracle.getCommitment(1,accounts[1].address,1)
+    //     assert(vals[0] == 100, "value should be correct")
+    //     assert(vals[1] == accounts[1].address, "reporter should be correct")
+    // })
     it("constructor()", async function() {
         console.log("CHD.sol")
         assert(await chd.charon() == accounts[1].address, "charon should be set")

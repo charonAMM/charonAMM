@@ -18,11 +18,9 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
      * @dev constructor to launch contract 
      * @param _tellor address of tellor oracle contract on this chain
      */
-    constructor(address payable _tellor, address _checkpointManager, address _fxRoot, address _fxChildTunnel) 
+    constructor(address payable _tellor, address _checkpointManager, address _fxRoot) 
         UsingTellor(_tellor)
-        FxBaseRootTunnel(_checkpointManager, _fxRoot){
-            fxChildTunnel = _fxChildTunnel;
-        }
+        FxBaseRootTunnel(_checkpointManager, _fxRoot){}
 
     function setCharon(address _charon) external{
         require(charon == address(0));

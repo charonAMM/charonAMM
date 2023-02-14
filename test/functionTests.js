@@ -25,7 +25,8 @@ describe("charon system - function tests", function() {
         mockNative = await deploy("MockNativeBridge")
         gnosisAMB = await deploy("GnosisAMB", mockNative.address, tellor.address)
         p2e = await deploy("MockPOLtoETHBridge", tellor.address, mockNative.address)
-        e2p = await deploy("MockETHtoPOLBridge", tellor.address,mockNative.address, mockNative.address,mockNative.address)
+        e2p = await deploy("MockETHtoPOLBridge", tellor.address,mockNative.address, mockNative.address)
+        await e2p.setFxChildTunnel(mockNative.address)
         await mockNative.setUsers(gnosisAMB.address, p2e.address, e2p.address)
     });
     it("constructor()", async function() {

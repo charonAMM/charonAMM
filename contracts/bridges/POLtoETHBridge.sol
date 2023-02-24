@@ -16,6 +16,7 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
     uint256[] public stateIds;
     mapping(uint256 => bytes) stateIdToData;
     mapping(uint256 => bool) didPush;
+    event MessageProcessed(uint256 _stateId, bytes _data);
 
     /**
      * @dev constructor to launch contract 
@@ -32,19 +33,20 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
      * @dev function needs to be implemented to handle message as per requirement
      * This is called by onStateReceive function.
      * Since it is called via a system call, any event will not be emitted during its execution.
-     * @param stateId unique state id
-     * @param sender root message sender
-     * @param data bytes message that was sent from Root Tunnel
+     * @param _stateId unique state id
+     * @param _sender root message sender
+     * @param _data bytes message that was sent from Root Tunnel
      */
     function _processMessageFromRoot(
-        uint256 stateId,
-        address sender,
-        bytes memory data
-    ) internal virtual override validateSender(sender) {
-        latestStateId = stateId;
-        stateIdToData[stateId] = data;
-        latestRootMessageSender = sender;
-        stateIds.push(stateId);
+        uint256 _stateId,
+        address _sender,
+        bytes memory _data
+    ) internal virtual override validateSender(_sender) {
+        latestStateId = _stateId;
+        stateIdToData[_stateId] = _data;
+        latestRootMessageSender = _sender;
+        stateIds.push(_stateId);
+        emit MessageProcessed(_stateId, _data);
     }
 
     /**
@@ -73,6 +75,10 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
     function sendCommitment(bytes memory _data) external{
         require(msg.sender == charon);
         _sendMessageToRoot(_data);
+    }
+
+    function getStateIds() external view returns(uint256[] memory){
+        return stateIds;
     }
 
     function _bytesToUint(bytes memory _b) internal pure returns (uint256 _n){

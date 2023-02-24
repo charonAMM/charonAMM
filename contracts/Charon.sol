@@ -65,6 +65,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       int256 extAmount;//amount being sent
       address relayer;//relayer of signed message (adds anonymity)
       uint256 fee;//fee given to relayer
+      uint256 rebate;//amount taken from relayer and given to recipient
       bytes encryptedOutput1;//encrypted UTXO output of txn
       bytes encryptedOutput2;//other encrypted UTXO of txn (must spend all in UTXO design)
     }
@@ -188,6 +189,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      */
     function depositToOtherChain(Proof memory _proofArgs,ExtData memory _extData, bool _isCHD) external _finalized_ returns(uint256 _depositId){
         require(_extData.extAmount > 0, "must deposit a positive amount");
+        require(_extData.rebate == 0, "rebate should be zero");
+        require(_extData.fee == 0, "fee should be zero, no need to use relayers");
         Commitment memory _c = Commitment(_extData,_proofArgs);
         depositCommitments.push(_c);
         _depositId = depositCommitments.length;
@@ -480,7 +483,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       * @param _args proof data for sneding tokens
       * @param _extData external (visible data) to verify proof and pay relayer fee
       */
-      function transact(Proof memory _args, ExtData memory _extData) external _finalized_{
+      function transact(Proof memory _args, ExtData memory _extData) external  payable _finalized_{
         int256 _publicAmount = _extData.extAmount - int256(_extData.fee);
         if(_publicAmount < 0){
           _publicAmount = int256(FIELD_SIZE - uint256(-_publicAmount));
@@ -492,10 +495,18 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         if (_extData.extAmount < 0){
           require(chd.mintCHD(_extData.recipient, uint256(-_extData.extAmount)));
         }
+        _transact(_args, _extData);
         if(_extData.fee > 0){
           require(chd.mintCHD(_extData.relayer,_extData.fee));
+          if(_extData.rebate > 0){
+            uint256 _outRebate = calcOutGivenIn(recordBalanceSynth,recordBalance,_extData.rebate,0);
+            require(_extData.fee > _extData.rebate, "rebate must be smaller than fee");
+            require(msg.value > _outRebate, "should all be in the function");
+            //transfer base token from relayer to recipient
+            //allows a user to get some funds to a blank addy
+            payable(_extData.recipient).transfer(_outRebate);
+          }
         }
-        _transact(_args, _extData);
     }
 
     //getters

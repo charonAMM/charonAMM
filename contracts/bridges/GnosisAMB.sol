@@ -10,11 +10,15 @@ import "../interfaces/IAMB.sol";
 contract GnosisAMB is UsingTellor{
 
     IAMB public ambBridge;
+    address connectedCharon;//address of charon on other chain
     bytes32[] public messageIds;
+    mapping(bytes32 => address) public idToCaller;
     mapping(bytes32=> bytes) public messageIdToData;
     mapping(bytes32=> bool) public didPush;
+    bytes4 private constant func_selector = bytes4(keccak256("getOracleSubmission(uint256)"));
     bytes32 public constant _requestSelector = 0x88b6c755140efe88bff94bfafa4a7fdffe226d27d92bd45385bb0cfa90986650; //ethCall
     event InfoRecieved(bytes32 _messageId, bool _status);
+    event InfoRequest(uint256 _depositId);
     
     /**
      * @dev constructor to launch contract 
@@ -24,8 +28,19 @@ contract GnosisAMB is UsingTellor{
         ambBridge = IAMB(_ambBridge);
     }
 
-    function getInfo(bytes calldata _data)  external returns (bytes32){
-        return ambBridge.requireToGetInformation(_requestSelector,_data);
+    //sets charon on other chain
+    function setCharon(address _charon) external{
+        require(connectedCharon == address(0));
+        connectedCharon = _charon;
+    }
+
+    function getInfo(uint256 _depositId)  external returns (bytes32 _messageId){
+        require(connectedCharon != address(0));
+        bytes memory _data = abi.encodeWithSelector(func_selector,_depositId);
+        _data = abi.encode(connectedCharon,_data);
+        emit InfoRequest(_depositId);
+        _messageId = ambBridge.requireToGetInformation(_requestSelector,_data);
+        idToCaller[_messageId] = msg.sender;
     }
 
     function onInformationReceived(bytes32 messageId,bool status,bytes calldata result) external{
@@ -35,10 +50,11 @@ contract GnosisAMB is UsingTellor{
         emit InfoRecieved(messageId,status);
     }
 
-    function getCommitment(bytes memory _inputData) external returns(bytes memory _value){
+    function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller){
         bytes32 _messageId = _bytesToBytes32(_inputData);
         didPush[_messageId] = true;
-        return messageIdToData[_messageId];
+        _caller = idToCaller[_messageId];
+       _value = messageIdToData[_messageId];
     }
 
     /**

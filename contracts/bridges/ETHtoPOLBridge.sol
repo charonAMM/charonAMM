@@ -11,9 +11,6 @@ import "./extensions/FxBaseRootTunnel.sol";
 contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
 
     address public charon;
-    uint256 public id;
-    mapping(uint256 => bytes) idToData;
-    event MessageProcessed(uint256 _id, bytes _data);
 
     /**
      * @dev constructor to launch contract 
@@ -28,14 +25,9 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
         charon = _charon;
     }
 
-    function _processMessageFromChild(bytes memory _data) internal override {
-        id++;
-        idToData[id] = _data;
-        emit MessageProcessed(id, _data);
-    }
-
-    function getCommitment(bytes memory _inputData) external view returns(bytes memory _value, address _caller){
-        return (idToData[_bytesToUint(_inputData)], address(0));
+    function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller){
+        bytes memory _message = _validateAndExtractMessage(_inputData);
+        return (_message,address(0));
     }
 
     /**
@@ -54,11 +46,4 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
         require(msg.sender == charon, "must be charon");
         _sendMessageToChild(_data);
     }
-
-    function _bytesToUint(bytes memory _b) internal pure returns (uint256 _n){
-        for(uint256 _i=0;_i<_b.length;_i++){
-            _n = _n + uint(uint8(_b[_i]))*(2**(8*(_b.length-(_i+1))));
-        }
-    }
-
 }

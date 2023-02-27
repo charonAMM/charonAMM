@@ -2,21 +2,19 @@
 pragma solidity ^0.8.0;
 
 import "usingtellor/contracts/UsingTellor.sol";
-import "../interfaces/IAMB.sol";
 /**
  @title Oracle
  @dev oracle contract for use in the charon system implementing tellor
  **/
-contract GnosisAMB is UsingTellor{
+contract TellorBridge is UsingTellor{
 
-    IAMB public ambBridge;
-    address public connectedCharon;//address of charon on other chain
+    address public charon;//address of charon on other chain
+    uint256 public connectedChainId;
     bytes32[] public messageIds;
     mapping(bytes32 => address) public idToCaller;
     mapping(bytes32=> bytes) public messageIdToData;
     mapping(bytes32=> bool) public didPush;
     bytes4 private constant func_selector = bytes4(keccak256("getOracleSubmission(uint256)"));
-    bytes32 public constant _requestSelector = 0x88b6c755140efe88bff94bfafa4a7fdffe226d27d92bd45385bb0cfa90986650; //ethCall
     event InfoRecieved(bytes32 _messageId, bool _status);
     event InfoRequest(uint256 _depositId);
     
@@ -25,36 +23,24 @@ contract GnosisAMB is UsingTellor{
      * @param _tellor address of tellor oracle contract on this chain
      */
     constructor(address _ambBridge, address payable _tellor) UsingTellor(_tellor){
-        ambBridge = IAMB(_ambBridge);
     }
 
-    //sets charon on other chain
-    function setCharon(address _charon) external{
-        require(connectedCharon == address(0));
-        connectedCharon = _charon;
+
+    function setPartnerInfo(address _charon, uint256 _connectedChainId) external{
+        require(charon == address(0));
+        charon = _charon;
+        connectedChainId = _connectedChainId;
     }
 
-    function getInfo(uint256 _depositId)  external returns (bytes32 _messageId){
-        require(connectedCharon != address(0));
-        bytes memory _data = abi.encodeWithSelector(func_selector,_depositId);
-        _data = abi.encode(connectedCharon,_data);
-        emit InfoRequest(_depositId);
-        _messageId = ambBridge.requireToGetInformation(_requestSelector,_data);
-        idToCaller[_messageId] = msg.sender;
-    }
-
-    function onInformationReceived(bytes32 messageId,bool status,bytes calldata result) external{
-        require(msg.sender == address(ambBridge));
-        messageIdToData[messageId] = result;
-        messageIds.push(messageId);
-        emit InfoRecieved(messageId,status);
-    }
 
     function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller){
-        bytes32 _messageId = _bytesToBytes32(_inputData);
-        didPush[_messageId] = true;
-        _caller = idToCaller[_messageId];
-       _value = messageIdToData[_messageId];
+        require(charon != address(0));
+        uint256 _timestamp;
+        uint256 _depositId = abi.decode(_inputData,(uint256));
+        bytes memory _callData = abi.encodeWithSelector(func_selector,_depositId);
+        bytes32 _queryId = keccak256(abi.encode("EVMCall",abi.encode(connectedChainId, charon, _callData)));
+        (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
+        _caller = tellor.getReporterByTimestamp(_queryId,_timestamp);
     }
 
     /**
@@ -71,12 +57,6 @@ contract GnosisAMB is UsingTellor{
 
     function sendCommitment(bytes memory _data) external{
         //don't need to do anything, all on the read side
-    }
-
-    function _bytesToBytes32(bytes memory _b) internal pure returns (bytes32 _out) {
-        for (uint256 _i = 0; _i < 32; _i++) {
-            _out |= bytes32(_b[_i] & 0xFF) >> (_i * 8);
-        }
     }
 
     function getMessageIds() external view returns(bytes32[] memory){

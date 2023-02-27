@@ -54,10 +54,10 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
      * @param _inputData the state Id you're trying to grab.  If null, grabs the most recent one not pushed over. 
      * @return _value bytes data returned from tellor
      */
-    function getCommitment(bytes memory _inputData) public returns(bytes memory _value){
+    function getCommitment(bytes memory _inputData) public returns(bytes memory _value, address){
         uint256 _stateId = _bytesToUint(_inputData);
         didPush[_stateId] = true;
-        return stateIdToData[_stateId];
+        return (stateIdToData[_stateId],address(0));
     }
 
     /**

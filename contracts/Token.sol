@@ -61,7 +61,7 @@ contract Token{
         _move(_from,_to,_amount);
         if (msg.sender != _from) {
             userAllowance[_from][msg.sender] = userAllowance[_from][msg.sender] -  _amount;
-            emit Approval(msg.sender, _to, userAllowance[_from][msg.sender]);
+            emit Approval(_from, msg.sender, userAllowance[_from][msg.sender]);
         }
         return true;
     }

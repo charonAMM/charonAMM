@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "usingtellor/contracts/UsingTellor.sol";
+import "hardhat/console.sol";
 /**
  @title Oracle
  @dev oracle contract for use in the charon system implementing tellor
@@ -22,19 +23,22 @@ contract TellorBridge is UsingTellor{
      * @dev constructor to launch contract 
      * @param _tellor address of tellor oracle contract on this chain
      */
-    constructor(address _ambBridge, address payable _tellor) UsingTellor(_tellor){
+    constructor(address payable _tellor) UsingTellor(_tellor){
     }
 
-
+    /**
+     * @dev constructor to launch contract 
+     * @param _charon charon contract address on other chain
+     * @param _connectedChainId other chainId
+     */
     function setPartnerInfo(address _charon, uint256 _connectedChainId) external{
         require(charon == address(0));
         charon = _charon;
         connectedChainId = _connectedChainId;
     }
 
-
-    function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller){
-        require(charon != address(0));
+    function getCommitment(bytes memory _inputData) external view returns(bytes memory _value, address _caller){
+        require(charon != address(0), "charon address should be set");
         uint256 _timestamp;
         uint256 _depositId = abi.decode(_inputData,(uint256));
         bytes memory _callData = abi.encodeWithSelector(func_selector,_depositId);

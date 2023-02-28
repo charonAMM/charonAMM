@@ -23,6 +23,7 @@ async function getProof({
   tree,
   extAmount,
   fee,
+  rebate,
   recipient,
   relayer,
   privateChainID,
@@ -57,6 +58,7 @@ async function getProof({
     extAmount: toFixedHex(extAmount),
     relayer: toFixedHex(relayer, 20),
     fee: toFixedHex(fee),
+    rebate: toFixedHex(rebate),
     encryptedOutput1: outputs[0].encrypt(),
     encryptedOutput2: outputs[1].encrypt()
   }
@@ -113,6 +115,7 @@ async function prepareTransaction({
   fee = 0,
   recipient = 0,
   relayer = 0,
+  rebate = 0,
   privateChainID = 2,
   myHasherFunc,
   myHasherFunc2,
@@ -137,6 +140,7 @@ async function prepareTransaction({
     tree: await buildMerkleTree(charon, myHasherFunc2),
     extAmount,
     fee,
+    rebate,
     recipient,
     relayer,
     privateChainID,

@@ -24,7 +24,7 @@ async function deploy(contractName, ...args) {
   }
 describe("charon tests", function () {
     let accounts;
-    let verifier2,verifier16,token,charon,hasher,token2,charon2, mockNative ,mockNative2, cfc,cfc2, gnosisAMB, gnosisAMB2, e2p, p2e;
+    let verifier2,verifier16,token,charon,hasher,token2,charon2, mockNative ,mockNative2, cfc,cfc2, tellorBridge, tellorBridge2, e2p, p2e;
     let fee = 0;
     let HEIGHT = 5;
     let builtPoseidon;
@@ -47,18 +47,20 @@ describe("charon tests", function () {
         await tellor.deployed();
         mockNative = await deploy("MockNativeBridge")
         mockNative2 = await deploy("MockNativeBridge")
-        gnosisAMB = await deploy("GnosisAMB", mockNative.address, tellor.address)
-        gnosisAMB2 = await deploy("GnosisAMB", mockNative2.address, tellor2.address)
+        tellorBridge = await deploy("TellorBridge", tellor.address)
+        tellorBridge2 = await deploy("TellorBridge", tellor2.address)
         p2e = await deploy("MockPOLtoETHBridge", tellor2.address, mockNative2.address)
         e2p = await deploy("MockETHtoPOLBridge", tellor.address,mockNative.address, mockNative.address)
         await e2p.setFxChildTunnel(mockNative.address)
-        await mockNative.setUsers(gnosisAMB.address, p2e.address, e2p.address)
-        await mockNative2.setUsers(gnosisAMB2.address, p2e.address, e2p.address)
-        charon = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token.address,fee,[gnosisAMB.address],HEIGHT,1,"Charon Pool Token","CPT")
+        await mockNative.setUsers(tellorBridge.address, p2e.address, e2p.address)
+        await mockNative2.setUsers(tellorBridge.address, p2e.address, e2p.address)
+        charon = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token.address,fee,[tellorBridge.address],HEIGHT,1,"Charon Pool Token","CPT")
         //now deploy on other chain (same chain, but we pretend w/ oracles)
         token2 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
-        charon2 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,[gnosisAMB2.address],HEIGHT,2,"Charon Pool Token2","CPT2");
+        charon2 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,[tellorBridge2.address],HEIGHT,2,"Charon Pool Token2","CPT2");
+        await tellorBridge.setPartnerInfo(charon2.address, 2);
+        await tellorBridge2.setPartnerInfo(charon.address,1);
         chd = await deploy("MockERC20",charon.address,"charon dollar","chd")
         chd2 = await deploy("MockERC20",charon2.address,"charon dollar2","chd2")
         //now set both of them. 
@@ -69,7 +71,6 @@ describe("charon tests", function () {
         await charon.finalize([2],[charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd.address,cfc.address);
         await charon2.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd2.address, cfc2.address);
     });
-
     function poseidon(inputs){
       let val = builtPoseidon(inputs)
       return builtPoseidon.F.toString(val)
@@ -85,7 +86,7 @@ describe("charon tests", function () {
     }).timeout(500000);
     it("Test Constructor", async function() {
         let _o = await charon.getOracles();
-        assert(_o[0] == gnosisAMB.address, "oracle  address should be set")
+        assert(_o[0] == tellorBridge.address, "oracle  address should be set")
         assert(await charon.levels() == HEIGHT, "merkle Tree height should be set")
         assert(await charon.hasher() == hasher.address, "hasher should be set")
         assert(await charon.verifier2() == verifier2.address, "verifier2 should be set")
@@ -136,10 +137,11 @@ describe("charon tests", function () {
         })
         let args = inputData.args
         let extData = inputData.extData
-        await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,false))
-        await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,true))
+        await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,false,0))
+        await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,true,web3.utils.toWei("9999")))
         await token.connect(accounts[1]).approve(charon.address,_amount)
-        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+        await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,false,10))//not enough maxOut
+        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount)
         let commi = await charon.getDepositCommitmentsById(1);
         assert(commi[1].proof == args.proof, "commitment a should be stored")
         assert(commi[1].publicAmount - args.publicAmount == 0, "commitment publicAmount should be stored")
@@ -291,16 +293,18 @@ describe("charon tests", function () {
         })
         let args = inputData.args
         let extData = inputData.extData
-        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
         const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
-        ['bytes','uint256','bytes32'],
-        [args.proof,args.publicAmount,args.root]
+          ['bytes','uint256','bytes32'],
+          [args.proof,args.publicAmount,args.root]
         );
         let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
-        let commi = await getTellorSubmission(args,extData);
-        await mockNative2.setAMBInfo(depositId, commi)
+        let _query = await getTellorData(tellor2,charon.address,1,depositId);
+        let _value = await charon.getOracleSubmission(depositId);
+        await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+        await h.advanceTime(86400)//wait 12 hours
         _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
-        await charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
+        await charon2.oracleDeposit([0],_encoded);
         await h.expectThrow(charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'})))
         assert(await charon2.isSpent(args.inputNullifiers[0]) == true ,"nullifierHash should be true")
         assert(await charon2.isSpent(args.inputNullifiers[1]) == true ,"nullifierHash should be true")
@@ -348,16 +352,18 @@ describe("charon tests", function () {
             })
             let args = inputData.args
             let extData = inputData.extData
-            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
             const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
             ['bytes','uint256','bytes32'],
             [args.proof,args.publicAmount,args.root]
             );
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
-            let commi = await getTellorSubmission(args,extData);
-            await mockNative2.setAMBInfo(depositId, commi)
+            let _query = await getTellorData(tellor2,charon.address,1,depositId);
+            let _value = await charon.getOracleSubmission(depositId);
+            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
-            await charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
+            await charon2.oracleDeposit([0],_encoded);
             // Alice sends some funds to withdraw (ignore bob)
             let bobSendAmount = utils.parseEther('4')
             const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
@@ -433,16 +439,18 @@ describe("charon tests", function () {
             })
             let args = inputData.args
             let extData = inputData.extData
-            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
             const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
             ['bytes','uint256','bytes32'],
             [args.proof,args.publicAmount,args.root]
             );
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
-            let commi = await getTellorSubmission(args,extData);
-            await mockNative2.setAMBInfo(depositId, commi)
+            let _query = await getTellorData(tellor2,charon.address,1,depositId);
+            let _value = await charon.getOracleSubmission(depositId);
+            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
-            await charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
+            await charon2.oracleDeposit([0],_encoded);
             //alice withdraws
             inputData = await prepareTransaction({
                 charon: charon2,
@@ -482,20 +490,22 @@ describe("charon tests", function () {
             })
             let args = inputData.args
             let extData = inputData.extData
-            let gas = await charon.connect(accounts[1]).estimateGas.depositToOtherChain(args,extData,false);
+            let gas = await charon.connect(accounts[1]).estimateGas.depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
             console.log('depositToOtherChain', gas - 0)
-            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
             const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
             ['bytes','uint256','bytes32'],
             [args.proof,args.publicAmount,args.root]
             );
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded)) 
-            let commi = await getTellorSubmission(args,extData);
-            await mockNative2.setAMBInfo(depositId, commi)
+            let _query = await getTellorData(tellor2,charon.address,1,depositId);
+            let _value = await charon.getOracleSubmission(depositId);
+            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
-            gas =  await charon2.estimateGas.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
+            gas =  await charon2.estimateGas.oracleDeposit([0],_encoded);
             console.log('oracleDeposit', gas - 0)
-            await charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
+            await charon2.oracleDeposit([0],_encoded);
             // Alice sends some funds to withdraw (ignore bob)
             let bobSendAmount = utils.parseEther('4')
             const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
@@ -540,7 +550,6 @@ describe("charon tests", function () {
             args = inputData.args
             extData = inputData.extData
             await charon2.transact(args,extData)
-              console.log("542")
             //second w/ more
             let charlieSendAmount = utils.parseEther('7')
             const charlieKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
@@ -592,10 +601,10 @@ describe("charon tests", function () {
           })
           let args = inputData.args
           let extData = inputData.extData
-          await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,false))
-          await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,true))
+          await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999")))
+          await h.expectThrow(charon.connect(accounts[1]).depositToOtherChain(args,extData,true,web3.utils.toWei("9999")))
           await token.connect(accounts[4]).approve(charon.address,_amount)
-          await charon.connect(accounts[4]).depositToOtherChain(args,extData,false);
+          await charon.connect(accounts[4]).depositToOtherChain(args,extData,false,_amount);
           let commi = await charon.getDepositCommitmentsById(1);
           assert(commi[1].proof == args.proof, "commitment a should be stored")
           assert(commi[1].publicAmount - args.publicAmount == 0, "commitment publicAmount should be stored")
@@ -635,7 +644,7 @@ describe("charon tests", function () {
           let args = inputData.args
           let extData = inputData.extData
           await token.connect(accounts[1]).approve(charon.address,_amount)
-          await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+          await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
           let dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
             ['bytes','uint256','bytes32'],
             [args.proof,args.publicAmount,args.root]
@@ -661,7 +670,7 @@ describe("charon tests", function () {
           args = inputData.args
           extData = inputData.extData
           await token.connect(accounts[1]).approve(charon.address,_amount)
-          await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+          await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
           dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
             ['bytes','uint256','bytes32'],
             [args.proof,args.publicAmount,args.root]
@@ -693,8 +702,8 @@ describe("charon tests", function () {
           let args = inputData.args
           let extData = inputData.extData
           await token.connect(accounts[1]).approve(charon.address,_amount)
-          await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
-          let dataEncoded = await getTellorSubmission(args,extData)
+          await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
+          let dataEncoded = await getTellorSubmission(args,extData);
           let subData = await charon.getOracleSubmission(1)
           assert(subData == dataEncoded, "oracle getter should work")
         })
@@ -749,16 +758,18 @@ describe("charon tests", function () {
             })
             let args = inputData.args
             let extData = inputData.extData
-            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
             const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
             ['bytes','uint256','bytes32'],
             [args.proof,args.publicAmount,args.root]
             );
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
-            let commi = await getTellorSubmission(args,extData);
-            await mockNative2.setAMBInfo(depositId, commi)
+            let _query = await getTellorData(tellor2,charon.address,1,depositId);
+            let _value = await charon.getOracleSubmission(depositId);
+            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
-            await charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
+            await charon2.oracleDeposit([0],_encoded);
             let bobSendAmount = utils.parseEther('4')
             const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
  // contains private and public keys
@@ -811,35 +822,40 @@ describe("charon tests", function () {
           myHasherFunc2: poseidon2
         })
         charon = charon.connect(sender)
-        let inputDataFake = await prepareTransaction({
-          charon,
-          inputs:[],
-          outputs: [fakeDepositUtxo],
-          account: {
-            owner: sender.address,
-            publicKey: fakeDepositUtxo.keypair.address(),
-          },
-          privateChainID: 2,
-          myHasherFunc: poseidon,
-          myHasherFunc2: poseidon2
-        })
+        let inputDataFake;
+        try{
+            inputDataFake = await prepareTransaction({
+            charon,
+            inputs:[],
+            outputs: [fakeDepositUtxo],
+            account: {
+              owner: sender.address,
+              publicKey: fakeDepositUtxo.keypair.address(),
+            },
+            privateChainID: 2,
+            myHasherFunc: poseidon,
+            myHasherFunc2: poseidon2
+          })}
+          catch{
+            console.log("good catch on bad deposit UTXO")
+          }
         let args = inputData.args
         let extData = inputData.extData
-        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
         await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10000"))
-        await charon.connect(accounts[1]).estimateGas.depositToOtherChain(inputDataFake.args,inputDataFake.extData,false);
+        await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
         const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
         ['bytes','uint256','bytes32'],
         [args.proof,args.publicAmount,args.root]
         );
-        let commi = await getTellorSubmission(args,extData);
-        await mockNative2.setAMBInfo(1, commi)
-        _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[1]);
-        await charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
-      commi = await getTellorSubmission(inputDataFake.args,inputDataFake.extData);
-        await mockNative2.setAMBInfo(2, commi)
-        _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[2]);
-        await charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'}));
+        let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+        let _query = await getTellorData(tellor2,charon.address,1,depositId);
+        let _value = await charon.getOracleSubmission(depositId);
+        await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+        await h.advanceTime(86400)//wait 12 hours
+        _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
+        await charon2.oracleDeposit([0],_encoded);
+        depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+        _query = await getTellorData(tellor2,charon.address,1,depositId);
         // Alice sends some funds to withdraw (ignore bob)
         let bobSendAmount = utils.parseEther('4')
         const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
@@ -937,18 +953,37 @@ describe("charon tests", function () {
                    args = inputData.args
                    extData = inputData.extData
                    await charon2.transact(args,extData)
-                   await h.expectThrow(charon2.transact(inputDataFake.args,inputDataFake.extData))
                    await h.expectThrow(charon2.transact(args,extData))
     })
+
+async function getTellorData(tInstance,cAddress,chain,depositID){
+  let ABI = ["function getOracleSubmission(uint256 _depositId)"];
+  let iface = new ethers.utils.Interface(ABI);
+  let funcSelector = iface.encodeFunctionData("getOracleSubmission", [depositID])
+
+  queryData = abiCoder.encode(
+      ['string', 'bytes'],
+      ['EVMCall', abiCoder.encode(
+          ['uint256','address','bytes'],
+          [chain,cAddress,funcSelector]
+      )]
+      );
+      queryId = h.hash(queryData)
+      nonce = await tInstance.getNewValueCountbyQueryId(queryId)
+      return({queryData: queryData,queryId: queryId,nonce: nonce})
+}
+
 async function getTellorSubmission(args,extData){
   const dataEncoded = abiCoder.encode(
-    ['bytes32','bytes32','bytes32','bytes32','bytes'],
+    ['bytes32','bytes32','bytes32','bytes32','bytes','bytes','bytes'],
     [
       args.inputNullifiers[0],
       args.inputNullifiers[1],
       args.outputCommitments[0],
       args.outputCommitments[1],
-      args.proof
+      args.proof,
+      extData.encryptedOutput1,
+      extData.encryptedOutput2
     ]
   );
   return dataEncoded;

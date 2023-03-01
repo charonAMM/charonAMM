@@ -172,7 +172,6 @@ describe("charon tests", function () {
         await h.expectThrow(testCharon.finalize([1,2],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//length should be same
         await testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address);
         await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//already finalized
-        assert(await testCharon.finalized(), "should be finalized")
         assert(await testCharon.balanceOf(accounts[0].address) - web3.utils.toWei("100") == 0, "should have full balance")
         assert(await testCharon.recordBalance() == web3.utils.toWei("100"), "record Balance should be set")
         assert(await testCharon.recordBalanceSynth() == web3.utils.toWei("1000"), "record Balance synth should be set")

@@ -17,7 +17,7 @@ const config = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 2,
+            runs: 1,
           },
         },
       },
@@ -26,7 +26,7 @@ const config = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 2,
+            runs: 1,
           },
         },
       },
@@ -35,7 +35,7 @@ const config = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 2,
+            runs: 1,
           },
         },
       },
@@ -44,7 +44,7 @@ const config = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 2,
+            runs: 1,
           },
         },
       },

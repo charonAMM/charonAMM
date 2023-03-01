@@ -47,7 +47,7 @@ contract TellorBridge is UsingTellor{
         _caller = tellor.getReporterByTimestamp(_queryId,_timestamp);
     }
 
-    /**
+     /**
      * @dev grabs the oracle value from the tellor oracle
      * @param _timestamp timestamp to grab
      * @param _chainID chain to grab
@@ -58,7 +58,7 @@ contract TellorBridge is UsingTellor{
         (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_timestamp > 0, "timestamp must be present");
     }
-
+    
     function sendCommitment(bytes memory _data) external{
         //don't need to do anything, all on the read side
     }

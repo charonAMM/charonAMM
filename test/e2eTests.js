@@ -34,6 +34,8 @@ async function deploy(contractName, ...args) {
         extData.encryptedOutput2
       ]
     );
+    return dataEncoded;
+  }
 
 async function getTellorData(tInstance,cAddress,chain,depositID){
     let ABI = ["function getOracleSubmission(uint256 _depositId)"];
@@ -51,6 +53,7 @@ async function getTellorData(tInstance,cAddress,chain,depositID){
         nonce = await tInstance.getNewValueCountbyQueryId(queryId)
         return({queryData: queryData,queryId: queryId,nonce: nonce})
 }
+
 describe("e2e charon tests", function () {
     let accounts;
     let verifier2,verifier16,token,charon,hasher,token2,charon2,mockNative ,mockNative2, cfc,cfc2, tellorBridge, tellorBridge2, e2p, p2e;
@@ -87,9 +90,10 @@ describe("e2e charon tests", function () {
         token2 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
         await token2.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
         charon2 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token2.address,fee,[p2e.address],HEIGHT,2,"Charon Pool Token2","CPT2");
+        await tellorBridge2.setPartnerInfo(charon.address,1);
         chd = await deploy("MockERC20",charon.address,"charon dollar","chd")
         chd2 = await deploy("MockERC20",charon2.address,"charon dollar2","chd2")
-        //now set both of them. 
+        //now set both of them. s
         await p2e.setCharon(charon2.address);
         await e2p.setCharon(charon.address);
         await token.approve(charon.address,web3.utils.toWei("100"))//100
@@ -133,11 +137,87 @@ describe("e2e charon tests", function () {
       })
       let args = inputData.args
       let extData = inputData.extData
-      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
       let stateId = await p2e.latestStateId();
       let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
       await charon2.oracleDeposit([0],_id);
       await h.expectThrow(charon2.oracleDeposit([0],_id))
+    })
+    it("deposit same commitment on both chains", async function() {
+      let mockNative3 = await deploy("MockNativeBridge")
+      await mockNative3.setUsers(tellorBridge2.address, p2e.address, e2p.address)
+      let token3 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
+      await token3.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
+      let TellorOracle = await ethers.getContractFactory(abi, bytecode);
+        tellor3 = await TellorOracle.deploy();
+        tellorBridge3 = await deploy("TellorBridge", tellor3.address)
+      let charon3 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token3.address,fee,[tellorBridge3.address],HEIGHT,3,"Charon Pool Token2","CPT2");
+      let chd3 = await deploy("MockERC20",charon3.address,"charon dollar3","chd3") 
+      await tellorBridge3.setPartnerInfo(charon.address,1)
+      await chd3.deployed();
+      await token3.approve(charon3.address,web3.utils.toWei("100"))
+      cfc3 = await deploy('MockCFC',token3.address,chd3.address)
+      await cfc3.deployed();
+      await charon3.finalize([1,2],[charon.address,charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address, cfc3.address);
+      let _depositAmount = web3.utils.toWei("10");
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                web3.utils.toWei("1000"),
+                                                _depositAmount,
+                                                0)
+      await token.connect(accounts[1]).approve(charon.address,_amount)
+      const sender = accounts[0]
+      const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon, chainID: 2 })
+      charon = charon.connect(sender)
+      let inputData = await prepareTransaction({
+        charon,
+        inputs:[],
+        outputs: [aliceDepositUtxo],
+        account: {
+          owner: sender.address,
+          publicKey: aliceDepositUtxo.keypair.address(),
+        },
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      let args = inputData.args
+      let extData = inputData.extData
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
+      let stateId = await p2e.latestStateId();
+      let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
+      await charon2.oracleDeposit([0],_id);
+      let depositId = 1
+      let _query = await getTellorData(tellor3,charon.address,1,depositId);
+      let _value = await charon.getOracleSubmission(depositId);
+      await tellor3.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+      await h.advanceTime(86400)//wait 12 hours
+      _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
+      await charon3.oracleDeposit([0],_encoded);
+      inputData = await prepareTransaction({
+        charon: charon2,
+        inputs: [aliceDepositUtxo],
+        outputs: [],
+        recipient: accounts[1].address,
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+    })
+    await charon2.transact(inputData.args,inputData.extData)
+    await h.expectThrow(charon3.transact(inputData.args,inputData.extData))  
+    try{
+      inputData = await prepareTransaction({
+        charon: charon3,
+        inputs: [aliceDepositUtxo],
+        outputs: [],
+        recipient: accounts[1].address,
+        privateChainID: 3,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+    })
+    } catch{
+      console.log("good throw")
+    }
     })
     it("Oracle attack (bad value pushed through, it can break it if oracle fails!!", async function() {
 
@@ -167,7 +247,7 @@ describe("e2e charon tests", function () {
       let extData = inputData.extData
       //await charon.connect(accounts[1]).depositToOtherChain(args,extData,false); (comment out the deposit part)
       //bad bridge
-      let _data = getTellorSubmission(args,extData)
+      let _data = await getTellorSubmission(args,extData)
       await mockNative2.sendMessageToChild(mockNative2.address,_data)
       let stateId = await p2e.latestStateId();
       let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
@@ -211,7 +291,7 @@ describe("e2e charon tests", function () {
             })
             let args = inputData.args
             let extData = inputData.extData
-            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
             let stateId = await p2e.latestStateId();
             let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
             await charon2.oracleDeposit([0],_id);
@@ -271,7 +351,7 @@ describe("e2e charon tests", function () {
             })
             let args = inputData.args
             let extData = inputData.extData
-            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
             let stateId = await p2e.latestStateId();
             let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
             await charon2.oracleDeposit([0],_id);
@@ -316,8 +396,13 @@ describe("e2e charon tests", function () {
       await mockNative3.setUsers(tellorBridge2.address, p2e.address, e2p.address)
       let token3 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
       await token3.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
-      let charon3 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token3.address,fee,[tellorBridge2.address],HEIGHT,3,"Charon Pool Token2","CPT2");
+      let TellorOracle = await ethers.getContractFactory(abi, bytecode);
+        tellor3 = await TellorOracle.deploy();
+        tellorBridge3 = await deploy("TellorBridge", tellor3.address)
+      let charon3 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token3.address,fee,[tellorBridge3.address],HEIGHT,3,"Charon Pool Token2","CPT2");
       let chd3 = await deploy("MockERC20",charon3.address,"charon dollar3","chd3") 
+      await tellorBridge.setPartnerInfo(charon3.address, 3);
+      await tellorBridge3.setPartnerInfo(charon.address,1)
       await chd3.deployed();
       await token3.approve(charon3.address,web3.utils.toWei("100"))
       cfc3 = await deploy('MockCFC',token3.address,chd3.address)
@@ -346,7 +431,7 @@ describe("e2e charon tests", function () {
       })
       let args = inputData.args
       let extData = inputData.extData
-      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
       let stateId = await p2e.latestStateId();
       let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
       await charon2.oracleDeposit([0],_id);
@@ -372,7 +457,7 @@ describe("e2e charon tests", function () {
       })
       args = inputData.args
       extData = inputData.extData
-      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
       const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
         ['bytes','uint256','bytes32'],
         [args.proof,args.publicAmount,args.root]
@@ -406,12 +491,9 @@ describe("e2e charon tests", function () {
       })
       args = inputData.args
       extData = inputData.extData
-      await charon2.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      await charon2.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
       commi = await getTellorSubmission(args,extData);
-      await mockNative2.sendMessageToRoot(commi)
-      stateId = await e2p.id();
-      _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
-      await charon.oracleDeposit([0],_id);
+      await charon.oracleDeposit([0],commi);
       //deposit from 3 to 1
       await token3.mint(accounts[1].address,web3.utils.toWei("100"))
       _amount = await charon.calcInGivenOut(web3.utils.toWei("110"),
@@ -434,14 +516,14 @@ describe("e2e charon tests", function () {
       })
       args = inputData.args
       extData = inputData.extData
-      await charon3.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      await charon3.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
       let __dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
-      ['bytes','uint256','bytes32'],
-      [args.proof,args.publicAmount,args.root]
+        ['bytes','uint256','bytes32'],
+        [args.proof,args.publicAmount,args.root]
       );
-      let depositId = await charon.getDepositIdByCommitmentHash(h.hash(__dataEncoded))
-      let _query = await getTellorData(tellor,charon3.address,3,depositId);
-      let _value = await charon.getOracleSubmission(depositId);
+      depositId = await charon3.getDepositIdByCommitmentHash(h.hash(__dataEncoded))
+      _query = await getTellorData(tellor,charon3.address,3,depositId);
+      _value = await charon3.getOracleSubmission(depositId);
       await tellor.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
       await h.advanceTime(86400)//wait 12 hours
       _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
@@ -637,7 +719,7 @@ describe("e2e charon tests", function () {
       })
       let args = inputData.args
       let extData = inputData.extData
-      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
       let stateId = await p2e.latestStateId();
       let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
       await charon2.oracleDeposit([0],_id); 
@@ -726,7 +808,7 @@ describe("e2e charon tests", function () {
       })
       let args = inputData.args
       let extData = inputData.extData
-      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false);
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
       let stateId = await p2e.latestStateId();
       let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
       await charon2.oracleDeposit([0],_id);
@@ -755,6 +837,69 @@ describe("e2e charon tests", function () {
       await charon2.transact(inputData.args,inputData.extData)
       await h.expectThrow(charon2.transact(inputData.args,inputData.extData))
       assert(await chd2.balanceOf(accounts[1].address) - _depositAmount == 0, "should mint CHD");
+    })
+    it("test rebate", async function() {
+      let _depositAmount = utils.parseEther('10');
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                web3.utils.toWei("1000"),
+                                                _depositAmount,
+                                                0)
+      await token.connect(accounts[1]).approve(charon.address,_amount)
+      const sender = accounts[0]
+      const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 2 })
+      charon = charon.connect(sender)
+      let inputData = await prepareTransaction({
+        charon,
+        inputs:[],
+        outputs: [aliceDepositUtxo],
+        account: {
+          owner: sender.address,
+          publicKey: aliceDepositUtxo.keypair.address(),
+        },
+        privateChainID: 2,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      let args = inputData.args
+      let extData = inputData.extData
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
+      let stateId1 = await p2e.latestStateId();
+      let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId1]);
+      await charon2.oracleDeposit([0],_id);
+      //alice withdraws
+      inputData = await prepareTransaction({
+        charon: charon2,
+        inputs: [aliceDepositUtxo],
+        outputs: [],
+        recipient: accounts[3].address,
+        privateChainID: 2,
+        fee: web3.utils.toWei("2"),
+        rebate: web3.utils.toWei("5"),
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+    })
+    await h.expectThrow(charon2.connect(accounts[2]).transact(inputData.args,inputData.extData))//rebate too big
+
+      inputData = await prepareTransaction({
+          charon: charon2,
+          inputs: [aliceDepositUtxo],
+          outputs: [],
+          recipient: accounts[3].address,
+          relayer: accounts[2].address,
+          privateChainID: 2,
+          fee: web3.utils.toWei("2"),
+          rebate: web3.utils.toWei("1"),
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+      })
+      let _rebate = await charon2.calcOutGivenIn(web3.utils.toWei("1000"),web3.utils.toWei("100"),web3.utils.toWei("1"),0);
+      let balAcc3 = await ethers.provider.getBalance(accounts[3].address)
+      let chdBal2 = await chd2.balanceOf(accounts[2].address); 
+      await charon2.connect(accounts[2]).transact(inputData.args,inputData.extData,{value:_rebate})
+      assert(await chd2.balanceOf(accounts[3].address)- (_depositAmount- web3.utils.toWei("2")) == 0, "should mint CHD");
+      assert(await chd2.balanceOf(accounts[2].address) - chdBal2 ==  web3.utils.toWei("2"), "should mint CHD to relayer");
+      assert(Math.abs(await ethers.provider.getBalance(accounts[3].address) - balAcc3 - _rebate) < web3.utils.toWei(".01"), "rebate should be given" )
     })
     it("Attempt to swap out of massive position", async function() {
       //try to do more than in the pool, assert fail
@@ -817,7 +962,7 @@ describe("e2e charon tests", function () {
       let args = inputData.args
       let extData = inputData.extData
       await token.connect(accounts[3]).approve(charon.address,_amount)
-      await charon.connect(accounts[3]).depositToOtherChain(args,extData,false);
+      await charon.connect(accounts[3]).depositToOtherChain(args,extData,false,_amount);
       let stateId1 = await p2e.latestStateId();
       let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId1]);
       await charon2.connect(accounts[5]).oracleDeposit([0],_id);
@@ -854,7 +999,7 @@ describe("e2e charon tests", function () {
       let args2 = inputData.args
       let extData2 = inputData.extData
       await token.connect(accounts[4]).approve(charon.address,_amount)
-      await charon.connect(accounts[4]).depositToOtherChain(args2,extData2,false);
+      await charon.connect(accounts[4]).depositToOtherChain(args2,extData2,false,_amount);
       let _payamount = _amount/50
       assert((await token.balanceOf(accounts[4].address)*1  + 1*_amount)  - _amount/50- web3.utils.toWei("100") == 0, "token balance should be correct2")
       assert(await chd.balanceOf(accounts[4].address) - _amount/50 < web3.utils.toWei("0.01"), "chd balance should be correct2")

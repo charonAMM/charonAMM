@@ -25,7 +25,7 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
         charon = _charon;
     }
 
-    function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller){
+    function getCommitment(bytes memory _inputData) external virtual returns(bytes memory _value, address _caller){
         bytes memory _message = _validateAndExtractMessage(_inputData);
         return (_message,address(0));
     }

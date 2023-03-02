@@ -38,9 +38,9 @@ contract GnosisAMB is UsingTellor{
         require(connectedCharon != address(0));
         bytes memory _data = abi.encodeWithSelector(func_selector,_depositId);
         _data = abi.encode(connectedCharon,_data);
-        emit InfoRequest(_depositId);
         _messageId = ambBridge.requireToGetInformation(_requestSelector,_data);
         idToCaller[_messageId] = msg.sender;
+        emit InfoRequest(_depositId);
     }
 
     function onInformationReceived(bytes32 messageId,bool status,bytes calldata result) external{

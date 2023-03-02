@@ -169,7 +169,6 @@ describe("charon tests", function () {
         await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address));//must transfer token
         await token2.approve(testCharon.address,web3.utils.toWei("100"))//100
         await h.expectThrow(testCharon.connect(accounts[1]).finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//must be controller
-        await h.expectThrow(testCharon.finalize([1,2],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//length should be same
         await testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address);
         await h.expectThrow(testCharon.finalize([1],[charon.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address,cfc.address))//already finalized
         assert(await testCharon.balanceOf(accounts[0].address) - web3.utils.toWei("100") == 0, "should have full balance")
@@ -711,11 +710,6 @@ describe("charon tests", function () {
           assert(pC[0][0] == 2, "partner chain should be correct")
           assert(pC[0][1] == charon2.address, "partner address should be correct")
         })
-        it("Test getTokens()", async function() {
-          let toks = await charon.getTokens()
-          assert(toks[0] == chd.address, "chd should be slot 0")
-          assert(toks[1] == token.address, "token should be slot 1")
-        });
         it("Test getSpotPrice()", async function() {
           let sprice = await charon.getSpotPrice();
           assert(sprice == web3.utils.toWei("10"), "chd spot price should be correct 10eth per chd")

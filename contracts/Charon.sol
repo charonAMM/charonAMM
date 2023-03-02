@@ -196,18 +196,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           recordBalance += _tokenAmount;
         }
         uint256 _min = userRewards / 1000;
-        if(_min > 0){
-          if (_min > _tokenAmount / 50){
-            _min = _tokenAmount / 50;
-          }
-          token.transfer(msg.sender, _min);
+        if(_min <= _tokenAmount){
+          require(token.transfer(msg.sender, _min));
           userRewards -= _min;
         }
         _min = userRewardsCHD / 1000;
-        if(_min > 0){
-          if (_min > _abs(_extData.extAmount) / 50){
-            _min = _abs(_extData.extAmount) / 50;
-          }
+        if(_min <= _abs(_extData.extAmount) ){
           chd.transfer(msg.sender, _min);
           userRewardsCHD -= _min;
         }

@@ -925,22 +925,22 @@ describe("e2e charon tests", function () {
       await token2.connect(accounts[1]).approve(charon2.address, web3.utils.toWei("300000"))
       await chd.connect(accounts[1]).approve(charon.address, web3.utils.toWei("300000"))
       await chd2.connect(accounts[1]).approve(charon2.address, web3.utils.toWei("300000"))
-      await charon.connect(accounts[1]).addRewards(web3.utils.toWei("100000"),web3.utils.toWei("100000"),web3.utils.toWei("100000"),true)
-      await charon.connect(accounts[1]).addRewards(web3.utils.toWei("100000"),web3.utils.toWei("100000"),web3.utils.toWei("100000"),false)
-      await charon2.connect(accounts[1]).addRewards(web3.utils.toWei("100000"),web3.utils.toWei("100000"),web3.utils.toWei("100000"),true)
-      await charon2.connect(accounts[1]).addRewards(web3.utils.toWei("100000"),web3.utils.toWei("100000"),web3.utils.toWei("100000"),false)
-      assert(await charon.recordBalanceSynth() == web3.utils.toWei("101000"), "new recordBalance Synth should be correct")
-      assert(await charon.recordBalance() == web3.utils.toWei("100100"), "new recordBalance should be correct")
-      assert(await charon.oracleCHDFunds() == web3.utils.toWei("100000"), "new oracleCHD funds should be correct")
-      assert(await charon.oracleTokenFunds() == web3.utils.toWei("100000"), "new oracleToken funds should be correct")
-      assert(await charon.userRewardsCHD() == web3.utils.toWei("100000"), "new userRewardsCHD should be correct")
-      assert(await charon.userRewards() == web3.utils.toWei("100000"), "new userRewards should be correct")
+      await charon.connect(accounts[1]).addRewards(web3.utils.toWei("1000"),web3.utils.toWei("1000"),web3.utils.toWei("1000"),true)
+      await charon.connect(accounts[1]).addRewards(web3.utils.toWei("1000"),web3.utils.toWei("1000"),web3.utils.toWei("1000"),false)
+      await charon2.connect(accounts[1]).addRewards(web3.utils.toWei("1000"),web3.utils.toWei("1000"),web3.utils.toWei("1000"),true)
+      await charon2.connect(accounts[1]).addRewards(web3.utils.toWei("1000"),web3.utils.toWei("1000"),web3.utils.toWei("1000"),false)
+      assert(await charon.recordBalanceSynth() == web3.utils.toWei("2000"), "new recordBalance Synth should be correct")
+      assert(await charon.recordBalance() == web3.utils.toWei("1100"), "new recordBalance should be correct")
+      assert(await charon.oracleCHDFunds() == web3.utils.toWei("1000"), "new oracleCHD funds should be correct")
+      assert(await charon.oracleTokenFunds() == web3.utils.toWei("1000"), "new oracleToken funds should be correct")
+      assert(await charon.userRewardsCHD() == web3.utils.toWei("1000"), "new userRewardsCHD should be correct")
+      assert(await charon.userRewards() == web3.utils.toWei("1000"), "new userRewards should be correct")
 
       //deposit twice and assert correct user rewards
       let _depositAmount = web3.utils.toWei("10");
       await token.mint(accounts[3].address,web3.utils.toWei("100"))
-      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100100"),
-                                                web3.utils.toWei("101000"),
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("1100"),
+                                                web3.utils.toWei("2000"),
                                                 _depositAmount,
                                                 0)
       
@@ -966,13 +966,11 @@ describe("e2e charon tests", function () {
       let stateId1 = await p2e.latestStateId();
       let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId1]);
       await charon2.connect(accounts[5]).oracleDeposit([0],_id);
-      let userW = _amount/50
-      assert((await token.balanceOf(accounts[3].address)*1  + 1*_amount)  - _amount/50- web3.utils.toWei("100") == 0, "token balance should be correct")
-      assert(await chd.balanceOf(accounts[3].address) - _amount/50 ==0, "chd balance should be correct")
-      assert(await charon.userRewards() - (web3.utils.toWei("100000") - userW) > 0, "user rewards should properly subtract")
-      assert(await charon.userRewards() - (web3.utils.toWei("100000") - userW) < web3.utils.toWei(".01"), "user rewards should properly subtract")
-      assert(await charon.userRewardsCHD() - (web3.utils.toWei("100000") - userW) > 0, "user rewards chd should properly subtract")
-      assert(await charon.userRewardsCHD() - (web3.utils.toWei("100000") - userW) < web3.utils.toWei(".01"), "user rewardschd should properly subtract")
+      let userW = web3.utils.toWei("1000")/1000   
+      assert((await token.balanceOf(accounts[3].address)*1  + 1*_amount) - userW - web3.utils.toWei("100") == 0, "token balance should be correct")
+      assert(await chd.balanceOf(accounts[3].address) - userW ==0, "chd balance should be correct")
+      assert(await charon.userRewards() - (web3.utils.toWei("1000") - userW) == 0, "user rewards should properly subtract")
+      assert(await charon.userRewardsCHD() - (web3.utils.toWei("1000") - userW) == 0, "user rewards chd should properly subtract")
       await token.mint(accounts[4].address,web3.utils.toWei("100"))
       let rec = await charon.recordBalance()
       let recS = await charon.recordBalanceSynth()
@@ -999,27 +997,28 @@ describe("e2e charon tests", function () {
       let args2 = inputData.args
       let extData2 = inputData.extData
       await token.connect(accounts[4]).approve(charon.address,_amount)
+      let _payamount = await charon.userRewards() / 1000
       await charon.connect(accounts[4]).depositToOtherChain(args2,extData2,false,_amount);
-      let _payamount = _amount/50
-      assert((await token.balanceOf(accounts[4].address)*1  + 1*_amount)  - _amount/50- web3.utils.toWei("100") == 0, "token balance should be correct2")
-      assert(await chd.balanceOf(accounts[4].address) - _amount/50 < web3.utils.toWei("0.01"), "chd balance should be correct2")
-      assert(await chd.balanceOf(accounts[4].address) - _amount/50 > 0 , "chd balance should be correct2")
-      assert(await charon.userRewards()  - (web3.utils.toWei("100000") - _payamount - userW) > 0, "user rewards should properly subtract2")
-      assert(await charon.userRewards()  - (web3.utils.toWei("100000") - _payamount - userW) < web3.utils.toWei(".001"), "user rewards should properly subtract2")
-      assert(await charon.userRewardsCHD() - (web3.utils.toWei("100000") - _payamount - userW) > 0, "user rewards chd should properly subtract2")
-      assert(await charon.userRewardsCHD() - (web3.utils.toWei("100000") - _payamount - userW) < web3.utils.toWei(".001"), "user rewards chd should properly subtract2")
+      assert((await token.balanceOf(accounts[4].address)*1  + 1*_amount)  - _payamount - web3.utils.toWei("100") == 0, "token balance should be correct2")
+      assert(await chd.balanceOf(accounts[4].address) - _payamount < web3.utils.toWei("0.01"), "chd balance should be correct2")
+      assert(await chd.balanceOf(accounts[4].address) - _payamount >= 0 , "chd balance should be correct2")
+      assert(await charon.userRewards()  - (web3.utils.toWei("1000") - _payamount - userW) >= 0, "user rewards should properly subtract2")
+      assert(await charon.userRewards()  - (web3.utils.toWei("1000") - _payamount - userW) < web3.utils.toWei(".001"), "user rewards should properly subtract2")
+      assert(await charon.userRewardsCHD() - (web3.utils.toWei("1000") - _payamount - userW) >= 0, "user rewards chd should properly subtract2")
+      assert(await charon.userRewardsCHD() - (web3.utils.toWei("1000") - _payamount - userW) < web3.utils.toWei(".001"), "user rewards chd should properly subtract2")
       //move both pieces of data over and assert correct oracle rewards
         let stateId = await p2e.latestStateId();
         _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
         await charon2.connect(accounts[6]).oracleDeposit([0],_id);
-        assert(await token2.balanceOf(accounts[5].address) == web3.utils.toWei("100"), "token balance should be correct2")
-        assert(await chd2.balanceOf(accounts[5].address) ==  web3.utils.toWei("100"), "chd balance should be correct2")
-        assert(await token2.balanceOf(accounts[6].address) == web3.utils.toWei("99.9"), "token balance should be correct2 - 2")
-        assert(await chd2.balanceOf(accounts[6].address) == web3.utils.toWei("99.9"), "chd balance should be correct2 -2")
-        assert(await charon2.oracleTokenFunds() - (web3.utils.toWei("100000") - web3.utils.toWei("99.9") - web3.utils.toWei("100")) > 0, "user rewards should properly subtract2")
-        assert(await charon2.oracleTokenFunds() - (web3.utils.toWei("100000") - web3.utils.toWei("99.9") - web3.utils.toWei("100")) < web3.utils.toWei(".001"), "user rewards should properly subtract2")
-        assert(await charon2.oracleCHDFunds() - (web3.utils.toWei("100000") - web3.utils.toWei("99.9") - web3.utils.toWei("100")) > 0, "user rewards should properly subtract2")
-        assert(await charon2.oracleCHDFunds() - (web3.utils.toWei("100000") - web3.utils.toWei("99.9") - web3.utils.toWei("100")) < web3.utils.toWei(".001"), "user rewards should properly subtract2")
+        assert(await token2.balanceOf(accounts[5].address) == web3.utils.toWei("1"), "token balance should be correct3")
+        assert(await chd2.balanceOf(accounts[5].address) ==  web3.utils.toWei("1"), "chd balance should be correct2")
+        assert(await token2.balanceOf(accounts[6].address) == web3.utils.toWei(".999"), "token balance should be correct2 - 2")
+        assert(await chd2.balanceOf(accounts[6].address) == web3.utils.toWei(".999"), "chd balance should be correct2 -2")
+    
+        assert(await charon2.oracleTokenFunds() - (web3.utils.toWei("1000") - web3.utils.toWei(".999") - web3.utils.toWei("1")) >= 0, "user rewards should properly subtract2")
+        assert(await charon2.oracleTokenFunds() - (web3.utils.toWei("1000") - web3.utils.toWei(".999") - web3.utils.toWei("1")) < web3.utils.toWei(".001"), "user rewards should properly subtract2")
+        assert(await charon2.oracleCHDFunds() - (web3.utils.toWei("1000") - web3.utils.toWei(".999") - web3.utils.toWei("1")) >= 0, "user rewards should properly subtract2")
+        assert(await charon2.oracleCHDFunds() - (web3.utils.toWei("1000") - web3.utils.toWei(".999") - web3.utils.toWei("1")) < web3.utils.toWei(".001"), "user rewards should properly subtract2")
     })
     it("Test distribution of base fee", async function() {
       fee = web3.utils.toWei(".02");//2%

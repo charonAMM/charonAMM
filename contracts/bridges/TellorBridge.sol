@@ -11,13 +11,7 @@ contract TellorBridge is UsingTellor{
 
     address public charon;//address of charon on other chain
     uint256 public connectedChainId;
-    bytes32[] public messageIds;
-    mapping(bytes32 => address) public idToCaller;
-    mapping(bytes32=> bytes) public messageIdToData;
-    mapping(bytes32=> bool) public didPush;
     bytes4 private constant func_selector = bytes4(keccak256("getOracleSubmission(uint256)"));
-    event InfoRecieved(bytes32 _messageId, bool _status);
-    event InfoRequest(uint256 _depositId);
     
     /**
      * @dev constructor to launch contract 
@@ -58,13 +52,8 @@ contract TellorBridge is UsingTellor{
         (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_timestamp > 0, "timestamp must be present");
     }
-    
+
     function sendCommitment(bytes memory _data) external{
         //don't need to do anything, all on the read side
     }
-
-    function getMessageIds() external view returns(bytes32[] memory){
-        return messageIds;
-    }
-
 }

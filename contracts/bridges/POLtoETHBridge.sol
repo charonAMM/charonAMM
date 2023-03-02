@@ -14,8 +14,8 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
     address public latestRootMessageSender;
     address public charon;
     uint256[] public stateIds;
-    mapping(uint256 => bytes) stateIdToData;
-    mapping(uint256 => bool) didPush;
+    mapping(uint256 => bytes) public stateIdToData;
+    mapping(uint256 => bool) public didPush;
     event MessageProcessed(uint256 _stateId, bytes _data);
 
     /**

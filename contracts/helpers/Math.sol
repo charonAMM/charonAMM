@@ -12,6 +12,10 @@ contract Math{
     uint256 public constant MAX_OUT_RATIO     = (BONE / 3) + 1 wei;
 
     /*Functions*/
+    function _abs(int x) internal pure returns (uint256) {
+        return uint256(x >= 0 ? x : -x);
+    }
+
     /**
      * @dev calculates an in amount of a token given how much is expected out of the other token
      * @param _tokenBalanceIn uint256 amount of tokenBalance of the in token's pool

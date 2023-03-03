@@ -25,7 +25,6 @@ async function getProof({
   fee,
   rebate,
   recipient,
-  relayer,
   privateChainID,
   myHasherFunc,
   test
@@ -56,7 +55,6 @@ async function getProof({
   const extData = {
     recipient: toFixedHex(recipient, 20),
     extAmount: toFixedHex(extAmount),
-    relayer: toFixedHex(relayer, 20),
     fee: toFixedHex(fee),
     rebate: toFixedHex(rebate),
     encryptedOutput1: outputs[0].encrypt(),
@@ -114,7 +112,6 @@ async function prepareTransaction({
   outputs = [],
   fee = 0,
   recipient = 0,
-  relayer = 0,
   rebate = 0,
   privateChainID = 2,
   myHasherFunc,
@@ -142,7 +139,6 @@ async function prepareTransaction({
     fee,
     rebate,
     recipient,
-    relayer,
     privateChainID,
     myHasherFunc,
     test

@@ -25,7 +25,6 @@ const randomBN = (nbytes = 31) => BigNumber.from(crypto.randomBytes(nbytes))
 function getExtDataHash({
   recipient,
   extAmount,
-  relayer,
   fee,
   rebate,
   encryptedOutput1,
@@ -35,13 +34,12 @@ function getExtDataHash({
 
   const encodedData = abi.encode(
     [
-      'tuple(address recipient,int256 extAmount,address relayer,uint256 fee,uint256 rebate,bytes encryptedOutput1,bytes encryptedOutput2)',
+      'tuple(address recipient,int256 extAmount,uint256 fee,uint256 rebate,bytes encryptedOutput1,bytes encryptedOutput2)',
     ],
     [
       {
         recipient: toFixedHex(recipient, 20),
         extAmount: toFixedHex(extAmount),
-        relayer: toFixedHex(relayer, 20),
         fee: toFixedHex(fee),
         rebate:toFixedHex(rebate),
         encryptedOutput1: encryptedOutput1,

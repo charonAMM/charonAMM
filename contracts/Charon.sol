@@ -63,7 +63,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     struct ExtData {
       address recipient;//party recieving CHD
       int256 extAmount;//amount being sent
-      address relayer;//relayer of signed message (adds anonymity)
       uint256 fee;//fee given to relayer
       uint256 rebate;//amount taken from relayer and given to recipient
       bytes encryptedOutput1;//encrypted UTXO output of txn
@@ -489,7 +488,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         }
         _transact(_args, _extData);
         if(_extData.fee > 0){
-          chd.mintCHD(_extData.relayer,_extData.fee);
+          chd.mintCHD(msg.sender,_extData.fee);
           if(_extData.rebate > 0){
             uint256 _outRebate = calcOutGivenIn(recordBalanceSynth,recordBalance,_extData.rebate,0);
             require(_extData.fee > _extData.rebate, "rebate must be smaller than fee");

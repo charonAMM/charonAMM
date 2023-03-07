@@ -5,7 +5,7 @@ const { toFixedHex, poseidonHash2, getExtDataHash, FIELD_SIZE, shuffle } = requi
 const Utxo = require('./utxo')
 const zero = "21663839004416932945382355908790599225266501822907911457504978515578255421292"
 const { prove } = require('./prover')
-const MERKLE_TREE_HEIGHT = 5
+const MERKLE_TREE_HEIGHT = 23
 
 async function buildMerkleTree(charon, hasherFunc) {
   let filter = charon.filters.NewCommitment()

@@ -54,7 +54,8 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
      * @param _inputData the state Id you're trying to grab.  If null, grabs the most recent one not pushed over. 
      * @return _value bytes data returned from tellor
      */
-    function getCommitment(bytes memory _inputData) public returns(bytes memory _value, address){
+    function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address){
+        require(msg.sender == charon);
         uint256 _stateId = _bytesToUint(_inputData);
         didPush[_stateId] = true;
         return (stateIdToData[_stateId],address(0));
@@ -66,7 +67,7 @@ contract POLtoETHBridge is UsingTellor, FxBaseChildTunnel{
      * @param _chainID chain to grab
      * @param _address address of the CIT token on mainnet Ethereum
      */
-    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) public view returns(bytes memory _value){
+    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) external view returns(bytes memory _value){
         bytes32 _queryId = keccak256(abi.encode("CrossChainBalance",abi.encode(_chainID,_address,_timestamp)));
         (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_timestamp > 0, "timestamp must be present");

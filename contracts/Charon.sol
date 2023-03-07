@@ -195,12 +195,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           recordBalance += _tokenAmount;
         }
         uint256 _min = userRewards / 1000;
-        if(_min <= _tokenAmount){
+        if(_min <= _tokenAmount && _min > 0){ 
           require(token.transfer(msg.sender, _min));
           userRewards -= _min;
         }
         _min = userRewardsCHD / 1000;
-        if(_min <= _abs(_extData.extAmount) ){
+        if(_min <= _abs(_extData.extAmount) && _min > 0){
           chd.transfer(msg.sender, _min);
           userRewardsCHD -= _min;
         }
@@ -371,7 +371,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
             chd.transfer(_caller, _funds);
           }
           chd.transfer(msg.sender,_funds);
-          
         }
         if(oracleTokenFunds > 2000){
           _funds = oracleTokenFunds/1000;
@@ -451,7 +450,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         else{
           _inRecordBal += _adjustedIn;
           require(token.transferFrom(msg.sender,address(this), _tokenAmountIn));
-          require(chd.transfer(msg.sender,_tokenAmountOut));
+          chd.transfer(msg.sender,_tokenAmountOut);
           recordBalance += _adjustedIn;
           recordBalanceSynth -= _tokenAmountOut;
           if(fee > 0){
@@ -487,17 +486,18 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           chd.mintCHD(_extData.recipient, uint256(-_extData.extAmount));
         }
         _transact(_args, _extData);
+        uint256 _outRebate;
         if(_extData.fee > 0){
           chd.mintCHD(msg.sender,_extData.fee);
           if(_extData.rebate > 0){
-            uint256 _outRebate = calcOutGivenIn(recordBalanceSynth,recordBalance,_extData.rebate,0);
+            _outRebate = calcOutGivenIn(recordBalanceSynth,recordBalance,_extData.rebate,0);
             require(_extData.fee > _extData.rebate, "rebate must be smaller than fee");
-            require(msg.value == _outRebate, "msg value should be rebate");
             //transfer base token from relayer to recipient
             //allows a user to get some funds to a blank addy
             payable(_extData.recipient).transfer(_outRebate);
           }
         }
+        require(msg.value == _outRebate, "msg value should be rebate");
     }
 
     //getters

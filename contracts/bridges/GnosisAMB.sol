@@ -10,6 +10,7 @@ import "../interfaces/IAMB.sol";
 contract GnosisAMB is UsingTellor{
 
     IAMB public ambBridge;
+    address public charon; //address of charon on this chain
     address public connectedCharon;//address of charon on other chain
     bytes32[] public messageIds;
     mapping(bytes32 => address) public idToCaller;
@@ -29,9 +30,10 @@ contract GnosisAMB is UsingTellor{
     }
 
     //sets charon on other chain
-    function setCharon(address _charon) external{
+    function setCharon(address _connectedCharon, address _charon) external{
         require(connectedCharon == address(0));
-        connectedCharon = _charon;
+        connectedCharon = _connectedCharon;
+        charon = _charon;
     }
 
     function getInfo(uint256 _depositId)  external returns (bytes32 _messageId){
@@ -51,6 +53,7 @@ contract GnosisAMB is UsingTellor{
     }
 
     function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller){
+        require(msg.sender == charon);
         bytes32 _messageId = _bytesToBytes32(_inputData);
         didPush[_messageId] = true;
         _caller = idToCaller[_messageId];
@@ -63,7 +66,7 @@ contract GnosisAMB is UsingTellor{
      * @param _chainID chain to grab
      * @param _address address of the CIT token on mainnet Ethereum
      */
-    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) public view returns(bytes memory _value){
+    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) external view returns(bytes memory _value){
         bytes32 _queryId = keccak256(abi.encode("CrossChainBalance",abi.encode(_chainID,_address,_timestamp)));
         (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_timestamp > 0, "timestamp must be present");

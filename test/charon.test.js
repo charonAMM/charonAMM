@@ -26,7 +26,7 @@ describe("charon tests", function () {
     let accounts;
     let verifier2,verifier16,token,charon,hasher,token2,charon2, mockNative ,mockNative2, cfc,cfc2, tellorBridge, tellorBridge2, e2p, p2e;
     let fee = 0;
-    let HEIGHT = 5;
+    let HEIGHT = 23;
     let builtPoseidon;
     let requestSelector = "0x88b6c755140efe88bff94bfafa4a7fdffe226d27d92bd45385bb0cfa90986650";
     beforeEach(async function () {
@@ -192,6 +192,7 @@ describe("charon tests", function () {
       await h.expectThrow(charon.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("50"),web3.utils.toWei("5")))
       await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
       assert(minOut >= web3.utils.toWei("4.88"), "should be greater than this")
+      await h.expectThrow(charon.connect(accounts[1]).lpDeposit(0,web3.utils.toWei("100"),web3.utils.toWei("10")))
       await charon.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("100"),web3.utils.toWei("10"))
       assert(await charon.recordBalance() - web3.utils.toWei("104.88") > 0, "record balance should be correct")
       assert(await charon.recordBalance() - web3.utils.toWei("104.88") < web3.utils.toWei("1"), "record balance should be correct")
@@ -231,7 +232,6 @@ describe("charon tests", function () {
                                               web3.utils.toWei("10")//tokenamountIn
                                               )
         await charon.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("100"),web3.utils.toWei("10"))
-        let poolSupply = await charon.totalSupply()
         await h.expectThrow(charon.connect(accounts[1]).lpWithdraw(1, web3.utils.toWei("48.8"),web3.utils.toWei("4.88")) )
         await h.expectThrow(charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei("4.88"), web3.utils.toWei("500"),web3.utils.toWei("4.88")) )
         await h.expectThrow(charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei("4.88"), web3.utils.toWei("48.8"),web3.utils.toWei("500")) )
@@ -299,9 +299,10 @@ describe("charon tests", function () {
         let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
         let _query = await getTellorData(tellor2,charon.address,1,depositId);
         let _value = await charon.getOracleSubmission(depositId);
+        _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
+        await h.expectThrow(charon2.oracleDeposit([0],_encoded));
         await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
         await h.advanceTime(86400)//wait 12 hours
-        _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
         await charon2.oracleDeposit([0],_encoded);
         await h.expectThrow(charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'})))
         assert(await charon2.isSpent(args.inputNullifiers[0]) == true ,"nullifierHash should be true")
@@ -316,6 +317,7 @@ describe("charon tests", function () {
           await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut,1))//bad max price
           await h.expectThrow(charon.swap(false,web3.utils.toWei("1"), _minOut,_maxPrice))//too little in
           await h.expectThrow(charon.swap(false,web3.utils.toWei("10"),web3.utils.toWei("50000"),_maxPrice))//too much out
+          await h.expectThrow(charon.connect(accounts[1]).swap(false,0, 0,_maxPrice))//zero input
           await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
           assert(await charon.recordBalance() == web3.utils.toWei("110"), "record Balance should be correct")
           assert(await charon.recordBalanceSynth() > web3.utils.toWei("900"), "recordBalanceSynth should be correct")

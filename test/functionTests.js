@@ -74,6 +74,9 @@ describe("charon system - function tests", function() {
         console.log("Math.sol")
         assert(await math.calcSpotPrice(web3.utils.toWei("100"),web3.utils.toWei("10"),0) == web3.utils.toWei("10"), "spot price should be correct")
     });
+    it("abs()", async function() {
+        assert(await math.abs(-9) - 9 == 0,"abs should work")
+    });
     it("calcOutGivenIn()", async function() {
         assert(await math.calcOutGivenIn(web3.utils.toWei("1000"),web3.utils.toWei("100"),web3.utils.toWei("100"),0) == web3.utils.toWei("9.090909090909090900"), "spot price should be correct")
     });

@@ -39,10 +39,4 @@ contract MockNativeBridge {
        lastBlock = block.number;
        p2e.processMessageFromRoot(block.number,address(this), _message);
    }
-
-    //PoltoETH
-
-    function sendMessageToRoot(bytes memory _message) external{
-        e2p.receiveMessage(_message);
-    }
 }

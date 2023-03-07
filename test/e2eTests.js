@@ -58,7 +58,7 @@ describe("e2e charon tests", function () {
     let accounts;
     let verifier2,verifier16,token,charon,hasher,token2,charon2,mockNative ,mockNative2, cfc,cfc2, tellorBridge, tellorBridge2, e2p, p2e;
     let fee = 0;
-    let HEIGHT = 5;
+    let HEIGHT = 23;
     let builtPoseidon;
     beforeEach(async function () {
         builtPoseidon = await buildPoseidon()

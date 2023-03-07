@@ -7,7 +7,7 @@ const { toFixedHex } = require('../src/utils')
 const { buildPoseidon } = require("circomlibjs");
 
 
-const MERKLE_TREE_HEIGHT = 5
+const MERKLE_TREE_HEIGHT = 23
 const MerkleTree = require('fixed-merkle-tree')
 
 

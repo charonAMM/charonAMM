@@ -85,6 +85,16 @@ describe("charon system - function tests", function() {
     });
     it("calcPoolOutGivenSingleIn(()", async function() {
         assert(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("100")) == web3.utils.toWei(".488088481710052490"), "pool out should be correct")
+    console.log("tokenBalanceIn, poolSupply, tokenAmountIn")
+    console.log("pool out / single in 1000,10,100", ethers.utils.formatEther(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("100"))))
+    console.log("pool out / single in 10,1000,5", ethers.utils.formatEther(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("10"),web3.utils.toWei("1000"),web3.utils.toWei("5"))))
+    console.log("pool out / single in 1000,100,100", ethers.utils.formatEther(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("100"),web3.utils.toWei("100"))))
+    console.log("pool out / single in 1000,1000,500", ethers.utils.formatEther(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("1000"),web3.utils.toWei("500"))))
+    console.log("pool out / single in 1000,1,100", ethers.utils.formatEther(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("1"),web3.utils.toWei("100"))))
+    console.log("pool out / single in 1000,1000000,100", ethers.utils.formatEther(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("1000000"),web3.utils.toWei("100"))))
+    console.log("pool out / single in 1000,10,10", ethers.utils.formatEther(await math.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("10"))))
+    
+    
     });
     it("calcSingleOutGivenIn()", async function() {
         assert(await math.calcSingleOutGivenIn(web3.utils.toWei("1000"),web3.utils.toWei("10"),web3.utils.toWei("1"),0,true) == web3.utils.toWei("190"), "single out should be correct")

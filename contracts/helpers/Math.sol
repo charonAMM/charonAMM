@@ -194,13 +194,13 @@ contract Math{
     function _bpow(uint256 _base, uint256 _exp) internal pure returns (uint256){
         require(_base >= 1 wei, "ERR_POW_BASE_TOO_LOW");
         require(_base <= ((2 * BONE) - 1 wei), "ERR_POW_BASE_TOO_HIGH");
-        uint256 _whole  = _bfloor(_exp);   
+        uint256 _whole  = _bfloor(_exp);   //0
         uint256 _remain = _exp - _whole;
-        uint256 _wholePow = _bpowi(_base, _btoi(_whole));
+        uint256 _wholePow = _bpowi(_base, _btoi(_whole));//_base
         if (_remain == 0) {
             return _wholePow;
         }
-        uint256 _partialResult = _bpowApprox(_base, _remain, BONE / 10**10);
+        uint256 _partialResult = _bpowApprox(_base, _remain, BONE / 10**10);//_base,5e18,10e8
         return _bmul(_wholePow, _partialResult);
     }
 
@@ -216,15 +216,15 @@ contract Math{
             pure 
             returns (uint256 _sum)
         {
-        uint256 _a = _exp;
+        uint256 _a = _exp;//5e18
         (uint256 _x, bool _xneg)  = _bsubSign(_base, BONE);
         uint256 _term = BONE;
         _sum = _term;
         bool _negative = false;
         for (uint256 _i = 1; _term >= _precision; _i++) {
-            uint256 _bigK = _i * BONE;
-            (uint256 _c, bool _cneg) = _bsubSign(_a, _bigK - BONE);
-            _term = _bmul(_term, _bmul(_c, _x));
+            uint256 _bigK = _i * BONE;//10e18
+            (uint256 _c, bool _cneg) = _bsubSign(_a, _bigK - BONE);//(5e18,false)
+            _term = _bmul(_term, _bmul(_c, _x));//1e18*(5e18* - _base)
             _term = _bdiv(_term, _bigK);
             if (_term == 0) break;
             if (_xneg) _negative = !_negative;
@@ -244,7 +244,7 @@ contract Math{
      * @return _z uint256 result of pow
      */
     function _bpowi(uint256 _a, uint256 _n) internal pure returns (uint256 _z){
-        _z = _n % 2 != 0 ? _a : BONE;
+        _z = _n % 2 != 0 ? _a : BONE;//_a
         for (_n /= 2; _n != 0; _n /= 2) {
             _a = _bmul(_a, _a);
             if (_n % 2 != 0) {

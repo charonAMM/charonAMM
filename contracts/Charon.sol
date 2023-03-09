@@ -389,11 +389,13 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @param _inIsCHD bool if token sending in is CHD
      * @param _tokenAmountIn amount of token to send in
      * @param _minAmountOut minimum amount of out token you need
+     * @param _maxPrice max price you're willing to send the pool too
      */
     function swap(
         bool _inIsCHD,
         uint256 _tokenAmountIn,
-        uint256 _minAmountOut
+        uint256 _minAmountOut,
+        uint256 _maxPrice
     )
         external
         returns (uint256 _tokenAmountOut, uint256 _spotPriceAfter){
@@ -415,6 +417,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                                     _outRecordBal,
                                     0
                                 );
+        require(_spotPriceBefore <= _maxPrice);
         if(_inIsCHD){ //this is because we burn CHD on swaps (can't leave system w/o burning it)
           _tokenAmountOut = calcSingleOutGivenIn(
                   _outRecordBal,
@@ -460,7 +463,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                                 _outRecordBal,
                                 0
                             );
-        require(_spotPriceAfter >= _spotPriceBefore);
+        require(_spotPriceAfter >= _spotPriceBefore);     
+        require(_spotPriceAfter <= _maxPrice);
         emit Swap(msg.sender,_inIsCHD,_tokenAmountIn,_tokenAmountOut);
       }
 

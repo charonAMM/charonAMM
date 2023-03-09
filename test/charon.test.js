@@ -311,13 +311,14 @@ describe("charon tests", function () {
         it("swap", async function () {
           await token.mint(accounts[1].address,web3.utils.toWei("100"))
           let _minOut = await charon.calcOutGivenIn(web3.utils.toWei("100"),web3.utils.toWei("1000"),web3.utils.toWei("10"),0)
-          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut))//transfer not approved
+          let _maxPrice = await charon.calcSpotPrice(web3.utils.toWei("110"),web3.utils.toWei("900"),0)
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut,_maxPrice))//transfer not approved
           await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
-          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut))//bad max price
-          await h.expectThrow(charon.swap(false,web3.utils.toWei("1"), _minOut * 2))//too little in
-          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"),web3.utils.toWei("50000")))//too much out
-          await h.expectThrow(charon.connect(accounts[1]).swap(false,0, 0))//zero input
-          await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut)
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"), _minOut,1))//bad max price
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("1"), _minOut,_maxPrice))//too little in
+          await h.expectThrow(charon.swap(false,web3.utils.toWei("10"),web3.utils.toWei("50000"),_maxPrice))//too much out
+          await h.expectThrow(charon.connect(accounts[1]).swap(false,0, 0,_maxPrice))//zero input
+          await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
           assert(await charon.recordBalance() == web3.utils.toWei("110"), "record Balance should be correct")
           assert(await charon.recordBalanceSynth() > web3.utils.toWei("900"), "recordBalanceSynth should be correct")
           assert(await charon.recordBalanceSynth() < web3.utils.toWei("910"), "recordBalanceSynth should be correct")

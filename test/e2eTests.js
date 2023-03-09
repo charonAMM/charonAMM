@@ -531,16 +531,19 @@ describe("e2e charon tests", function () {
       //do a swap
       await token.mint(accounts[2].address,web3.utils.toWei("100"))
       let _minOut = await charon.calcOutGivenIn(web3.utils.toWei("120"),web3.utils.toWei("1000"),web3.utils.toWei("10"),0)
+      let _maxPrice = await charon.calcSpotPrice(web3.utils.toWei("130"),web3.utils.toWei("900"),0)
       await token.connect(accounts[2]).approve(charon.address,web3.utils.toWei("10"))
-      await charon.connect(accounts[2]).swap(false,web3.utils.toWei("10"), _minOut)
+      await charon.connect(accounts[2]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
       await token2.mint(accounts[1].address,web3.utils.toWei("100"))
       _minOut = await charon2.calcOutGivenIn(web3.utils.toWei("120"),web3.utils.toWei("1000"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon2.calcSpotPrice(web3.utils.toWei("130"),web3.utils.toWei("900"),0)
       await token2.connect(accounts[1]).approve(charon2.address,web3.utils.toWei("10"))
-      await charon2.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut)
+      await charon2.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
       await chd3.mint(accounts[1].address,web3.utils.toWei("100"))
       _minOut = await charon3.calcOutGivenIn(web3.utils.toWei("1010"),web3.utils.toWei("102"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon3.calcSpotPrice(web3.utils.toWei("1020"),web3.utils.toWei("101"),0)
       await chd3.connect(accounts[1]).approve(charon3.address,web3.utils.toWei("10"))
-      await charon3.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut)//this one with chdt
+      await charon3.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut,_maxPrice)//this one with chdt
       //lp withdraw
       await charon.lpWithdraw(web3.utils.toWei("5"), 0,0)
       await charon2.lpWithdraw(web3.utils.toWei("5"), 0,0)
@@ -616,16 +619,19 @@ describe("e2e charon tests", function () {
       //do another swap
       await token.mint(accounts[1].address,web3.utils.toWei("100"))
       _minOut = await charon.calcOutGivenIn(web3.utils.toWei("123"),web3.utils.toWei("800"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon.calcSpotPrice(web3.utils.toWei("123"),web3.utils.toWei("800"),0)
       await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
-      await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut)
+      await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
       await chd2.mint(accounts[1].address,web3.utils.toWei("100"))
       _minOut = await charon2.calcOutGivenIn(web3.utils.toWei("876"),web3.utils.toWei("104"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon2.calcSpotPrice(web3.utils.toWei("876"),web3.utils.toWei("104"),0)
       await chd2.connect(accounts[1]).approve(charon2.address,web3.utils.toWei("10"))
-      await charon2.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut)
+      await charon2.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut,_maxPrice)
       await chd3.mint(accounts[1].address,web3.utils.toWei("100"))
       _minOut = await charon3.calcOutGivenIn(web3.utils.toWei("960"),web3.utils.toWei("93"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon3.calcSpotPrice(web3.utils.toWei("960"),web3.utils.toWei("93"),0)
       await chd3.connect(accounts[1]).approve(charon3.address,web3.utils.toWei("10"))
-      await charon3.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut)//this one with chd
+      await charon3.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut,_maxPrice)//this one with chd
       //withdraw on each chain/
       inputData = await prepareTransaction({
                     charon: charon,
@@ -674,15 +680,18 @@ describe("e2e charon tests", function () {
       //do another swap
       await token.mint(accounts[1].address,web3.utils.toWei("100"))
       _minOut = await charon.calcOutGivenIn(web3.utils.toWei("133"),web3.utils.toWei("760"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon.calcSpotPrice(web3.utils.toWei("133"),web3.utils.toWei("760"),0)
       await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
-      await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut)
+      await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
       await token2.mint(accounts[1].address,web3.utils.toWei("100"))
      _minOut = await charon2.calcOutGivenIn(web3.utils.toWei("121"),web3.utils.toWei("810"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon2.calcSpotPrice(web3.utils.toWei("121"),web3.utils.toWei("810"),0)
       await token2.connect(accounts[1]).approve(charon2.address,web3.utils.toWei("10"))
-      await charon2.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut)
+      await charon2.connect(accounts[1]).swap(false,web3.utils.toWei("10"), _minOut,_maxPrice)
       _minOut = await charon3.calcOutGivenIn(web3.utils.toWei("1000"),web3.utils.toWei("89"),web3.utils.toWei("10"),0)
+      _maxPrice = await charon3.calcSpotPrice(web3.utils.toWei("1000"),web3.utils.toWei("89"),0)
       await chd3.connect(accounts[1]).approve(charon3.address,web3.utils.toWei("10"))
-      await charon3.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut)//this one with chd
+      await charon3.connect(accounts[1]).swap(true,web3.utils.toWei("10"), _minOut,_maxPrice)//this one with chd
     })
     it("No way to send money and then withdraw on old UTXO", async function() {
       let _depositAmount = utils.parseEther('10');
@@ -896,13 +905,13 @@ describe("e2e charon tests", function () {
       //try to do more than in the pool, assert fail
       await token.mint(accounts[1].address,web3.utils.toWei("1000"))
       await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("1000"))
-      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("1000"),0))
+      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("1000"),0,web3.utils.toWei("50000")))
       //do slightly less (find break point)
-      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("100"),0))
-      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("80"),0))
+      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("100"),0,web3.utils.toWei("50000")))
+      await h.expectThrow(charon.connect(accounts[1]).swap(false,web3.utils.toWei("80"),0,web3.utils.toWei("50000")))
       await token.mint(accounts[1].address,web3.utils.toWei("100"))
       await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
-      await charon.connect(accounts[1]).swap(false,web3.utils.toWei("30"),0)
+      await charon.connect(accounts[1]).swap(false,web3.utils.toWei("30"),0,web3.utils.toWei("50000"))
     })
     it("Add rewards and pay them out", async function() {
       //mint chd and token on both chains
@@ -1044,12 +1053,12 @@ describe("e2e charon tests", function () {
       //make a swap, assert that fee went to CFC
       await token.mint(accounts[1].address,web3.utils.toWei("100"))
       await token.connect(accounts[1]).approve(charon3.address,web3.utils.toWei("10"))
-      await charon3.connect(accounts[1]).swap(false,web3.utils.toWei("10"),0)//accept any min/max price/amount
+      await charon3.connect(accounts[1]).swap(false,web3.utils.toWei("10"),0,web3.utils.toWei("99999"))//accept any min/max price/amount
       assert(await token.balanceOf(cfc3.address) == web3.utils.toWei(".2"))
       //make a swap from chd, assert that fee went to cfc
       await chd4.mint(accounts[1].address,web3.utils.toWei("100"))
       await chd4.connect(accounts[1]).approve(charon4.address,web3.utils.toWei("10"))
-      await charon4.connect(accounts[1]).swap(true,web3.utils.toWei("10"),0)
+      await charon4.connect(accounts[1]).swap(true,web3.utils.toWei("10"),0,web3.utils.toWei("99999"))
       assert(await chd4.balanceOf(cfc4.address) == web3.utils.toWei(".2"), "chd 4 balance should be correct")
       assert(await token.balanceOf(cfc4.address) == 0, "token cfc balance should be correct")
 

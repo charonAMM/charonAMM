@@ -31,17 +31,79 @@
 //     });
 //     it("constructor()", async function() {
 //         console.log("ETHtoPOLBridge.sol")
-//             assert(await token.name() == "mock token")
-//             assert(await token.symbol() == "MT")
+//             assert(await e2p.tellor() == tellor.address, "tellor addy should be set")
+//             assert(await e2p.fxChildTunnel() == mockNative.address, "fxChildTunnel should be set")
 //     });
+//     it("setCharon()", async function() {
+//         await e2p.setCharon(accounts[1].address)
+//         assert(await e2p.charon() == accounts[1].address, "charon addy should be set")
+//         await h.expectThrow(e2p.setCharon(accounts[2].address))
+//     });
+//     it("setFxChildTunnel()", async function() {
+//         await e2p.setFxChildTunnel(accounts[1].address)
+//         assert(await e2p.fxChildTunnel() == accounts[1].address, "charon addy should be set")
+//         await h.expectThrow(e2p.etFxChildTunnel(accounts[2].address))
+//     });
+
+//     it("getCommitment()", async function() {
+//         //need to mock this one
+//         //assert onlyCharon
+//         mock get back message and addy 0
+//     });
+//     it("sendCommitment()", async function() {
+//         //need to mock this one
+//         //assert onlyCharon, calls sendCommitment on mock
+//     });
+
+
 //     it("constructor()", async function() {
 //         console.log("POLtoETHBridge.sol")
-//             assert(await token.name() == "mock token")
-//             assert(await token.symbol() == "MT")
+//         assert(await p2e.tellor() == tellor.address, "tellor addy should be set")
+//         assert(await p2e.fxChild() == mockNative.address, "fxChildshould be set")
 //     });
+//     it("setCharon()", async function() {
+//         await p2e.setCharon(accounts[1].address)
+//         assert(await p2e.charon() == accounts[1].address, "charon addy should be set")
+//         await h.expectThrow(p2e.setCharon(accounts[2].address))
+//     });
+//     it("_processMessageFromRoot()", async function() {
+//         //mock it up
+//         //store all variables properly
+//     });
+//     it("getCommitment()", async function() {
+//         //need to mock this one
+//         //assert onlyCharon
+//         mock get back message and addy 0
+//     });
+//     it("sendCommitment()", async function() {
+//         //need to mock this one
+//         //assert onlyCharon, calls sendCommitment on mock
+//     });
+//     it("getStateIds()", async function() {
+//         //need to mock this one
+//         //assert onlyCharon, calls sendCommitment on mock
+//         let vars = p2e.getStateIds();
+//         assert(vars[0] == myStateId, "stateId should be correct")
+//     });
+
+
 //     it("constructor()", async function() {
 //         console.log("TellorBridge.sol")
 //             assert(await token.name() == "mock token")
 //             assert(await token.symbol() == "MT")
 //     });
+//     it("setPartnerInfo()", async function() {
+//             assert(await tellorBridge.charon() == accounts[1].address "mock token")
+//             assert(await tellorBridge.connectedChainId == 1);
+//     });
+//     it("getCommitment()", async function() {
+//         //need to mock this one
+//         //assert onlyCharon
+//         mock get back message and addy 0
+//     });
+//     it("sendCommitment()", async function() {
+//         //need to mock this one
+//         //assert onlyCharon, calls sendCommitment on mock
+//     });
+
 // });

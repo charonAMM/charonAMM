@@ -7,8 +7,6 @@ const assert = chai.assert;
 const log = (msg) => { if (process.env.MOCHA_VERBOSE) console.log(msg); };
 
 describe("Poseidon Smart contract test", function () {
-    let testrpc;
-    let web3;
     let poseidon6;
     let poseidon3;
     let poseidon;

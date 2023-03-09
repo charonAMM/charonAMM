@@ -11,8 +11,6 @@ import "./extensions/FxBaseRootTunnel.sol";
 contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
 
     address public charon;
-    uint256 public id;
-    mapping(uint256 => bytes) idToData;
 
     /**
      * @dev constructor to launch contract 
@@ -26,13 +24,11 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
         require(charon == address(0));
         charon = _charon;
     }
-    function _processMessageFromChild(bytes memory _data) internal override {
-        id++;
-        idToData[id] = _data;
-    }
 
-    function getCommitment(bytes memory _inputData) external view returns(bytes memory _value){
-        return idToData[_bytesToUint(_inputData)];
+    function getCommitment(bytes memory _inputData) external virtual returns(bytes memory _value, address _caller){
+        require(msg.sender == charon, "must be charon");
+        bytes memory _message = _validateAndExtractMessage(_inputData);
+        return (_message,address(0));
     }
 
     /**
@@ -41,7 +37,7 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
      * @param _chainID chain to grab
      * @param _address address of the CIT token on mainnet Ethereum
      */
-    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) public view returns(bytes memory _value){
+    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) external view returns(bytes memory _value){
         bytes32 _queryId = keccak256(abi.encode("CrossChainBalance",abi.encode(_chainID,_address,_timestamp)));
         (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_timestamp > 0, "timestamp must be present");
@@ -51,11 +47,4 @@ contract ETHtoPOLBridge is UsingTellor, FxBaseRootTunnel{
         require(msg.sender == charon, "must be charon");
         _sendMessageToChild(_data);
     }
-
-    function _bytesToUint(bytes memory _b) internal pure returns (uint256 _n){
-        for(uint256 _i=0;_i<_b.length;_i++){
-            _n = _n + uint(uint8(_b[_i]))*(2**(8*(_b.length-(_i+1))));
-        }
-    }
-
 }

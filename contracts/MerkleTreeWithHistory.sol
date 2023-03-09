@@ -18,7 +18,7 @@ contract MerkleTreeWithHistory {
   // make public for debugging, make all private for deployment
   // filledSubtrees and roots could be bytes32[size], but using mappings makes it cheaper because
   // it removes index range check on every interaction
-  mapping(uint256 => bytes32) public filledSubtrees;
+  mapping(uint256 => bytes32) filledSubtrees;
   mapping(uint256 => bytes32) roots;
   mapping(uint256 => bytes32) zeros;
   uint32 public constant ROOT_HISTORY_SIZE = 100;
@@ -32,8 +32,8 @@ contract MerkleTreeWithHistory {
     * @param _hasher address of poseidon hasher
     */
   constructor(uint32 _levels, address _hasher) {
-    require(_levels > 0, "_levels should be greater than zero");
-    require(_levels < 32, "_levels should be less than 32");
+    require(_levels > 0);
+    require(_levels < 32);
     levels = _levels;
     hasher = IHasher(_hasher);
     zeros[0] = bytes32(ZERO_VALUE);
@@ -54,8 +54,8 @@ contract MerkleTreeWithHistory {
     * @return bytes32 hash of input
     */
   function hashLeftRight(bytes32 _left, bytes32 _right) public view returns (bytes32) {
-    require(uint256(_left) < FIELD_SIZE, "_left should be inside the field");
-    require(uint256(_right) < FIELD_SIZE, "_right should be inside the field");
+    require(uint256(_left) < FIELD_SIZE);
+    require(uint256(_right) < FIELD_SIZE);
     bytes32[2] memory _input;
     _input[0] = _left;
     _input[1] = _right;
@@ -103,7 +103,7 @@ contract MerkleTreeWithHistory {
     if(_i <= 32){
       return zeros[_i];
     }
-    else revert("Index out of bounds");
+    else revert();
   }
 
   /*internal functions*/
@@ -115,7 +115,7 @@ contract MerkleTreeWithHistory {
     */
   function _insert(bytes32 _leaf1, bytes32 _leaf2) internal returns (uint32 _nextIndex) {
     _nextIndex = nextIndex;
-    require(_nextIndex != uint32(2)**levels, "Merkle tree is full. No more leaves can be added");
+    require(_nextIndex != uint32(2)**levels);
     uint32 _currentIndex = _nextIndex / 2;
     bytes32 _currentLevelHash = hashLeftRight(_leaf1, _leaf2);
     bytes32 _left;

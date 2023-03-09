@@ -10,11 +10,16 @@ import "../interfaces/IAMB.sol";
 contract GnosisAMB is UsingTellor{
 
     IAMB public ambBridge;
+    address public charon; //address of charon on this chain
+    address public connectedCharon;//address of charon on other chain
     bytes32[] public messageIds;
+    mapping(bytes32 => address) public idToCaller;
     mapping(bytes32=> bytes) public messageIdToData;
     mapping(bytes32=> bool) public didPush;
+    bytes4 private constant func_selector = bytes4(keccak256("getOracleSubmission(uint256)"));
     bytes32 public constant _requestSelector = 0x88b6c755140efe88bff94bfafa4a7fdffe226d27d92bd45385bb0cfa90986650; //ethCall
     event InfoRecieved(bytes32 _messageId, bool _status);
+    event InfoRequest(uint256 _depositId);
     
     /**
      * @dev constructor to launch contract 
@@ -24,8 +29,20 @@ contract GnosisAMB is UsingTellor{
         ambBridge = IAMB(_ambBridge);
     }
 
-    function getInfo(bytes calldata _data)  external returns (bytes32){
-        return ambBridge.requireToGetInformation(_requestSelector,_data);
+    //sets charon on other chain
+    function setCharon(address _connectedCharon, address _charon) external{
+        require(connectedCharon == address(0));
+        connectedCharon = _connectedCharon;
+        charon = _charon;
+    }
+
+    function getInfo(uint256 _depositId)  external returns (bytes32 _messageId){
+        require(connectedCharon != address(0));
+        bytes memory _data = abi.encodeWithSelector(func_selector,_depositId);
+        _data = abi.encode(connectedCharon,_data);
+        _messageId = ambBridge.requireToGetInformation(_requestSelector,_data);
+        idToCaller[_messageId] = msg.sender;
+        emit InfoRequest(_depositId);
     }
 
     function onInformationReceived(bytes32 messageId,bool status,bytes calldata result) external{
@@ -35,10 +52,12 @@ contract GnosisAMB is UsingTellor{
         emit InfoRecieved(messageId,status);
     }
 
-    function getCommitment(bytes memory _inputData) external returns(bytes memory _value){
+    function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller){
+        require(msg.sender == charon);
         bytes32 _messageId = _bytesToBytes32(_inputData);
         didPush[_messageId] = true;
-        return messageIdToData[_messageId];
+        _caller = idToCaller[_messageId];
+       _value = messageIdToData[_messageId];
     }
 
     /**
@@ -47,7 +66,7 @@ contract GnosisAMB is UsingTellor{
      * @param _chainID chain to grab
      * @param _address address of the CIT token on mainnet Ethereum
      */
-    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) public view returns(bytes memory _value){
+    function getRootHashAndSupply(uint256 _timestamp,uint256 _chainID, address _address) external view returns(bytes memory _value){
         bytes32 _queryId = keccak256(abi.encode("CrossChainBalance",abi.encode(_chainID,_address,_timestamp)));
         (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
         require(_timestamp > 0, "timestamp must be present");

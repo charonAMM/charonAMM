@@ -6,6 +6,6 @@ pragma solidity ^0.8.0;
  @dev Interface of the Oracle contract for the CharonAMM
  **/
 interface IOracle {
-    function getCommitment(bytes memory _inputData) external returns(bytes memory);
+    function getCommitment(bytes memory _inputData) external returns(bytes memory _value, address _caller);
     function sendCommitment(bytes memory _data) external;
 }

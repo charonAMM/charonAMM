@@ -711,7 +711,7 @@ abstract contract FxBaseRootTunnel {
     }
 
     // set fxChildTunnel if not set already
-    function setFxChildTunnel(address _fxChildTunnel) public virtual {
+    function setFxChildTunnel(address _fxChildTunnel) external virtual {
         require(fxChildTunnel == address(0x0), "FxBaseRootTunnel: CHILD_TUNNEL_ALREADY_SET");
         fxChildTunnel = _fxChildTunnel;
     }
@@ -803,35 +803,35 @@ abstract contract FxBaseRootTunnel {
         );
     }
 
-    /**
-     * @notice receive message from  L2 to L1, validated by proof
-     * @dev This function verifies if the transaction actually happened on child chain
-     *
-     * @param inputData RLP encoded data of the reference tx containing following list of fields
-     *  0 - headerNumber - Checkpoint header block number containing the reference tx
-     *  1 - blockProof - Proof that the block header (in the child chain) is a leaf in the submitted merkle root
-     *  2 - blockNumber - Block number containing the reference tx on child chain
-     *  3 - blockTime - Reference tx block time
-     *  4 - txRoot - Transactions root of block
-     *  5 - receiptRoot - Receipts root of block
-     *  6 - receipt - Receipt of the reference transaction
-     *  7 - receiptProof - Merkle proof of the reference receipt
-     *  8 - branchMask - 32 bits denoting the path of receipt in merkle tree
-     *  9 - receiptLogIndex - Log Index to read from the receipt
-     */
-    function receiveMessage(bytes memory inputData) public virtual {
-        bytes memory message = _validateAndExtractMessage(inputData);
-        _processMessageFromChild(message);
-    }
+    // /**
+    //  * @notice receive message from  L2 to L1, validated by proof
+    //  * @dev This function verifies if the transaction actually happened on child chain
+    //  *
+    //  * @param inputData RLP encoded data of the reference tx containing following list of fields
+    //  *  0 - headerNumber - Checkpoint header block number containing the reference tx
+    //  *  1 - blockProof - Proof that the block header (in the child chain) is a leaf in the submitted merkle root
+    //  *  2 - blockNumber - Block number containing the reference tx on child chain
+    //  *  3 - blockTime - Reference tx block time
+    //  *  4 - txRoot - Transactions root of block
+    //  *  5 - receiptRoot - Receipts root of block
+    //  *  6 - receipt - Receipt of the reference transaction
+    //  *  7 - receiptProof - Merkle proof of the reference receipt
+    //  *  8 - branchMask - 32 bits denoting the path of receipt in merkle tree
+    //  *  9 - receiptLogIndex - Log Index to read from the receipt
+    //  */
+    // function receiveMessage(bytes memory inputData) public virtual {
+    //     bytes memory message = _validateAndExtractMessage(inputData);
+    //     _processMessageFromChild(message);
+    // }
 
-    /**
-     * @notice Process message received from Child Tunnel
-     * @dev function needs to be implemented to handle message as per requirement
-     * This is called by receiveMessage function.
-     * Since it is called via a system call, any event will not be emitted during its execution.
-     * @param message bytes message that was sent from Child Tunnel
-     */
-    function _processMessageFromChild(bytes memory message) internal virtual{
+    // /**
+    //  * @notice Process message received from Child Tunnel
+    //  * @dev function needs to be implemented to handle message as per requirement
+    //  * This is called by receiveMessage function.
+    //  * Since it is called via a system call, any event will not be emitted during its execution.
+    //  * @param message bytes message that was sent from Child Tunnel
+    //  */
+    // function _processMessageFromChild(bytes memory message) internal virtual{
 
-    }
+    // }
 }

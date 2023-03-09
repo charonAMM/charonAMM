@@ -16,7 +16,7 @@ nullifier = hash(commitment, merklePath, sign(privKey, commitment, merklePath))
 */
 
 // Universal JoinSplit transaction with nIns inputs and 2 outputs
-template Transaction(levels, nIns, nOuts, zeroLeaf) {
+template Transaction(levels, nIns, nOuts) {
     signal input root;
     // extAmount = external amount used for deposits and withdrawals
     // correct extAmount range is enforced on the smart contract
@@ -54,10 +54,11 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
         inKeypair[tx] = Keypair();
         inKeypair[tx].privateKey <== inPrivateKey[tx];
 
-        inCommitmentHasher[tx] = Poseidon(3);
+        inCommitmentHasher[tx] = Poseidon(4);
         inCommitmentHasher[tx].inputs[0] <== inAmount[tx];
-        inCommitmentHasher[tx].inputs[1] <== inKeypair[tx].publicKey;
-        inCommitmentHasher[tx].inputs[2] <== inBlinding[tx];
+        inCommitmentHasher[tx].inputs[1] <== privateChainID;
+        inCommitmentHasher[tx].inputs[2] <== inKeypair[tx].publicKey;
+        inCommitmentHasher[tx].inputs[3] <== inBlinding[tx];
 
         inSignature[tx] = Signature();
         inSignature[tx].privateKey <== inPrivateKey[tx];
@@ -97,10 +98,11 @@ template Transaction(levels, nIns, nOuts, zeroLeaf) {
 
     // verify correctness of transaction outputs
     for (var tx = 0; tx < nOuts; tx++) {
-        outCommitmentHasher[tx] = Poseidon(3);
+        outCommitmentHasher[tx] = Poseidon(4);
         outCommitmentHasher[tx].inputs[0] <== outAmount[tx];
-        outCommitmentHasher[tx].inputs[1] <== outPubkey[tx];
-        outCommitmentHasher[tx].inputs[2] <== outBlinding[tx];
+        outCommitmentHasher[tx].inputs[1] <== chainID;
+        outCommitmentHasher[tx].inputs[2] <== outPubkey[tx];
+        outCommitmentHasher[tx].inputs[3] <== outBlinding[tx];
         outCommitmentHasher[tx].out === outputCommitment[tx];
 
         // Check that amount fits into 248 bits to prevent overflow

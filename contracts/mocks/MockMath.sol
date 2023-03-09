@@ -8,6 +8,9 @@ import "../helpers/Math.sol";
  @dev testing contract for the math contract contains amm math functions for the charon system
 **/
 contract MockMath is Math{
+    function abs(int _a) external pure returns (uint256){
+        return _abs(_a);
+    }
     function bdiv(uint256 _a, uint256 _b) external pure returns (uint256){
         return _bdiv(_a,_b);
     }

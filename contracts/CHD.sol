@@ -26,25 +26,21 @@ contract CHD is Token{
      * @dev allows the charon contract to burn tokens of users
      * @param _from address to burn tokens of
      * @param _amount amount of tokens to burn
-     * @return bool of success
      */
-    function burnCHD(address _from, uint256 _amount) external returns(bool){
-        require(msg.sender == charon,"caller must be charon");
+    function burnCHD(address _from, uint256 _amount) external{
+        require(msg.sender == charon);
         _burn(_from, _amount);
         emit CHDBurned(_from,_amount);
-        return true;
     }
     
     /**
      * @dev allows the charon contract to mint chd tokens
      * @param _to address to mint tokens to
      * @param _amount amount of tokens to mint
-     * @return bool of success
      */
-    function mintCHD(address _to, uint256 _amount) external returns(bool){
-        require(msg.sender == charon, "caller must be charon");
+    function mintCHD(address _to, uint256 _amount) external{
+        require(msg.sender == charon);
         _mint(_to,_amount);
         emit CHDMinted(_to,_amount);
-        return true;
     }
 }

@@ -10,14 +10,15 @@ contract MockPOLtoETHBridge is POLtoETHBridge{
         POLtoETHBridge(_tellor, _fxChild){}
 
     function _processMessageFromRoot(
-        uint256 stateId,
-        address sender,
-        bytes memory data
+        uint256 _stateId,
+        address _sender,
+        bytes memory _data
     ) internal override{
-        latestStateId = stateId;
-        stateIdToData[stateId] = data;
-        latestRootMessageSender = sender;
-        stateIds.push(stateId);
+        latestStateId = _stateId;
+        stateIdToData[_stateId] = _data;
+        latestRootMessageSender = _sender;
+        stateIds.push(_stateId);
+        emit MessageProcessed(_stateId, _data);
     }
     function processMessageFromRoot(uint256 stateId,address sender,bytes memory data) external override{
         _processMessageFromRoot(stateId,sender,data);

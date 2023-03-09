@@ -7,11 +7,11 @@ const { toFixedHex } = require('../src/utils')
 const { buildPoseidon } = require("circomlibjs");
 
 
-const MERKLE_TREE_HEIGHT = 5
+const MERKLE_TREE_HEIGHT = 23
 const MerkleTree = require('fixed-merkle-tree')
 
 
-describe('MerkleTreeWithHistory', function () {
+describe('merkletreewithhistory tests', function () {
   this.timeout(20000)
   let poseidon, hasher, merkleTreeWithHistory;
   let zero = "21663839004416932945382355908790599225266501822907911457504978515578255421292"
@@ -51,7 +51,7 @@ describe('MerkleTreeWithHistory', function () {
 
     it('should initialize', async () => {
       const zeroValue = await merkleTreeWithHistory.ZERO_VALUE()
-      const firstSubtree = await merkleTreeWithHistory.filledSubtrees(0)
+      const firstSubtree = await merkleTreeWithHistory.getFilledSubtrees(0)
       const firstZero = await merkleTreeWithHistory.getZeros(0)
       assert(await merkleTreeWithHistory.hasher() == hasher.address, "hasher should be set")
       assert(await merkleTreeWithHistory.levels() == MERKLE_TREE_HEIGHT, "height should be set")

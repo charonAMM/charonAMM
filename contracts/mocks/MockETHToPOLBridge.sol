@@ -9,7 +9,9 @@ contract MockETHtoPOLBridge is ETHtoPOLBridge{
     constructor(address payable _tellor, address _checkpointManager, address _fxRoot)
         ETHtoPOLBridge(_tellor,_checkpointManager,_fxRoot){}
 
-    function getCommitment(bytes memory _inputData) override external pure returns(bytes memory _value, address _caller){
-        return (_inputData,address(0));
+    function getCommitment(bytes memory _inputData) override external view returns(bytes memory _value, address _caller){
+        require(msg.sender == charon, "must be charon");
+        bytes memory _message = _inputData;//_validateAndExtractMessage(_inputData);
+        return (_message,address(0));
     }
 }

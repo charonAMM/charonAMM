@@ -124,7 +124,6 @@ contract Math{
             uint256 _bar = _bpow((BONE - _y),_amountIn);
             _tokenAmountOut = _tokenBalanceOut - _bmul(_tokenBalanceOut, _bar);
         }
-
     }
 
     /**

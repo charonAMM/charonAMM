@@ -9,8 +9,9 @@ import "../interfaces/IERC20.sol";
  */
 contract MockCFC{
 
-    IERC20 public token;
     IERC20 public chd;
+    IERC20 public token;
+
 
     constructor(address _token, address _chd){
         token = IERC20(_token);

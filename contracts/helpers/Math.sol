@@ -12,10 +12,6 @@ contract Math{
     uint256 public constant MAX_OUT_RATIO     = (BONE / 3) + 1 wei;
 
     /*Functions*/
-    function _abs(int x) internal pure returns (uint256) {
-        return uint256(x >= 0 ? x : -x);
-    }
-
     /**
      * @dev calculates an in amount of a token given how much is expected out of the other token
      * @param _tokenBalanceIn uint256 amount of tokenBalance of the in token's pool
@@ -117,7 +113,7 @@ contract Math{
             uint256 _zaz = _bmul((BONE - _normalizedWeight), _swapFee); 
             _tokenAmountOut = _bmul(_tokenAmountOutBeforeSwapFee,(BONE - _zaz));
         }
-        else{
+        else{//this portion handles when it's a swap, where you have to burn the chd instead of using calcOutGivenIn
             uint256 _adjustedIn = BONE - _swapFee;
             _adjustedIn = _bmul(_amountIn, _adjustedIn);
             uint256 _y = _bdiv(BONE, (_inSupply));
@@ -147,6 +143,14 @@ contract Math{
     }
 
     //internal functions
+    /**
+     * @dev absolute value function
+     * @param _x integer input to convert to uint256 absolute value
+     */
+    function _abs(int _x) internal pure returns (uint256) {
+        return uint256(_x >= 0 ? _x : -_x);
+    }
+    
     /**
      * @dev division of two numbers but adjusts as if decimals
      * @param _a numerator

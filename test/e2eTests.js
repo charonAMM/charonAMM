@@ -1136,9 +1136,9 @@ describe("e2e charon tests", function () {
       await token2.connect(accounts[1]).approve(charon4.address,web3.utils.toWei("1000"))
       await charon4.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("50"),web3.utils.toWei("5"))
       let ptokens = await charon4.balanceOf(accounts[1].address)
+      bal1 = await chd4.balanceOf(cfc4.address)
       await charon4.connect(accounts[1]).lpWithdrawSingleCHD(ptokens,0)
-      assert(await chd4.balanceOf(cfc4.address) > web3.utils.toWei("2.1"), "chd should be correct after single lpWithdraw")
-      assert(await chd4.balanceOf(cfc4.address) < web3.utils.toWei("2.11"), "chd should be correct after single lpWithdraw")
+      assert(await chd4.balanceOf(cfc4.address) - bal1 == 0, "chd should be correct after single lpWithdraw, no fee")
     })
     it("deposit on own chain", async function() {
       let mockNative3 = await deploy("MockNativeBridge")

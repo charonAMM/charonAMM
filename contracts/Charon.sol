@@ -84,36 +84,37 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     }
 
     CHD public chd;//address/implementation of chd token
+    Commitment[] depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
     IERC20 public immutable token;//base token address/implementation for the charonAMM
-    address[] oracles;//address of the oracle to use for the system
     IVerifier public immutable verifier2; //implementation/address of the two input veriifier contract
     IVerifier public immutable verifier16;//implementation/address of the sixteen input veriifier contract
-    Commitment[] depositCommitments;//all commitments deposited by tellor in an array.  depositID is the position in array
     PartnerContract[] partnerContracts;//list of connected contracts for this deployment
     address public controller;//controller adddress (used for initializing contracts, then should be CFC for accepting fees)
+    address[] oracles;//address of the oracle to use for the system
+    bool private _lock;//to prevent reentracy
     uint256 public immutable chainID; //chainID of this charon instance
     uint256 public immutable fee;//fee when liquidity is withdrawn or trade happens (1e18 = 100% fee)
-    bool private _lock;//to prevent reentracy
+    uint256 public oracleTokenFunds;//amount of token funds to be paid to reporters
+    uint256 public oracleCHDFunds;//amount of chd funds to be paid to reporters
     uint256 public recordBalance;//balance of asset stored in this contract
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     uint256 public userRewards;//amount of baseToken user rewards in contract
     uint256 public userRewardsCHD;//amount of chd user rewards in contract
-    uint256 public oracleTokenFunds;//amount of token funds to be paid to reporters
-    uint256 public oracleCHDFunds;//amount of chd funds to be paid to reporters
-    mapping(bytes32 => uint256) depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
     mapping(bytes32 => bool) nullifierHashes;//zk proof hashes to tell whether someone withdrew
+    mapping(bytes32 => uint256) depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
+   
 
     //events
-    event DepositToOtherChain(bool _isCHD, address _sender, uint256 _timestamp, int256 _amount);
+    event DepositToOtherChain(bool _isCHD, address _sender, uint256 _depositId, int256 _amount);
     event LPDeposit(address _lp,uint256 _poolAmountOut);
     event RewardAdded(uint256 _amount,bool _isCHD);
     event LPWithdrawal(address _lp, uint256 _poolAmountIn);
-    event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput);
+    event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput, bool _isDeposit);
     event NewNullifier(bytes32 _nullifier);
     event OracleDeposit(uint256 _oracleIndex,bytes _inputData);
     event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
 
-    //modifiers
+    //functions
     /**
      * @dev constructor to launch charon
      * @param _verifier2 address of the verifier contract (circom generated sol)
@@ -210,8 +211,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         for(uint256 _i = 0; _i<=oracles.length-1; _i++){
           IOracle(oracles[_i]).sendCommitment(getOracleSubmission(_depositId));
         }
-        _transact(_proofArgs, _extData);//automatically adds your deposit to this chain (improve anonymity set)
-        emit DepositToOtherChain(_isCHD,msg.sender, block.timestamp, _extData.extAmount);
+        _transact(_proofArgs, _extData, true);//automatically adds your deposit to this chain (improve anonymity set)
+        emit DepositToOtherChain(_isCHD, msg.sender, _depositId, _extData.extAmount);
     }
 
     /**
@@ -257,10 +258,10 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         uint256 _ratio = _bdiv(_poolAmountOut, supply);
         require(_ratio > 0);
         uint256 _baseAssetIn = _bmul(_ratio, recordBalance);
-        require(_baseAssetIn <= _maxBaseAssetIn, "too big baseDeposit required");
+        require(_baseAssetIn <= _maxBaseAssetIn, "maxBaseAssetIn hit");
         recordBalance = recordBalance + _baseAssetIn;
         uint256 _CHDIn = _bmul(_ratio, recordBalanceSynth);
-        require(_CHDIn <= _maxCHDIn, "too big chd deposit required");
+        require(_CHDIn <= _maxCHDIn, "maxCHDIn hit");
         recordBalanceSynth = recordBalanceSynth + _CHDIn;
         _mint(msg.sender,_poolAmountOut);
         require(token.transferFrom(msg.sender,address(this), _baseAssetIn));
@@ -345,14 +346,9 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                         );
         recordBalanceSynth -= _tokenAmountOut;
         require(_tokenAmountOut >= _minAmountOut);
-        uint256 _exitFee = _bmul(_tokenAmountOut, fee);
         _burn(msg.sender,_poolAmountIn);
-        chd.transfer(msg.sender, _tokenAmountOut - _exitFee);
+        chd.transfer(msg.sender, _tokenAmountOut);
         emit LPWithdrawal(msg.sender,_poolAmountIn);
-        if(_exitFee > 0){
-          chd.approve(address(controller),_exitFee);
-          ICFC(controller).addFees(_exitFee,true);
-        }
     }
     /**
      * @dev reads tellor commitments to allow you to withdraw on this chain
@@ -368,7 +364,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         (_value,_caller) = IOracle(oracles[_oracleIndex]).getCommitment(_inputData);
         _proof.inputNullifiers = new bytes32[](2);
         (_proof.inputNullifiers[0], _proof.inputNullifiers[1], _proof.outputCommitments[0], _proof.outputCommitments[1], _proof.proof,_extData.encryptedOutput1, _extData.encryptedOutput2) = abi.decode(_value,(bytes32,bytes32,bytes32,bytes32,bytes,bytes,bytes));
-        _transact(_proof, _extData);
+        _transact(_proof, _extData, true);
         //you need this amount to be less than the stake amount, but if this is greater than the gas price to deposit and then report, you don't need to worry about it
         uint256 _funds;
         if(oracleCHDFunds > 2000){
@@ -397,7 +393,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @param _inIsCHD bool if token sending in is CHD
      * @param _tokenAmountIn amount of token to send in
      * @param _minAmountOut minimum amount of out token you need
-     * @param _maxPrice max price you're willing to send the pool too
+     * @param _maxPrice max price you're willing to send the pool to
      */
     function swap(
         bool _inIsCHD,
@@ -496,7 +492,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         if (_extData.extAmount < 0){
           chd.mintCHD(_extData.recipient, uint256(-_extData.extAmount));
         }
-        _transact(_args, _extData);
+        _transact(_args, _extData, false);
         uint256 _outRebate;
         if(_extData.fee > 0){
           chd.mintCHD(msg.sender,_extData.fee);
@@ -535,6 +531,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     function getOracles() external view returns(address[] memory){
       return oracles;
     }
+
     /**
      * @dev returns the data for an oracle submission on another chain given a depositId
      */
@@ -573,21 +570,22 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       return nullifierHashes[_nullifierHash];
     }
 
-    //internal functions
+    //internal
     /**
      * @dev internal logic of secret transfers and chd mints
      * @param _args proof data for sneding tokens
      * @param _extData external (visible data) to verify proof and pay relayer fee
+     * @param _isDeposit bool if done during oracleDeposit
      */
-    function _transact(Proof memory _args, ExtData memory _extData) internal{
+    function _transact(Proof memory _args, ExtData memory _extData, bool _isDeposit) internal{
       for (uint256 _i = 0; _i < _args.inputNullifiers.length; _i++) {
-        require(!nullifierHashes[_args.inputNullifiers[_i]], "Input is already spent");
+        require(!nullifierHashes[_args.inputNullifiers[_i]], "Input already spent");
         nullifierHashes[_args.inputNullifiers[_i]] = true;
         emit NewNullifier(_args.inputNullifiers[_i]);
       }
       _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
-      emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1);
-      emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2);
+      emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1, _isDeposit);
+      emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2, _isDeposit);
     }
 
     /**
@@ -645,7 +643,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
             ]
           );
       } else {
-        revert("unsupported input count");
+        revert("bad input count");
       }
   }
 }

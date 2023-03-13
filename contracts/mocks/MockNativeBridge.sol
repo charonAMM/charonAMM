@@ -6,16 +6,15 @@ import "../bridges/POLtoETHBridge.sol";
 import "../bridges/ETHtoPOLBridge.sol";
 /**
  @title MockNativeBridge
+ @dev a contract for testing the bridge functions (pretending to be chain validators or operators)
  **/
 contract MockNativeBridge {
 
-   //AMB Stuff
-
     GnosisAMB public amb;
-    uint256 public lastBlock;
     POLtoETHBridge public p2e;
     ETHtoPOLBridge public e2p;
     address public fxChildTunnel;
+    uint256 public lastBlock;
 
     constructor(){
         fxChildTunnel = address(this);
@@ -33,11 +32,9 @@ contract MockNativeBridge {
     }
 
    //EthToPOL Stuff
-
    function sendMessageToChild(address _fxChildTunnel, bytes memory _message) external{
        require(_fxChildTunnel == fxChildTunnel);
        lastBlock = block.number;
-       
        p2e.processMessageFromRoot(block.number,address(this), _message);
    }
 }

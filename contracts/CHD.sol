@@ -9,12 +9,14 @@ import "./Token.sol";
 **/    
 contract CHD is Token{
 
-    //Storage
+    //storage
     address public charon;//address of the charon contract
-    //Events
+
+    //events
     event CHDMinted(address _to, uint256 _amount);
     event CHDBurned(address _from, uint256 _amount);
 
+    //functions
     /**
      * @dev constructor to initialize contract and token
      */

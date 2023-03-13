@@ -4,20 +4,23 @@ pragma solidity ^0.8.0;
 import "usingtellor/contracts/UsingTellor.sol";
 import "../interfaces/IAMB.sol";
 /**
- @title Oracle
- @dev oracle contract for use in the charon system implementing tellor
+ @title GnosisAMB
+ @dev bridge contract for connecting to GnoisChain via Ethereum
  **/
 contract GnosisAMB is UsingTellor{
 
+    //storage
     IAMB public ambBridge;
     address public charon; //address of charon on this chain
     address public connectedCharon;//address of charon on other chain
-    bytes32[] public messageIds;
-    mapping(bytes32 => address) public idToCaller;
-    mapping(bytes32=> bytes) public messageIdToData;
-    mapping(bytes32=> bool) public didPush;
-    bytes4 private constant func_selector = bytes4(keccak256("getOracleSubmission(uint256)"));
     bytes32 public constant _requestSelector = 0x88b6c755140efe88bff94bfafa4a7fdffe226d27d92bd45385bb0cfa90986650; //ethCall
+    bytes32[] public messageIds;
+    bytes4 private constant func_selector = bytes4(keccak256("getOracleSubmission(uint256)"));
+    mapping(bytes32 => address) public idToCaller;
+    mapping(bytes32=> bool) public didPush;
+    mapping(bytes32=> bytes) public messageIdToData;
+
+    //events
     event InfoRecieved(bytes32 _messageId, bool _status);
     event InfoRequest(uint256 _depositId);
     

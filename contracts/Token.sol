@@ -7,18 +7,18 @@ pragma solidity 0.8.17;
  */
 contract Token{
 
-    /*Storage*/
+    //storage
     string  private tokenName;
     string  private tokenSymbol;
     uint256 internal supply;//totalSupply
     mapping(address => uint) balance;
     mapping(address => mapping(address=>uint)) userAllowance;//allowance
 
-    /*Events*/
+    //events
     event Approval(address indexed _src, address indexed _dst, uint _amt);
     event Transfer(address indexed _src, address indexed _dst, uint _amt);
 
-    /*Functions*/
+    //functions
     /**
      * @dev Constructor to initialize token
      * @param _name of token
@@ -118,7 +118,7 @@ contract Token{
         return supply;
     }
 
-    /**Internal Functions */
+    //internal
     /**
      * @dev burns tokens
      * @param _from address to burn tokens from

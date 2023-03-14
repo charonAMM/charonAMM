@@ -1217,4 +1217,146 @@ describe("e2e charon tests", function () {
       console.log("good throw")
     }
     })
+    it("test relayer payment on secret transfer", async function() {
+      let mockNative3 = await deploy("MockNativeBridge")
+      await mockNative3.setUsers(tellorBridge2.address, p2e.address, e2p.address)
+      let token3 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
+      await token3.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
+      let TellorOracle = await ethers.getContractFactory(abi, bytecode);
+        tellor3 = await TellorOracle.deploy();
+        tellorBridge3 = await deploy("TellorBridge", tellor3.address)
+      let charon3 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token3.address,fee,[tellorBridge3.address],HEIGHT,3,"Charon Pool Token2","CPT2");
+      let chd3 = await deploy("MockERC20",charon3.address,"charon dollar3","chd3") 
+      await tellorBridge3.setPartnerInfo(charon.address,1)
+      await chd3.deployed();
+      await token3.approve(charon3.address,web3.utils.toWei("100"))
+      cfc3 = await deploy('MockCFC',token3.address,chd3.address)
+      await cfc3.deployed();
+      await charon3.finalize([1,2],[charon.address,charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address, cfc3.address);
+      let _depositAmount = web3.utils.toWei("10");
+      await token.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                web3.utils.toWei("1000"),
+                                                _depositAmount,
+                                                0)
+      await token.connect(accounts[1]).approve(charon.address,_amount)
+      const sender = accounts[0]
+      const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon, chainID: 1 })
+      charon = charon.connect(sender)
+      let inputData = await prepareTransaction({
+        charon,
+        inputs:[],
+        outputs: [aliceDepositUtxo],
+        account: {
+          owner: sender.address,
+          publicKey: aliceDepositUtxo.keypair.address(),
+        },
+        privateChainID: 1,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      let args = inputData.args
+      let extData = inputData.extData
+      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
+      // Alice sends some funds to withdraw (ignore bob)
+      let bobSendAmount = utils.parseEther('4')
+      const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
+// contains private and public keys
+      const bobAddress = await bobKeypair.address() // contains only public key
+      const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon), chainID: 1 })
+      
+      let aliceChangeUtxo = new Utxo({
+          amount: web3.utils.toWei('3'),//3 = 10-4(toBob)-3fee
+          myHashFunc: poseidon,
+          keypair: aliceDepositUtxo.keypair,
+          chainID: 1
+      })
+      inputData = await prepareTransaction({
+          charon: charon,
+          inputs:[aliceDepositUtxo],
+          outputs: [bobSendUtxo, aliceChangeUtxo],
+          privateChainID: 1,
+          fee: web3.utils.toWei("3"),
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+        })
+      console.log("mytxn")
+    await charon.connect(accounts[3]).transact(inputData.args,inputData.extData)
+    console.log("here")
+    assert(await chd.balanceOf(accounts[3].address) == web3.utils.toWei("3"))
+    const filter = charon.filters.NewCommitment()
+    const fromBlock = await ethers.provider.getBlock()
+    const events = await charon.queryFilter(filter, fromBlock.number)
+    let receiveUtxo
+    try {
+      receiveUtxo = Utxo.decrypt(aliceDepositUtxo.keypair, events[0].args._encryptedOutput, events[0].args._index)
+    } catch (e) {
+    // we try to decrypt another output here because it shuffles outputs before sending to blockchain
+        receiveUtxo = Utxo.decrypt(aliceDepositUtxo.keypair, events[1].args._encryptedOutput, events[1].args._index)
+    }
+    expect(receiveUtxo.amount).to.be.equal(web3.utils.toWei("3"))
+
+    let bobReceiveUtxo;
+    try {
+        bobReceiveUtxo = Utxo.decrypt(bobKeypair, events[0].args._encryptedOutput, events[0].args._index)
+    } catch (e) {
+    // we try to decrypt another output here because it shuffles outputs before sending to blockchain
+        bobReceiveUtxo = Utxo.decrypt(bobKeypair, events[1].args._encryptedOutput, events[1].args._index)
+    }
+    expect(bobReceiveUtxo.amount).to.be.equal(web3.utils.toWei("4"))
+    console.log(bobReceiveUtxo)
+    console.log(aliceChangeUtxo)
+
+    // have bob and alice try and pull out more than they can
+
+    try{
+      let aliceFakeUtxo = new Utxo({
+        amount: web3.utils.toWei('6'),//amount w/out fee
+        myHashFunc: poseidon,
+        keypair: aliceDepositUtxo.keypair,
+        chainID: 1
+        
+      })
+      inputData = await prepareTransaction({
+        charon: charon,
+        inputs: [aliceFakeUtxo],
+        outputs: [],
+        recipient: accounts[1].address,
+        privateChainID: 1,
+        myHasherFunc: poseidon,
+        myHasherFunc2: poseidon2
+      })
+      await charon.transact(inputData.args,inputData.extData)
+    }
+    catch{
+      console.log("good fake catch on passing no fee")
+    }
+    //alice actually pulls out 
+    inputData = await prepareTransaction({
+      charon: charon,
+      inputs: [aliceChangeUtxo],
+      outputs: [],
+      recipient: accounts[4].address,
+      privateChainID: 1,
+      myHasherFunc: poseidon,
+      myHasherFunc2: poseidon2
+  })
+  await charon.transact(inputData.args,inputData.extData)
+  assert(await chd.balanceOf(accounts[4].address) - web3.utils.toWei("3") == 0, "should mint CHD to Alice");
+
+  //bob pulls out (heyo)
+  //let bobActualUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair, chainID: 1 })
+  bobReceiveUtxo.chainID = 1
+  inputData = await prepareTransaction({
+    charon: charon,
+    inputs: [bobReceiveUtxo],
+    outputs: [],
+    recipient: accounts[5].address,
+    privateChainID: 1,
+    myHasherFunc: poseidon,
+    myHasherFunc2: poseidon2
+})
+await charon.transact(inputData.args,inputData.extData)
+assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "should mint CHD to Bob");
+    })
 });

@@ -9,7 +9,8 @@ const MERKLE_TREE_HEIGHT = 23
 
 async function buildMerkleTree(charon, hasherFunc) {
   let filter = charon.filters.NewCommitment()
-  const events = await charon.queryFilter(filter, 0)
+  const events = await charon.queryFilter(filter, 0 , "latest")
+  //console.log(events)
   const leaves = events.sort((a, b) => a.args._index - b.args._index).map((e) => toFixedHex(e.args._commitment))
   let tree = await new MerkleTree.default(MERKLE_TREE_HEIGHT,[], { hashFunction: hasherFunc, zeroElement: zero })
   await tree.bulkInsert(leaves)

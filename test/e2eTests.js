@@ -1359,4 +1359,13 @@ describe("e2e charon tests", function () {
 await charon.transact(inputData.args,inputData.extData)
 assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "should mint CHD to Bob");
     })
+    it("test all checkDrip functions and working properly -- cannot transfer, transferFrom, LPWithdraw for one day", async function() {
+      assert(0==1)
+    })
+    it("drain test drip -- full drip", async function() {
+      assert(0==1)
+    })
+    it("drain test drip -- multiple drips added, full drip", async function() {
+      assert(0==1)
+    })
 });

@@ -355,7 +355,7 @@ describe("e2e charon tests", function () {
             assert(web3.utils.toWei("1000") - 1*await chd2.balanceOf(accounts[0].address)*1  < web3.utils.toWei(".01") , "should withdraw all chd")
             assert(await charon2.totalSupply() == 0, "all pool tokens should be gone")
     })
-    it("underlying token freezes (tellor upgrade example), allow single sided withdraw", async function() {
+    it("underlying token freezes (tellor upgrade example), deposit back to other side to withdraw", async function() {
       let _depositAmount = utils.parseEther('10');
             await token.mint(accounts[1].address,web3.utils.toWei("100"))
             let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
@@ -388,7 +388,6 @@ describe("e2e charon tests", function () {
             // Alice sends some funds to withdraw (ignore bob)
             let bobSendAmount = utils.parseEther('4')
             const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
- // contains private and public keys
             const bobAddress = await bobKeypair.address() // contains only public key
             const bobSendUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: Keypair.fromString(bobAddress,poseidon), chainID: 2 })
             let aliceChangeUtxo = new Utxo({
@@ -408,16 +407,17 @@ describe("e2e charon tests", function () {
             args = inputData.args
             extData = inputData.extData
             await charon2.transact(args,extData)
-            let bal1 = await token2.balanceOf(accounts[0].address);
-            let chdbal1 = await token2.balanceOf(charon.address)
-            await charon2.connect(accounts[0]).lpWithdrawSingleCHD(web3.utils.toWei("98"), 0)
-            assert((await charon2.recordBalance()*1) - 1*web3.utils.toWei("100") == 0, "record balance should not move" )
-            assert((await charon2.recordBalanceSynth()*1) - 1*web3.utils.toWei(".4") == 0 , "record balance synth should be back to correct" )
-            assert(await charon2.balanceOf(accounts[0].address)*1 == web3.utils.toWei("2"), "all pool tokens should be gone")
-            assert(await token2.balanceOf(accounts[0].address)*1 -bal1 == 0, "token balance should not move" )
-            assert(await token2.balanceOf(charon.address)*1 - chdbal1 == 0, "token balance should be same at charon" )
-            assert(web3.utils.toWei("1000") - 1*await chd2.balanceOf(accounts[0].address)*1  < web3.utils.toWei("2") , "should withdraw all chd")
-            assert(await charon2.totalSupply() == web3.utils.toWei("2"), "all(most) pool tokens should be gone")
+            const filter = charon2.filters.NewCommitment()
+            const fromBlock = await ethers.provider.getBlock()
+            const events = await charon2.queryFilter(filter, fromBlock.number)
+            let bobReceiveUtxo;
+            try {
+                bobReceiveUtxo = Utxo.decrypt(bobKeypair, events[0].args._encryptedOutput, events[0].args._index)
+            } catch (e) {
+            // we try to decrypt another output here because it shuffles outputs before sending to blockchain
+                bobReceiveUtxo = Utxo.decrypt(bobKeypair, events[1].args._encryptedOutput, events[1].args._index)
+            }
+            expect(bobReceiveUtxo.amount).to.be.equal(web3.utils.toWei("4"))
             inputData = await prepareTransaction({
               charon: charon2,
               inputs: [aliceChangeUtxo],
@@ -428,6 +428,70 @@ describe("e2e charon tests", function () {
               myHasherFunc2: poseidon2
           })
           await charon2.transact(inputData.args,inputData.extData)
+          assert(await chd2.balanceOf(accounts[1].address) == web3.utils.toWei("6"))
+
+          await chd2.connect(accounts[1]).approve(charon.address,web3.utils.toWei("6"))
+          aliceNewUtxo = new Utxo({ amount: web3.utils.toWei("6"), myHashFunc: poseidon, chainID: 1 })
+          charon = charon.connect(sender)
+          inputData = await prepareTransaction({
+            charon,
+            inputs:[],
+            outputs: [aliceNewUtxo],
+            account: {
+              owner: accounts[1].address,
+              publicKey: aliceNewUtxo.keypair.address(),
+            },
+            privateChainID: 1,
+            myHasherFunc: poseidon,
+            myHasherFunc2: poseidon2
+          })
+          await charon2.connect(accounts[1]).depositToOtherChain(inputData.args,inputData.extData,true, web3.utils.toWei("6"));
+          commi = await getTellorSubmission(inputData.args,inputData.extData);
+          await charon.oracleDeposit([0],commi);
+        //let bobActualUtxo = new Utxo({ amount: bobSendAmount,myHashFunc: poseidon, keypair: bobKeypair, chainID: 1 })
+        bobReceiveUtxo.chainID = 2
+        inputData = await prepareTransaction({
+          charon: charon2,
+          inputs: [bobReceiveUtxo],
+          outputs: [],
+          recipient: accounts[2].address,
+          privateChainID: 2,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+      })
+
+        await charon2.transact(inputData.args,inputData.extData)
+        assert(await chd2.balanceOf(accounts[2].address) == web3.utils.toWei("4"))
+        await chd2.connect(accounts[2]).approve(charon2.address,web3.utils.toWei("4"))
+        const bobDepositUtxo = new Utxo({ amount: web3.utils.toWei("4"), myHashFunc: poseidon, chainID: 1 })
+        charon = charon.connect(sender)
+        inputData = await prepareTransaction({
+          charon,
+          inputs:[],
+          outputs: [bobDepositUtxo],
+          account: {
+            owner: bobKeypair.address(),
+            publicKey: bobDepositUtxo.keypair.address(),
+          },
+          privateChainID: 1,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+        })
+        await charon2.connect(accounts[2]).depositToOtherChain(inputData.args,inputData.extData,true,0);
+        commi = await getTellorSubmission(inputData.args,inputData.extData);
+        await charon.oracleDeposit([0],commi);
+        inputData = await prepareTransaction({
+          charon: charon,
+          inputs: [bobDepositUtxo],
+          outputs: [],
+          recipient: accounts[2].address,
+          privateChainID: 1,
+          myHasherFunc: poseidon,
+          myHasherFunc2: poseidon2
+      })
+      await charon.transact(inputData.args,inputData.extData)
+      assert(chd.balanceOf(accounts[2].address == web3.utils.toWei("4")))
+
     })
     it("Multiple back and forths (oracle deposits on 3 different chains and withdrawals and trades)", async function() {
       console.log("starting long e2e test....")
@@ -1136,9 +1200,11 @@ describe("e2e charon tests", function () {
       await token2.connect(accounts[1]).approve(charon4.address,web3.utils.toWei("1000"))
       await charon4.connect(accounts[1]).lpDeposit(minOut,web3.utils.toWei("50"),web3.utils.toWei("5"))
       let ptokens = await charon4.balanceOf(accounts[1].address)
-      bal1 = await chd4.balanceOf(cfc4.address)
-      await charon4.connect(accounts[1]).lpWithdrawSingleCHD(ptokens,0)
-      assert(await chd4.balanceOf(cfc4.address) - bal1 == 0, "chd should be correct after single lpWithdraw, no fee")
+      bal1 = await chd4.balanceOf(accounts[1].address)
+      await charon4.connect(accounts[1]).lpWithdraw(ptokens,0,0)
+      bal2 = await chd4.balanceOf(accounts[1].address)
+      assert(await chd4.balanceOf(cfc4.address)  > ((bal2-bal1)*.02 ) > 0, "chd should be correct after single lpWithdraw, no fee")
+      assert(await chd4.balanceOf(cfc4.address)  > ((bal2-bal1)*.02 ) < web3.utils.toWei(".01"), "chd should be correct after single lpWithdraw, no fee")
     })
     it("deposit on own chain", async function() {
       let mockNative3 = await deploy("MockNativeBridge")
@@ -1280,9 +1346,7 @@ describe("e2e charon tests", function () {
           myHasherFunc: poseidon,
           myHasherFunc2: poseidon2
         })
-      console.log("mytxn")
     await charon.connect(accounts[3]).transact(inputData.args,inputData.extData)
-    console.log("here")
     assert(await chd.balanceOf(accounts[3].address) == web3.utils.toWei("3"))
     const filter = charon.filters.NewCommitment()
     const fromBlock = await ethers.provider.getBlock()
@@ -1304,11 +1368,7 @@ describe("e2e charon tests", function () {
         bobReceiveUtxo = Utxo.decrypt(bobKeypair, events[1].args._encryptedOutput, events[1].args._index)
     }
     expect(bobReceiveUtxo.amount).to.be.equal(web3.utils.toWei("4"))
-    console.log(bobReceiveUtxo)
-    console.log(aliceChangeUtxo)
-
     // have bob and alice try and pull out more than they can
-
     try{
       let aliceFakeUtxo = new Utxo({
         amount: web3.utils.toWei('6'),//amount w/out fee
@@ -1360,12 +1420,152 @@ await charon.transact(inputData.args,inputData.extData)
 assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "should mint CHD to Bob");
     })
     it("test all checkDrip functions and working properly -- cannot transfer, transferFrom, LPWithdraw for one day", async function() {
-      assert(0==1)
-    })
-    it("drain test drip -- full drip", async function() {
-      assert(0==1)
+      await h.expectThrow(charon.lpSingleCHD(0,1));//cannot put zero in
+      await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+      let minOut = await charon.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),//tokenBalanceIn
+          web3.utils.toWei("100"),//poolSupply
+          web3.utils.toWei("10")//tokenamountIn
+          )
+      await h.expectThrow(charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),minOut))
+      await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+      assert(minOut - web3.utils.toWei(".498") > 0, "should be greater than this")
+      await charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),minOut)
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000") == 0, "record balancesynth should be correct")
+      assert(await charon.dripRate() == web3.utils.toWei(".01"), "drip rate should be correct")
+      assert(await charon.singleCHDLPToDrip() == web3.utils.toWei("10"))
+      await h.expectThrow(charon.connect(accounts[1]).transfer(accounts[3].address, web3.utils.toWei(".1")))
+      await charon.connect(accounts[1]).approve(accounts[2].address, web3.utils.toWei("100"))
+      await h.expectThrow(charon.connect(accounts[2]).transferFrom(accounts[1].address, accounts[3].address,web3.utils.toWei(".1")))
+      await h.expectThrow(charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei(".1"), 0,0))
+      h.advanceTime(86400)
+      //fast forward a day, all three functions work
+      await charon.connect(accounts[1]).transfer(accounts[3].address, web3.utils.toWei(".1"))
+      await charon.connect(accounts[2]).transferFrom(accounts[1].address, accounts[3].address,web3.utils.toWei(".1"))
+      await charon.checkDrip()
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.01") == 0, "record balancesynth should go up 1")
+      await charon.checkDrip();
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.02") == 0, "record balancesynth should go up 2")
+      await chd.mint(accounts[3].address,web3.utils.toWei("1000"))
+      await chd.connect(accounts[3]).approve(charon.address,web3.utils.toWei("150"))
+      await charon.connect(accounts[3]).addRewards(web3.utils.toWei("5"),0,web3.utils.toWei("5"),true)//no toLP's
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.03") == 0, "record balancesynth should go up 3");
+            //check all functions ( swap, transfer,)
+
+      let _depositAmount = utils.parseEther('10');
+            await token.mint(accounts[1].address,web3.utils.toWei("100"))
+            let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+                                                      web3.utils.toWei("1000"),
+                                                      _depositAmount,
+                                                      0)
+            await token.connect(accounts[1]).approve(charon.address,_amount)
+            const sender = accounts[0]
+            const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 1 })
+            charon = charon.connect(sender)
+            let inputData = await prepareTransaction({
+              charon,
+              inputs:[],
+              outputs: [aliceDepositUtxo],
+              account: {
+                owner: sender.address,
+                publicKey: aliceDepositUtxo.keypair.address(),
+              },
+              privateChainID: 1,
+              myHasherFunc: poseidon,
+              myHasherFunc2: poseidon2
+            })
+            let args = inputData.args
+            let extData = inputData.extData
+            await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
+            assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.04") == 0, "record balancesynth should go up 4")
+            //alice withdraws
+            inputData = await prepareTransaction({
+                charon: charon,
+                inputs: [aliceDepositUtxo],
+                outputs: [],
+                recipient: accounts[1].address,
+                privateChainID: 1,
+                myHasherFunc: poseidon,
+                myHasherFunc2: poseidon2
+            })
+            await charon.transact(inputData.args,inputData.extData)
+            assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.05") == 0, "record balancesynth should go up 5")
+            await token.mint(accounts[1].address,web3.utils.toWei("100"))
+            await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
+            let bal1 = await chd.balanceOf(accounts[1].address);
+            let cfcBal1 = await chd.balanceOf(cfc.address);
+            let rec1 = await charon.recordBalanceSynth();
+            await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"),0,web3.utils.toWei("99999999"))
+            let bal2 = await chd.balanceOf(accounts[1].address);
+            let cfcBal2 = await chd.balanceOf(cfc.address);
+            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 6")
+            await token.mint(accounts[1].address,web3.utils.toWei("100"))
+            await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
+            await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+            await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+            rec1 = await charon.recordBalanceSynth();
+            bal1 = await chd.balanceOf(accounts[1].address);
+            cfcBal1 = await chd.balanceOf(cfc.address);
+            await charon.connect(accounts[1]).lpDeposit(web3.utils.toWei("1"),web3.utils.toWei("100"),web3.utils.toWei("10"))
+            bal2 = await chd.balanceOf(accounts[1].address);
+            cfcBal2 = await chd.balanceOf(cfc.address);
+            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 7")
+            bal1 = await chd.balanceOf(accounts[1].address);
+            cfcBal1 = await chd.balanceOf(cfc.address);
+            rec1 = await charon.recordBalanceSynth();
+            await charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei(".1"), 0,0);//can do since past a day
+            bal2 = await chd.balanceOf(accounts[1].address);
+            cfcBal2 = await chd.balanceOf(cfc.address);
+            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 8")
     })
     it("drain test drip -- multiple drips added, full drip", async function() {
-      assert(0==1)
+      await h.expectThrow(charon.lpSingleCHD(0,1));//cannot put zero in
+      await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
+      let minOut = await charon.calcPoolOutGivenSingleIn(web3.utils.toWei("1000"),//tokenBalanceIn
+          web3.utils.toWei("100"),//poolSupply
+          web3.utils.toWei("10")//tokenamountIn
+          )
+      await h.expectThrow(charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),minOut))
+      await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+      assert(minOut - web3.utils.toWei(".498") > 0, "should be greater than this")
+      await charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),minOut)
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000") == 0, "record balancesynth should be correct")
+      assert(await charon.dripRate() == web3.utils.toWei(".01"), "drip rate should be correct")
+      assert(await charon.singleCHDLPToDrip() == web3.utils.toWei("10"))
+      assert(await charon.balanceOf(accounts[1].address)*1 - web3.utils.toWei(".4987") > 0 , "mint of tokens should be correct")
+      assert(await charon.balanceOf(accounts[1].address)*1 - web3.utils.toWei(".4987") < web3.utils.toWei(".01") , "mint of tokens should be correct")
+      await h.expectThrow(charon.connect(accounts[1]).transfer(accounts[3].address, web3.utils.toWei(".1")))
+      await charon.connect(accounts[1]).approve(accounts[2].address, web3.utils.toWei("100"))
+      await h.expectThrow(charon.connect(accounts[2]).transferFrom(accounts[1].address, accounts[3].address,web3.utils.toWei(".1")))
+      for(i=0;i<500;i++){
+        await charon.checkDrip();
+      }
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1005") == 0, "record balancesynth should go up 6")
+      assert(await charon.singleCHDLPToDrip() - web3.utils.toWei("5") == 0, "record balancesynth should go up 6")
+      await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+      await charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),0)
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1005") == 0, "record balancesynth should be correct")
+      assert(await charon.dripRate() == web3.utils.toWei(".015"), "drip rate should be correct")
+      assert(await charon.singleCHDLPToDrip() == web3.utils.toWei("15"))
+      for(i=0;i<500;i++){
+        await charon.checkDrip();
+      }
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1012.5") == 0, "record balancesynth should go up 6")
+      assert(await charon.singleCHDLPToDrip() - web3.utils.toWei("7.5") == 0, "record balancesynth should go up 6")
+      await chd.connect(accounts[1]).approve(charon.address,web3.utils.toWei("100"))
+      await charon.connect(accounts[1]).lpSingleCHD(web3.utils.toWei("10"),0)
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1012.5") == 0, "record balancesynth should be correct")
+      assert(await charon.dripRate() == web3.utils.toWei(".0175"), "drip rate should be correct")
+      assert(await charon.singleCHDLPToDrip() == web3.utils.toWei("17.5"))
+      for(i=0;i<500;i++){
+        await charon.checkDrip();
+      }
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1021.25") == 0, "record balancesynth should go up 7")
+      assert(await charon.singleCHDLPToDrip() - web3.utils.toWei("8.75") == 0, "record balancesynth should go up 6")
+      for(i=0;i<500;i++){
+        await charon.checkDrip();
+      }
+      assert(await charon.singleCHDLPToDrip() == 0, "drip should be gone")
+      assert(await charon.recordBalanceSynth() - web3.utils.toWei("1030") == 0, "record balancesynth should be correct")
+      assert(await chd.balanceOf(accounts[1].address)*1 - web3.utils.toWei("970") == 0, "contractsynth should take tokens")
     })
 });

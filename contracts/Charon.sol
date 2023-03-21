@@ -100,6 +100,10 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     uint256 public userRewards;//amount of baseToken user rewards in contract
     uint256 public userRewardsCHD;//amount of chd user rewards in contract
+    uint256 public singleCHDLPToDrip;//amount to drip over next day
+    uint256 public lastDrip;
+    uint256 public dripRate;
+    mapping(address => uint256) public singleLockTime;
     mapping(bytes32 => bool) nullifierHashes;//zk proof hashes to tell whether someone withdrew
     mapping(bytes32 => uint256) depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
    
@@ -171,7 +175,25 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         oracleTokenFunds += _toOracle;
         userRewards += _toUsers;
       }
+      checkDrip();
       emit RewardAdded(_toUsers + _toLPs + _toOracle,_isCHD);
+    }
+
+    /**
+     * @dev function to distribute singleCHDLPToDrip.  
+     * note can only be done once per block
+     * drip rate set in single LP depositCHD
+     */
+    function checkDrip() public {
+      if(block.timestamp > lastDrip && singleCHDLPToDrip > 0){//only oncePerBlock
+        lastDrip = block.timestamp;
+        uint256 _amountToDrip =  dripRate;
+        if(singleCHDLPToDrip < dripRate){
+          _amountToDrip = singleCHDLPToDrip;
+        }
+        recordBalanceSynth += _amountToDrip;
+        singleCHDLPToDrip -= _amountToDrip;
+      }
     }
 
     /**
@@ -266,6 +288,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         _mint(msg.sender,_poolAmountOut);
         require(token.transferFrom(msg.sender,address(this), _baseAssetIn));
         chd.transferFrom(msg.sender, address(this),_CHDIn);
+        checkDrip();
         emit LPDeposit(msg.sender,_poolAmountOut);
     }
 
@@ -281,10 +304,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                             supply,
                             _tokenAmountIn//amount of token In
                         );
-        recordBalanceSynth += _tokenAmountIn;
+        singleCHDLPToDrip += _tokenAmountIn;
+        dripRate = singleCHDLPToDrip / 1000;
         require(_poolAmountOut >= _minPoolAmountOut);
         _mint(msg.sender,_poolAmountOut);
         chd.transferFrom(msg.sender,address(this), _tokenAmountIn);
+        singleLockTime[msg.sender] = block.timestamp + 24 hours;
         emit LPDeposit(msg.sender,_poolAmountOut);
     }
 
@@ -300,6 +325,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         returns (uint256 _tokenAmountOut)
     {
         require(_lock == false);
+        require(block.timestamp > singleLockTime[msg.sender]);
+        checkDrip();
         uint256 _exitFee = _bmul(_poolAmountIn, fee);
         uint256 _pAiAfterExitFee = _poolAmountIn - _exitFee;
         uint256 _ratio = _bdiv(_pAiAfterExitFee, supply);
@@ -330,26 +357,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         }
     }
 
-   /**
-     * @dev allows a user to single-side LP withdraw CHD 
-     * @param _poolAmountIn amount of pool tokens to deposit
-     * @param _minAmountOut minimum amount of CHD you need out
-     */
-    function lpWithdrawSingleCHD(uint256 _poolAmountIn, uint256 _minAmountOut) external{
-        require(_lock == false);
-        uint256 _tokenAmountOut = calcSingleOutGivenIn(
-                            recordBalanceSynth,
-                            supply,
-                            _poolAmountIn,
-                            0,
-                            true
-                        );
-        recordBalanceSynth -= _tokenAmountOut;
-        require(_tokenAmountOut >= _minAmountOut);
-        _burn(msg.sender,_poolAmountIn);
-        chd.transfer(msg.sender, _tokenAmountOut);
-        emit LPWithdrawal(msg.sender,_poolAmountIn);
-    }
     /**
      * @dev reads tellor commitments to allow you to withdraw on this chain
      * @param _oracleIndex index of oracle in oracle array
@@ -470,6 +477,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                             );
         require(_spotPriceAfter >= _spotPriceBefore);     
         require(_spotPriceAfter <= _maxPrice);
+        checkDrip();
         emit Swap(msg.sender,_inIsCHD,_tokenAmountIn,_tokenAmountOut);
       }
 
@@ -572,6 +580,19 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
 
     //internal
     /**
+     * @dev override of _move function for pool token.  Prevents transfer of pool token for 1 day after singleSideCHD deposit
+     * @param _src address of sender
+     * @param _dst address of recipient
+     * @param _amount amount of token to send
+     */
+    function _move(address _src, address _dst, uint256 _amount) internal override {
+        require(block.timestamp > singleLockTime[_src]); //cannot move pool tokens if locked
+        balance[_src] = balance[_src] - _amount;//will overflow if too big
+        balance[_dst] = balance[_dst] + _amount;
+        emit Transfer(_src, _dst, _amount);
+    }
+
+    /**
      * @dev internal logic of secret transfers and chd mints
      * @param _args proof data for sneding tokens
      * @param _extData external (visible data) to verify proof and pay relayer fee
@@ -584,6 +605,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         emit NewNullifier(_args.inputNullifiers[_i]);
       }
       _insert(_args.outputCommitments[0], _args.outputCommitments[1]);
+      checkDrip();
       emit NewCommitment(_args.outputCommitments[0], nextIndex - 2, _extData.encryptedOutput1, _isDeposit);
       emit NewCommitment(_args.outputCommitments[1], nextIndex - 1, _extData.encryptedOutput2, _isDeposit);
     }

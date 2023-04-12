@@ -46,7 +46,17 @@ async function getProof({
         throw new Error(`Input commitment ${toFixedHex(input.getCommitment(myHasherFunc))} was not found`)
       }
       inputMerklePathIndices.push(input.index)
-      inputMerklePathElements.push(tree.path(input.index).pathElements)
+      try{
+        inputMerklePathElements.push(tree.path(input.index).pathElements)
+      }
+      catch{
+        if(test){
+          inputMerklePathElements.push(new Array(tree.levels).fill(0))
+        }
+        else{
+          throw new Error("index out of bounds")
+        }
+      }
     } else {
       inputMerklePathIndices.push(0)
       inputMerklePathElements.push(new Array(tree.levels).fill(0))

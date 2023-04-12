@@ -1206,83 +1206,6 @@ describe("e2e charon tests", function () {
       assert(await chd4.balanceOf(cfc4.address)  > ((bal2-bal1)*.02 ) > 0, "chd should be correct after single lpWithdraw, no fee")
       assert(await chd4.balanceOf(cfc4.address)  > ((bal2-bal1)*.02 ) < web3.utils.toWei(".01"), "chd should be correct after single lpWithdraw, no fee")
     })
-    it("deposit on own chain", async function() {
-      let mockNative3 = await deploy("MockNativeBridge")
-      await mockNative3.setUsers(tellorBridge2.address, p2e.address, e2p.address)
-      let token3 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
-      await token3.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
-      let TellorOracle = await ethers.getContractFactory(abi, bytecode);
-        tellor3 = await TellorOracle.deploy();
-        tellorBridge3 = await deploy("TellorBridge", tellor3.address)
-      let charon3 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token3.address,fee,[tellorBridge3.address],HEIGHT,3,"Charon Pool Token2","CPT2");
-      let chd3 = await deploy("MockERC20",charon3.address,"charon dollar3","chd3") 
-      await tellorBridge3.setPartnerInfo(charon.address,1)
-      await chd3.deployed();
-      await token3.approve(charon3.address,web3.utils.toWei("100"))
-      cfc3 = await deploy('MockCFC',token3.address,chd3.address)
-      await cfc3.deployed();
-      await charon3.finalize([1,2],[charon.address,charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address, cfc3.address);
-      let _depositAmount = web3.utils.toWei("10");
-      await token.mint(accounts[1].address,web3.utils.toWei("100"))
-      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
-                                                web3.utils.toWei("1000"),
-                                                _depositAmount,
-                                                0)
-      await token.connect(accounts[1]).approve(charon.address,_amount)
-      const sender = accounts[0]
-      const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon, chainID: 1 })
-      charon = charon.connect(sender)
-      let inputData = await prepareTransaction({
-        charon,
-        inputs:[],
-        outputs: [aliceDepositUtxo],
-        account: {
-          owner: sender.address,
-          publicKey: aliceDepositUtxo.keypair.address(),
-        },
-        privateChainID: 1,
-        myHasherFunc: poseidon,
-        myHasherFunc2: poseidon2
-      })
-      let args = inputData.args
-      let extData = inputData.extData
-      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
-      let stateId = await p2e.latestStateId();
-      let _id = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[stateId]);
-      await charon2.oracleDeposit([0],_id);
-      let depositId = 1
-      let _query = await getTellorData(tellor3,charon.address,1,depositId);
-      let _value = await charon.getOracleSubmission(depositId);
-      await tellor3.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
-      await h.advanceTime(86400)//wait 12 hours
-      _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
-      await charon3.oracleDeposit([0],_encoded);
-      inputData = await prepareTransaction({
-        charon: charon,
-        inputs: [aliceDepositUtxo],
-        outputs: [],
-        recipient: accounts[1].address,
-        privateChainID: 1,
-        myHasherFunc: poseidon,
-        myHasherFunc2: poseidon2
-    })
-    await h.expectThrow(charon2.transact(inputData.args,inputData.extData))  
-    await charon.transact(inputData.args,inputData.extData)
-    await h.expectThrow(charon3.transact(inputData.args,inputData.extData))  
-    try{
-      inputData = await prepareTransaction({
-        charon: charon3,
-        inputs: [aliceDepositUtxo],
-        outputs: [],
-        recipient: accounts[1].address,
-        privateChainID: 3,
-        myHasherFunc: poseidon,
-        myHasherFunc2: poseidon2
-    })
-    } catch{
-      console.log("good throw")
-    }
-    })
     it("test relayer payment on secret transfer", async function() {
       let mockNative3 = await deploy("MockNativeBridge")
       await mockNative3.setUsers(tellorBridge2.address, p2e.address, e2p.address)
@@ -1300,17 +1223,16 @@ describe("e2e charon tests", function () {
       await cfc3.deployed();
       await charon3.finalize([1,2],[charon.address,charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address, cfc3.address);
       let _depositAmount = web3.utils.toWei("10");
-      await token.mint(accounts[1].address,web3.utils.toWei("100"))
-      let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
+      await token2.mint(accounts[1].address,web3.utils.toWei("100"))
+      let _amount = await charon2.calcInGivenOut(web3.utils.toWei("100"),
                                                 web3.utils.toWei("1000"),
                                                 _depositAmount,
                                                 0)
-      await token.connect(accounts[1]).approve(charon.address,_amount)
+      await token2.connect(accounts[1]).approve(charon2.address,_amount)
       const sender = accounts[0]
       const aliceDepositUtxo = new Utxo({ amount: _depositAmount, myHashFunc:poseidon, chainID: 1 })
-      charon = charon.connect(sender)
       let inputData = await prepareTransaction({
-        charon,
+        charon: charon2,
         inputs:[],
         outputs: [aliceDepositUtxo],
         account: {
@@ -1323,7 +1245,9 @@ describe("e2e charon tests", function () {
       })
       let args = inputData.args
       let extData = inputData.extData
-      await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
+      await charon2.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
+      commi = await getTellorSubmission(inputData.args,inputData.extData);
+      await charon.oracleDeposit([0],commi);
       // Alice sends some funds to withdraw (ignore bob)
       let bobSendAmount = utils.parseEther('4')
       const bobKeypair = new Keypair({myHashFunc:poseidon}) // contains private and public keys
@@ -1453,16 +1377,18 @@ assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "s
 
       let _depositAmount = utils.parseEther('10');
             await token.mint(accounts[1].address,web3.utils.toWei("100"))
+            await token2.mint(accounts[1].address,web3.utils.toWei("100"))
             let _amount = await charon.calcInGivenOut(web3.utils.toWei("100"),
                                                       web3.utils.toWei("1000"),
                                                       _depositAmount,
                                                       0)
             await token.connect(accounts[1]).approve(charon.address,_amount)
+            await token2.connect(accounts[1]).approve(charon2.address,_amount)
             const sender = accounts[0]
             const aliceDepositUtxo = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 1 })
             charon = charon.connect(sender)
             let inputData = await prepareTransaction({
-              charon,
+              charon: charon,
               inputs:[],
               outputs: [aliceDepositUtxo],
               account: {
@@ -1477,6 +1403,10 @@ assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "s
             let extData = inputData.extData
             await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
             assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.04") == 0, "record balancesynth should go up 4")
+            await charon2.connect(accounts[1]).depositToOtherChain(args,extData,false,web3.utils.toWei("9999"));
+            commi = await getTellorSubmission(inputData.args,inputData.extData);
+            await charon.oracleDeposit([0],commi);
+            assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.05") == 0, "record balancesynth should go up 5")
             //alice withdraws
             inputData = await prepareTransaction({
                 charon: charon,
@@ -1488,7 +1418,7 @@ assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "s
                 myHasherFunc2: poseidon2
             })
             await charon.transact(inputData.args,inputData.extData)
-            assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.05") == 0, "record balancesynth should go up 5")
+            assert(await charon.recordBalanceSynth() - web3.utils.toWei("1000.06") == 0, "record balancesynth should go up 6")
             await token.mint(accounts[1].address,web3.utils.toWei("100"))
             await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
             let bal1 = await chd.balanceOf(accounts[1].address);
@@ -1497,7 +1427,7 @@ assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "s
             await charon.connect(accounts[1]).swap(false,web3.utils.toWei("10"),0,web3.utils.toWei("99999999"))
             let bal2 = await chd.balanceOf(accounts[1].address);
             let cfcBal2 = await chd.balanceOf(cfc.address);
-            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 6")
+            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 7")
             await token.mint(accounts[1].address,web3.utils.toWei("100"))
             await token.connect(accounts[1]).approve(charon.address,web3.utils.toWei("10"))
             await chd.mint(accounts[1].address,web3.utils.toWei("1000"))
@@ -1508,14 +1438,14 @@ assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "s
             await charon.connect(accounts[1]).lpDeposit(web3.utils.toWei("1"),web3.utils.toWei("100"),web3.utils.toWei("10"))
             bal2 = await chd.balanceOf(accounts[1].address);
             cfcBal2 = await chd.balanceOf(cfc.address);
-            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 7")
+            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 8")
             bal1 = await chd.balanceOf(accounts[1].address);
             cfcBal1 = await chd.balanceOf(cfc.address);
             rec1 = await charon.recordBalanceSynth();
             await charon.connect(accounts[1]).lpWithdraw(web3.utils.toWei(".1"), 0,0);//can do since past a day
             bal2 = await chd.balanceOf(accounts[1].address);
             cfcBal2 = await chd.balanceOf(cfc.address);
-            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 8")
+            assert(Math.abs((rec1*1 + 1*web3.utils.toWei(".01")) - ((bal2-bal1) + (cfcBal2 - cfcBal1))- (await charon.recordBalanceSynth()*1)) < web3.utils.toWei(".001") , "record balancesynth should go up 9")
     })
     it("drain test drip -- multiple drips added, full drip", async function() {
       await h.expectThrow(charon.lpSingleCHD(0,1));//cannot put zero in

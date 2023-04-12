@@ -233,7 +233,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         for(uint256 _i = 0; _i<=oracles.length-1; _i++){
           IOracle(oracles[_i]).sendCommitment(getOracleSubmission(_depositId));
         }
-        _transact(_proofArgs, _extData, true);//automatically adds your deposit to this chain (improve anonymity set)
+        checkDrip();
         emit DepositToOtherChain(_isCHD, msg.sender, _depositId, _extData.extAmount);
     }
 
@@ -423,7 +423,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           _inRecordBal = recordBalance;
           _outRecordBal = recordBalanceSynth;
         }
-        require(_tokenAmountIn <= _bmul(_inRecordBal, MAX_IN_RATIO));
+        require(_tokenAmountIn <= _bmul(_inRecordBal, 1 ether/ 2));//max in ratio
         uint256 _spotPriceBefore = calcSpotPrice(
                                     _inRecordBal,
                                     _outRecordBal,

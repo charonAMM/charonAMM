@@ -6,11 +6,6 @@ pragma solidity 0.8.17;
  @dev the math contract contains amm math functions for the charon system
 **/
 contract Math{
-    /*Storage*/
-    uint256 public constant BONE              = 10**18;
-    uint256 public constant MAX_IN_RATIO      = BONE / 2;
-    uint256 public constant MAX_OUT_RATIO     = (BONE / 3) + 1 wei;
-
     /*Functions*/
     /**
      * @dev calculates an in amount of a token given how much is expected out of the other token
@@ -31,8 +26,8 @@ contract Math{
     {
         uint256 _diff = _tokenBalanceOut - _tokenAmountOut;
         uint256 _y = _bdiv(_tokenBalanceOut, _diff);
-        uint256 _foo = _y - BONE;
-        _tokenAmountIn = BONE - _swapFee;
+        uint256 _foo = _y - 1 ether;
+        _tokenAmountIn = 1 ether - _swapFee;
         _tokenAmountIn = _bdiv(_bmul(_tokenBalanceIn, _foo), _tokenAmountIn);
     }
 
@@ -53,10 +48,10 @@ contract Math{
         public pure
         returns (uint256 _tokenAmountOut)
     {
-        uint256 _adjustedIn = BONE - _swapFee;
+        uint256 _adjustedIn = 1 ether - _swapFee;
         _adjustedIn = _bmul(_tokenAmountIn, _adjustedIn);
         uint256 _y = _bdiv(_tokenBalanceIn, (_tokenBalanceIn + _adjustedIn));
-        uint256 _bar = BONE - _y;
+        uint256 _bar = 1 ether - _y;
         _tokenAmountOut = _bmul(_tokenBalanceOut, _bar);
     }
 
@@ -75,7 +70,7 @@ contract Math{
         public pure
         returns (uint256 _poolAmountOut)
     {
-        uint256 _tokenAmountInAfterFee = _bmul(_tokenAmountIn,BONE);
+        uint256 _tokenAmountInAfterFee = _bmul(_tokenAmountIn,1 ether);
         uint256 _newTokenBalanceIn = _tokenBalanceIn + _tokenAmountInAfterFee;
         uint256 _tokenInRatio = _bdiv(_newTokenBalanceIn, _tokenBalanceIn);
         uint256 _poolRatio = _bpow(_tokenInRatio, _bdiv(1 ether, 2 ether));
@@ -104,20 +99,20 @@ contract Math{
         uint256 _normalizedWeight;
         if(_isPool){
             _normalizedWeight = _bdiv(1 ether,2 ether);
-            uint256 _amountInAfterExitFee = _bmul(_amountIn, (BONE));
+            uint256 _amountInAfterExitFee = _bmul(_amountIn, (1 ether));
             uint256 _newSupply = _inSupply - _amountInAfterExitFee;
             uint256 _ratio = _bdiv(_newSupply, _inSupply);
-            uint256 _tokenOutRatio = _bpow(_ratio, _bdiv(BONE, _normalizedWeight));
+            uint256 _tokenOutRatio = _bpow(_ratio, _bdiv(1 ether, _normalizedWeight));
             uint256 _newTokenBalanceOut = _bmul(_tokenOutRatio, _tokenBalanceOut);
             uint256 _tokenAmountOutBeforeSwapFee = _tokenBalanceOut - _newTokenBalanceOut;
-            uint256 _zaz = _bmul((BONE - _normalizedWeight), _swapFee); 
-            _tokenAmountOut = _bmul(_tokenAmountOutBeforeSwapFee,(BONE - _zaz));
+            uint256 _zaz = _bmul((1 ether - _normalizedWeight), _swapFee); 
+            _tokenAmountOut = _bmul(_tokenAmountOutBeforeSwapFee,(1 ether - _zaz));
         }
         else{//this portion handles when it's a swap, where you have to burn the chd instead of using calcOutGivenIn
-            uint256 _adjustedIn = BONE - _swapFee;
+            uint256 _adjustedIn = 1 ether - _swapFee;
             _adjustedIn = _bmul(_amountIn, _adjustedIn);
-            uint256 _y = _bdiv(BONE, (_inSupply));
-            uint256 _bar = _bpow((BONE - _y),_amountIn);
+            uint256 _y = _bdiv(1 ether, (_inSupply));
+            uint256 _bar = _bpow((1 ether - _y),_amountIn);
             _tokenAmountOut = _tokenBalanceOut - _bmul(_tokenBalanceOut, _bar);
         }
     }
@@ -138,7 +133,7 @@ contract Math{
         returns (uint256)
     {
         uint256 _ratio =  _bdiv(_tokenBalanceIn ,_tokenBalanceOut);
-        uint256 _scale = _bdiv(BONE , (BONE - _swapFee));//10e18/(10e18-fee)
+        uint256 _scale = _bdiv(1 ether , (1 ether - _swapFee));//10e18/(10e18-fee)
         return _bmul(_ratio ,_scale);
     }
 
@@ -159,8 +154,8 @@ contract Math{
      */
     function _bdiv(uint256 _a, uint256 _b) internal pure returns (uint256 _c2){
         require(_b != 0, "ERR_DIV_ZERO");
-        uint256 _c0 = _a * BONE;
-        require(_a == 0 || _c0 / _a == BONE, "ERR_DIV_INTERNAL"); // bmul overflow
+        uint256 _c0 = _a * 1 ether;
+        require(_a == 0 || _c0 / _a == 1 ether, "ERR_DIV_INTERNAL"); // bmul overflow
         uint256 _c1 = _c0 + (_b / 2);
         require(_c1 >= _c0, "ERR_DIV_INTERNAL"); //  badd require
         _c2 = _c1 / _b;
@@ -172,7 +167,7 @@ contract Math{
      * @return uint256 result of rounding down
      */
     function _bfloor(uint256 _a) internal pure returns (uint256){
-        return _btoi(_a) * BONE;
+        return _btoi(_a) * 1 ether;
     }
     
     /**
@@ -184,8 +179,8 @@ contract Math{
     function _bmul(uint256 _a, uint256 _b) internal pure returns (uint256 _c2){
         uint256 _c0 = _a * _b;
         require(_a == 0 || _c0 / _a == _b, "ERR_MUL_OVERFLOW");
-        uint256 _c1 = _c0 + (BONE / 2);
-        _c2 = _c1 / BONE;
+        uint256 _c1 = _c0 + (1 ether / 2);
+        _c2 = _c1 / 1 ether;
     }
 
     /**
@@ -196,14 +191,14 @@ contract Math{
      */
     function _bpow(uint256 _base, uint256 _exp) internal pure returns (uint256){
         require(_base >= 1 wei, "ERR_POW_BASE_TOO_LOW");
-        require(_base <= ((2 * BONE) - 1 wei), "ERR_POW_BASE_TOO_HIGH");
+        require(_base <= ((2 * 1 ether) - 1 wei), "ERR_POW_BASE_TOO_HIGH");
         uint256 _whole  = _bfloor(_exp);   //0
         uint256 _remain = _exp - _whole;
         uint256 _wholePow = _bpowi(_base, _btoi(_whole));//_base
         if (_remain == 0) {
             return _wholePow;
         }
-        uint256 _partialResult = _bpowApprox(_base, _remain, BONE / 10**10);//_base,5e18,10e8
+        uint256 _partialResult = _bpowApprox(_base, _remain, 1 ether / 10**10);//_base,5e18,10e8
         return _bmul(_wholePow, _partialResult);
     }
 
@@ -220,13 +215,13 @@ contract Math{
             returns (uint256 _sum)
         {
         uint256 _a = _exp;//5e18
-        (uint256 _x, bool _xneg)  = _bsubSign(_base, BONE);
-        uint256 _term = BONE;
+        (uint256 _x, bool _xneg)  = _bsubSign(_base, 1 ether);
+        uint256 _term = 1 ether;
         _sum = _term;
         bool _negative = false;
         for (uint256 _i = 1; _term >= _precision; _i++) {
-            uint256 _bigK = _i * BONE;//10e18
-            (uint256 _c, bool _cneg) = _bsubSign(_a, _bigK - BONE);//(5e18,false)
+            uint256 _bigK = _i * 1 ether;//10e18
+            (uint256 _c, bool _cneg) = _bsubSign(_a, _bigK - 1 ether);//(5e18,false)
             _term = _bmul(_term, _bmul(_c, _x));//1e18*(5e18* - _base)
             _term = _bdiv(_term, _bigK);
             if (_term == 0) break;
@@ -247,7 +242,7 @@ contract Math{
      * @return _z uint256 result of pow
      */
     function _bpowi(uint256 _a, uint256 _n) internal pure returns (uint256 _z){
-        _z = _n % 2 != 0 ? _a : BONE;//_a
+        _z = _n % 2 != 0 ? _a : 1 ether;//_a
         for (_n /= 2; _n != 0; _n /= 2) {
             _a = _bmul(_a, _a);
             if (_n % 2 != 0) {
@@ -271,11 +266,11 @@ contract Math{
     }
 
     /**
-     * @dev divides a number by BONE (1e18)
+     * @dev divides a number by 1 ether (1e18)
      * @param _a numerator
      * @return uint256 result
      */
     function _btoi(uint256 _a) internal pure returns (uint256){
-        return _a / BONE;
+        return _a / 1 ether;
     }
 }

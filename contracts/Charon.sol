@@ -205,7 +205,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      * @return _depositId returns the depositId (position in commitment array)
      */
     function depositToOtherChain(Proof memory _proofArgs,ExtData memory _extData, bool _isCHD, uint256 _maxOut) external returns(uint256 _depositId){
-        require(_extData.extAmount > 0);
+        require(_extData.extAmount > 0, "amount must be positive");
         require(_lock == false);
         depositCommitments.push(Commitment(_extData,_proofArgs));
         _depositId = depositCommitments.length;
@@ -216,7 +216,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
           chd.burnCHD(msg.sender,uint256(_extData.extAmount));
         }
         else{
-          require(_tokenAmount <= _maxOut);
+          require(_tokenAmount <= _maxOut, "_maxOut exceeded");
           require(token.transferFrom(msg.sender, address(this), _tokenAmount));
           recordBalance += _tokenAmount;
         }
@@ -278,12 +278,12 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     {   
         require(_lock == false);
         uint256 _ratio = _bdiv(_poolAmountOut, supply);
-        require(_ratio > 0);
+        require(_ratio > 0, "ratio zero");
         uint256 _baseAssetIn = _bmul(_ratio, recordBalance);
-        require(_baseAssetIn <= _maxBaseAssetIn, "maxBaseAssetIn hit");
+        require(_baseAssetIn <= _maxBaseAssetIn);
         recordBalance = recordBalance + _baseAssetIn;
         uint256 _CHDIn = _bmul(_ratio, recordBalanceSynth);
-        require(_CHDIn <= _maxCHDIn, "maxCHDIn hit");
+        require(_CHDIn <= _maxCHDIn);
         recordBalanceSynth = recordBalanceSynth + _CHDIn;
         _mint(msg.sender,_poolAmountOut);
         require(token.transferFrom(msg.sender,address(this), _baseAssetIn));
@@ -306,7 +306,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
                         );
         singleCHDLPToDrip += _tokenAmountIn;
         dripRate = singleCHDLPToDrip / 1000;
-        require(_poolAmountOut >= _minPoolAmountOut);
+        require(_poolAmountOut >= _minPoolAmountOut, "minPoolAmountOut");
         _mint(msg.sender,_poolAmountOut);
         chd.transferFrom(msg.sender,address(this), _tokenAmountIn);
         singleLockTime[msg.sender] = block.timestamp + 24 hours;
@@ -325,7 +325,7 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         returns (uint256 _tokenAmountOut)
     {
         require(_lock == false);
-        require(block.timestamp > singleLockTime[msg.sender]);
+        require(block.timestamp > singleLockTime[msg.sender], "locked");
         checkDrip();
         uint256 _exitFee = _bmul(_poolAmountIn, fee);
         uint256 _pAiAfterExitFee = _poolAmountIn - _exitFee;

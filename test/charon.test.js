@@ -287,9 +287,14 @@ describe("charon tests", function () {
         let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
         let _query = await getTellorData(tellor2,charon.address,1,depositId);
         let _value = await charon.getOracleSubmission(depositId);
+        let _bnum = await ethers.provider.getBlockNumber();
+        let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+          ['bytes','uint256'],
+          [_value,_bnum]
+        );
         _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
         await h.expectThrow(charon2.oracleDeposit([0],_encoded));
-        await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+        await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
         await h.advanceTime(86400)//wait 12 hours
         await charon2.oracleDeposit([0],_encoded);
         await h.expectThrow(charon2.oracleDeposit([0],web3.utils.sha3(_encoded, {encoding: 'hex'})))
@@ -348,7 +353,12 @@ describe("charon tests", function () {
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
             let _query = await getTellorData(tellor2,charon.address,1,depositId);
             let _value = await charon.getOracleSubmission(depositId);
-            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            let _bnum = await ethers.provider.getBlockNumber();
+            let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+              ['bytes','uint256'],
+              [_value,_bnum]
+            );
+            await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
             await charon2.oracleDeposit([0],_encoded);
@@ -435,7 +445,12 @@ describe("charon tests", function () {
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
             let _query = await getTellorData(tellor2,charon.address,1,depositId);
             let _value = await charon.getOracleSubmission(depositId);
-            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            let _bnum = await ethers.provider.getBlockNumber();
+            let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+              ['bytes','uint256'],
+              [_value,_bnum]
+            );
+            await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
             await charon2.oracleDeposit([0],_encoded);
@@ -488,7 +503,12 @@ describe("charon tests", function () {
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded)) 
             let _query = await getTellorData(tellor2,charon.address,1,depositId);
             let _value = await charon.getOracleSubmission(depositId);
-            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            let _bnum = await ethers.provider.getBlockNumber();
+            let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+              ['bytes','uint256'],
+              [_value,_bnum]
+            );
+            await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
             gas =  await charon2.estimateGas.oracleDeposit([0],_encoded);
@@ -755,7 +775,12 @@ describe("charon tests", function () {
             let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
             let _query = await getTellorData(tellor2,charon.address,1,depositId);
             let _value = await charon.getOracleSubmission(depositId);
-            await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+            let _bnum = await ethers.provider.getBlockNumber();
+            let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+              ['bytes','uint256'],
+              [_value,_bnum]
+            );
+            await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
             _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
             await charon2.oracleDeposit([0],_encoded);
@@ -839,7 +864,12 @@ describe("charon tests", function () {
         let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
         let _query = await getTellorData(tellor2,charon.address,1,depositId);
         let _value = await charon.getOracleSubmission(depositId);
-        await tellor2.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+        let _bnum = await ethers.provider.getBlockNumber();
+        let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+          ['bytes','uint256'],
+          [_value,_bnum]
+        );
+        await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
         await h.advanceTime(86400)//wait 12 hours
         _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
         await charon2.oracleDeposit([0],_encoded);

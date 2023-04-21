@@ -123,7 +123,8 @@ describe("charon system - bridge tests", function() {
         let depositId = 1;
         _query = await getTellorData(tellor,accounts[3].address,1,depositId);
         let _data = h.hash("myData")
-        await tellor.connect(accounts[2]).submitValue(_query.queryId, _data,_query.nonce, _query.queryData);
+        _evmEncoded = await ethers.utils.AbiCoder.prototype.encode(['bytes','uint256'],[_data, 123456]);
+        await tellor.connect(accounts[2]).submitValue(_query.queryId, _evmEncoded,_query.nonce, _query.queryData);
         await h.advanceTime(86400)//wait 12 hours
         _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
         await h.expectThrow(tellorBridge.getCommitment(_encoded))

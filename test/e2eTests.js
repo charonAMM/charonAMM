@@ -194,7 +194,12 @@ describe("e2e charon tests", function () {
       let depositId = 1
       let _query = await getTellorData(tellor3,charon.address,1,depositId);
       let _value = await charon.getOracleSubmission(depositId);
-      await tellor3.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+      let _bnum = await ethers.provider.getBlockNumber();
+      let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+        ['bytes','uint256'],
+        [_value,_bnum]
+      );
+      await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
       await h.advanceTime(86400)//wait 12 hours
       _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
       await charon3.oracleDeposit([0],_encoded);
@@ -569,8 +574,13 @@ describe("e2e charon tests", function () {
         let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
         let _query = await getTellorData(tellor3,charon.address,1,depositId);
         let _value = await charon.getOracleSubmission(depositId);
-        await tellor3.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
-        await tellor3.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);//twice for funsies (shouldn't care)
+        let _bnum = await ethers.provider.getBlockNumber();
+        let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+          ['bytes','uint256'],
+          [_value,_bnum]
+        );
+        await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
+        await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);//twice for funsies (shouldn't care)
         await h.advanceTime(86400)//wait 12 hours
         _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
         await charon3.oracleDeposit([0],_encoded);
@@ -629,7 +639,12 @@ describe("e2e charon tests", function () {
       depositId = await charon3.getDepositIdByCommitmentHash(h.hash(__dataEncoded))
       _query = await getTellorData(tellor,charon3.address,3,depositId);
       _value = await charon3.getOracleSubmission(depositId);
-      await tellor.submitValue(_query.queryId, _value,_query.nonce, _query.queryData);
+      _bnum = await ethers.provider.getBlockNumber();
+      _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+        ['bytes','uint256'],
+        [_value,_bnum]
+      );
+      await tellor.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
       await h.advanceTime(86400)//wait 12 hours
       _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
       await charon.oracleDeposit([1],_encoded);
@@ -1498,4 +1513,65 @@ assert(await chd.balanceOf(accounts[5].address) - web3.utils.toWei("4") == 0, "s
       assert(await charon.recordBalanceSynth() - web3.utils.toWei("1030") == 0, "record balancesynth should be correct")
       assert(await chd.balanceOf(accounts[1].address)*1 - web3.utils.toWei("970") == 0, "contractsynth should take tokens")
     })
+it("Tellor Bridge EVM standard test", async function() {
+  let mockNative3 = await deploy("MockNativeBridge")
+  await mockNative3.setUsers(tellorBridge2.address, p2e.address, e2p.address)
+  let token3 = await deploy("MockERC20",accounts[1].address,"Dissapearing Space Monkey2","DSM2")
+  await token3.mint(accounts[0].address,web3.utils.toWei("1000000"))//1M
+  let TellorOracle = await ethers.getContractFactory(abi, bytecode);
+    tellor3 = await TellorOracle.deploy();
+    tellorBridge3 = await deploy("TellorBridge", tellor3.address)
+  let charon3 = await deploy("Charon",verifier2.address,verifier16.address,hasher.address,token3.address,fee,[tellorBridge3.address],HEIGHT,3,"Charon Pool Token2","CPT2");
+  let chd3 = await deploy("MockERC20",charon3.address,"charon dollar3","chd3") 
+  await tellorBridge.setPartnerInfo(charon3.address, 3);
+  await tellorBridge3.setPartnerInfo(charon.address,1)
+  await chd3.deployed();
+  await token3.approve(charon3.address,web3.utils.toWei("100"))
+  cfc3 = await deploy('MockCFC',token3.address,chd3.address)
+  await cfc3.deployed();
+  await charon3.finalize([1,2],[charon.address,charon2.address],web3.utils.toWei("100"),web3.utils.toWei("1000"),chd3.address, cfc3.address);
+  //deposit from 1 to 3
+  let _depositAmount = utils.parseEther('10');
+  await token.mint(accounts[1].address,web3.utils.toWei("100"))
+  _amount = await charon.calcInGivenOut(web3.utils.toWei("110"),
+                                            web3.utils.toWei("1000"),
+                                            _depositAmount,
+                                            0)
+  await token.connect(accounts[1]).approve(charon.address,_amount)
+  let aliceDepositUtxo13 = new Utxo({ amount: _depositAmount,myHashFunc: poseidon, chainID: 3 })
+  let inputData = await prepareTransaction({
+    charon: charon,
+    inputs:[],
+    outputs: [aliceDepositUtxo13],
+    account: {
+      owner: accounts[0].address,
+      publicKey: aliceDepositUtxo13.keypair.address(),
+    },
+    privateChainID: 3,
+    myHasherFunc: poseidon,
+    myHasherFunc2: poseidon2
+  })
+  let args = inputData.args
+  let extData = inputData.extData
+  await charon.connect(accounts[1]).depositToOtherChain(args,extData,false,_amount);
+  const dataEncoded = await ethers.utils.AbiCoder.prototype.encode(
+    ['bytes','uint256','bytes32'],
+    [args.proof,args.publicAmount,args.root]
+    );
+    let depositId = await charon.getDepositIdByCommitmentHash(h.hash(dataEncoded))
+    let _query = await getTellorData(tellor3,charon.address,1,depositId);
+    let _value = await charon.getOracleSubmission(depositId);
+    let _bnum = await ethers.provider.getBlockNumber();
+    let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
+      ['bytes','uint256'],
+      [_value,_bnum]
+    );
+    await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
+    await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);//twice for funsies (shouldn't care)
+    await h.advanceTime(86400)//wait 12 hours
+    let _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
+    let _vars = await tellorBridge3.getCommitment(_encoded);
+    assert(_vars[0] == _value, "value should return correctly");
+    assert(_vars[1] == accounts[0].address, "reporter address should be zero")
+})
 });

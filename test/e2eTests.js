@@ -197,7 +197,7 @@ describe("e2e charon tests", function () {
       let _bnum = await ethers.provider.getBlockNumber();
       let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
         ['bytes','uint256'],
-        [_value,_bnum]
+        [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
       );
       await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
       await h.advanceTime(86400)//wait 12 hours
@@ -577,7 +577,7 @@ describe("e2e charon tests", function () {
         let _bnum = await ethers.provider.getBlockNumber();
         let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
           ['bytes','uint256'],
-          [_value,_bnum]
+          [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
         );
         await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
         await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);//twice for funsies (shouldn't care)
@@ -642,7 +642,7 @@ describe("e2e charon tests", function () {
       _bnum = await ethers.provider.getBlockNumber();
       _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
         ['bytes','uint256'],
-        [_value,_bnum]
+        [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
       );
       await tellor.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
       await h.advanceTime(86400)//wait 12 hours
@@ -1564,7 +1564,7 @@ it("Tellor Bridge EVM standard test", async function() {
     let _bnum = await ethers.provider.getBlockNumber();
     let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
       ['bytes','uint256'],
-      [_value,_bnum]
+      [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
     );
     await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
     await tellor3.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);//twice for funsies (shouldn't care)

@@ -290,7 +290,7 @@ describe("charon tests", function () {
         let _bnum = await ethers.provider.getBlockNumber();
         let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
           ['bytes','uint256'],
-          [_value,_bnum]
+          [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
         );
         _encoded = await ethers.utils.AbiCoder.prototype.encode(['uint256'],[depositId]);
         await h.expectThrow(charon2.oracleDeposit([0],_encoded));
@@ -356,7 +356,7 @@ describe("charon tests", function () {
             let _bnum = await ethers.provider.getBlockNumber();
             let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
               ['bytes','uint256'],
-              [_value,_bnum]
+              [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
             );
             await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
@@ -448,7 +448,7 @@ describe("charon tests", function () {
             let _bnum = await ethers.provider.getBlockNumber();
             let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
               ['bytes','uint256'],
-              [_value,_bnum]
+              [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
             );
             await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
@@ -506,7 +506,7 @@ describe("charon tests", function () {
             let _bnum = await ethers.provider.getBlockNumber();
             let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
               ['bytes','uint256'],
-              [_value,_bnum]
+              [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
             );
             await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
@@ -778,7 +778,7 @@ describe("charon tests", function () {
             let _bnum = await ethers.provider.getBlockNumber();
             let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
               ['bytes','uint256'],
-              [_value,_bnum]
+              [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
             );
             await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
             await h.advanceTime(86400)//wait 12 hours
@@ -867,7 +867,7 @@ describe("charon tests", function () {
         let _bnum = await ethers.provider.getBlockNumber();
         let _evmCallVal = await ethers.utils.AbiCoder.prototype.encode(
           ['bytes','uint256'],
-          [_value,_bnum]
+          [await ethers.utils.AbiCoder.prototype.encode(['bytes'],[_value]),_bnum]
         );
         await tellor2.submitValue(_query.queryId, _evmCallVal,_query.nonce, _query.queryData);
         await h.advanceTime(86400)//wait 12 hours

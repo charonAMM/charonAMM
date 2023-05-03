@@ -54,6 +54,7 @@ contract TellorBridge is UsingTellor{
         bytes32 _queryId = keccak256(abi.encode("EVMCall",abi.encode(connectedChainId, charon, _callData)));
         (_value,_timestamp) = getDataBefore(_queryId,block.timestamp - 12 hours);
         (_value,) = abi.decode(_value,(bytes,uint256));
+        (_value) = abi.decode(_value,(bytes));//double encoding
         _caller = tellor.getReporterByTimestamp(_queryId,_timestamp);
     }
 

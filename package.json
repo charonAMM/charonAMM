@@ -31,7 +31,7 @@
         "circomlib": "^2.0.5",
         "circomlibjs": "^0.1.7",
         "fixed-merkle-tree": "^0.7.3",
-        "snarkjs": "^0.5.0",
+        "snarkjs": "^0.7.0",
         "tmp-promise": "^3.0.3",
         "usingtellor": "^5.0.3",
         "yarn": "^1.22.19"

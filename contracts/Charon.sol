@@ -96,13 +96,8 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     uint256 public immutable fee;//fee when liquidity is withdrawn or trade happens (1e18 = 100% fee)
     uint256 public oracleTokenFunds;//amount of token funds to be paid to reporters
     uint256 public oracleCHDFunds;//amount of chd funds to be paid to reporters
-    uint256 public recordBalance;//balance of asset stored in this contract
-    uint256 public recordBalanceSynth;//balance of asset bridged from other chain
     uint256 public userRewards;//amount of baseToken user rewards in contract
     uint256 public userRewardsCHD;//amount of chd user rewards in contract
-    uint256 public singleCHDLPToDrip;//amount to drip over next day
-    uint256 public lastDrip;
-    uint256 public dripRate;
     mapping(address => uint256) public singleLockTime;
     mapping(bytes32 => bool) nullifierHashes;//zk proof hashes to tell whether someone withdrew
     mapping(bytes32 => uint256) depositIdByCommitmentHash;//gives you a deposit ID (used by tellor) given a commitment
@@ -116,8 +111,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     event NewCommitment(bytes32 _commitment, uint256 _index, bytes _encryptedOutput, bool _isDeposit);
     event NewNullifier(bytes32 _nullifier);
     event OracleDeposit(uint256 _oracleIndex,bytes _inputData);
-    event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
-
     //functions
     /**
      * @dev constructor to launch charon
@@ -177,23 +170,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
       }
       checkDrip();
       emit RewardAdded(_toUsers + _toLPs + _toOracle,_isCHD);
-    }
-
-    /**
-     * @dev function to distribute singleCHDLPToDrip.  
-     * note can only be done once per block
-     * drip rate set in single LP depositCHD
-     */
-    function checkDrip() public {
-      if(block.timestamp > lastDrip && singleCHDLPToDrip > 0){//only oncePerBlock
-        lastDrip = block.timestamp;
-        uint256 _amountToDrip =  dripRate;
-        if(singleCHDLPToDrip < dripRate){
-          _amountToDrip = singleCHDLPToDrip;
-        }
-        recordBalanceSynth += _amountToDrip;
-        singleCHDLPToDrip -= _amountToDrip;
-      }
     }
 
     /**
@@ -268,96 +244,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
     }
 
     /**
-     * @dev Allows a user to deposit as an LP on this side of the AMM
-     * @param _poolAmountOut amount of pool tokens to recieve
-     * @param _maxCHDIn max amount of CHD to send to contract
-     * @param _maxBaseAssetIn max amount of base asset to send in
-     */
-    function lpDeposit(uint256 _poolAmountOut, uint256 _maxCHDIn, uint256 _maxBaseAssetIn)
-        external
-    {   
-        require(_lock == false);
-        uint256 _ratio = _bdiv(_poolAmountOut, supply);
-        require(_ratio > 0, "ratio zero");
-        uint256 _baseAssetIn = _bmul(_ratio, recordBalance);
-        require(_baseAssetIn <= _maxBaseAssetIn);
-        recordBalance = recordBalance + _baseAssetIn;
-        uint256 _CHDIn = _bmul(_ratio, recordBalanceSynth);
-        require(_CHDIn <= _maxCHDIn);
-        recordBalanceSynth = recordBalanceSynth + _CHDIn;
-        _mint(msg.sender,_poolAmountOut);
-        require(token.transferFrom(msg.sender,address(this), _baseAssetIn));
-        chd.transferFrom(msg.sender, address(this),_CHDIn);
-        checkDrip();
-        emit LPDeposit(msg.sender,_poolAmountOut);
-    }
-
-    /**
-     * @dev allows a user to single-side LP CHD 
-     * @param _tokenAmountIn amount of CHD to deposit
-     * @param _minPoolAmountOut minimum number of pool tokens you need out
-     */
-    function lpSingleCHD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external{
-        require(_lock == false);
-        uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
-                            recordBalanceSynth,//pool tokenIn balance
-                            supply,
-                            _tokenAmountIn//amount of token In
-                        );
-        singleCHDLPToDrip += _tokenAmountIn;
-        dripRate = singleCHDLPToDrip / 1000;
-        require(_poolAmountOut >= _minPoolAmountOut, "minPoolAmountOut");
-        _mint(msg.sender,_poolAmountOut);
-        chd.transferFrom(msg.sender,address(this), _tokenAmountIn);
-        singleLockTime[msg.sender] = block.timestamp + 24 hours;
-        emit LPDeposit(msg.sender,_poolAmountOut);
-    }
-
-    /**
-     * @dev Allows an lp to withdraw funds
-     * @param _poolAmountIn amount of pool tokens to transfer in
-     * @param _minCHDOut min aount of chd you need out
-     * @param _minBaseAssetOut min amount of base token you need out
-     * @return _tokenAmountOut amount of tokens recieved
-     */
-    function lpWithdraw(uint256 _poolAmountIn, uint256 _minCHDOut, uint256 _minBaseAssetOut)
-        external
-        returns (uint256 _tokenAmountOut)
-    {
-        require(_lock == false);
-        require(block.timestamp > singleLockTime[msg.sender], "locked");
-        checkDrip();
-        uint256 _exitFee = _bmul(_poolAmountIn, fee);
-        uint256 _pAiAfterExitFee = _poolAmountIn - _exitFee;
-        uint256 _ratio = _bdiv(_pAiAfterExitFee, supply);
-        _burn(msg.sender,_pAiAfterExitFee);//burning the total amount, but not taking out the tokens that are fees paid to the LP
-        _tokenAmountOut = _bmul(_ratio, recordBalance);
-        require(_tokenAmountOut != 0);
-        require(_tokenAmountOut >= _minBaseAssetOut);
-        recordBalance = recordBalance - _tokenAmountOut;
-        uint256 _CHDOut = _bmul(_ratio, recordBalanceSynth);
-        require(_CHDOut != 0);
-        require(_CHDOut >= _minCHDOut);
-        recordBalanceSynth = recordBalanceSynth - _CHDOut;
-        require(token.transfer(msg.sender, _tokenAmountOut));
-        chd.transfer(msg.sender, _CHDOut);
-        emit LPWithdrawal(msg.sender, _poolAmountIn);
-        //now transfer exit fee to CFC
-        if(_exitFee > 0){
-          _ratio = _bdiv(_exitFee, supply);
-          _burn(msg.sender,_exitFee);//burning the total amount, but not taking out the tokens that are fees paid to the LP
-          _tokenAmountOut = _bmul(_ratio, recordBalance);
-          recordBalance = recordBalance - _tokenAmountOut;
-          _CHDOut = _bmul(_ratio, recordBalanceSynth);
-           recordBalanceSynth = recordBalanceSynth - _CHDOut;
-          token.approve(address(controller),_tokenAmountOut);
-          ICFC(controller).addFees(_tokenAmountOut,false);
-          chd.approve(address(controller),_CHDOut);
-          ICFC(controller).addFees(_CHDOut,true);
-        }
-    }
-
-    /**
      * @dev reads tellor commitments to allow you to withdraw on this chain
      * @param _oracleIndex index of oracle in oracle array
     * @param _inputData depending on the bridge, it might be needed and lets you specify what you're pulling
@@ -394,92 +280,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         }
         emit OracleDeposit(_oracleIndex, _inputData);
     }
-  
-    /**
-     * @dev withdraw your tokens from deposit on alternate chain
-     * @param _inIsCHD bool if token sending in is CHD
-     * @param _tokenAmountIn amount of token to send in
-     * @param _minAmountOut minimum amount of out token you need
-     * @param _maxPrice max price you're willing to send the pool to
-     */
-    function swap(
-        bool _inIsCHD,
-        uint256 _tokenAmountIn,
-        uint256 _minAmountOut,
-        uint256 _maxPrice
-    )
-        external
-        returns (uint256 _tokenAmountOut, uint256 _spotPriceAfter){
-        require(_lock == false);
-        uint256 _inRecordBal;
-        uint256 _outRecordBal;
-        uint256 _exitFee = _bmul(_tokenAmountIn, fee);
-        uint256 _adjustedIn = _tokenAmountIn - _exitFee;
-        if(_inIsCHD){
-           _inRecordBal = recordBalanceSynth;
-           _outRecordBal = recordBalance;
-        } 
-        else{
-          _inRecordBal = recordBalance;
-          _outRecordBal = recordBalanceSynth;
-        }
-        require(_tokenAmountIn <= _bmul(_inRecordBal, 1 ether/ 2));//max in ratio
-        uint256 _spotPriceBefore = calcSpotPrice(
-                                    _inRecordBal,
-                                    _outRecordBal,
-                                    0
-                                );
-        require(_spotPriceBefore <= _maxPrice);
-        if(_inIsCHD){ //this is because we burn CHD on swaps (can't leave system w/o burning it)
-          _tokenAmountOut = calcSingleOutGivenIn(
-                  _outRecordBal,
-                  _inRecordBal,
-                  _adjustedIn,
-                  0,
-                  false
-              );
-        }
-        else{
-          _tokenAmountOut = calcOutGivenIn(
-                            _inRecordBal,
-                            _outRecordBal,
-                            _adjustedIn,
-                           0
-                        );
-        }
-        require(_tokenAmountOut >= _minAmountOut);
-        require(_spotPriceBefore <= _bdiv(_adjustedIn, _tokenAmountOut));
-        _outRecordBal -= _tokenAmountOut;
-        if(_inIsCHD){
-           chd.burnCHD(msg.sender,_adjustedIn);
-           require(token.transfer(msg.sender,_tokenAmountOut));
-           recordBalance -= _tokenAmountOut;
-           if(_exitFee > 0){
-            chd.approve(address(controller),_exitFee);
-            ICFC(controller).addFees(_exitFee,true);
-           }
-        } 
-        else{
-          _inRecordBal += _adjustedIn;
-          require(token.transferFrom(msg.sender,address(this), _tokenAmountIn));
-          chd.transfer(msg.sender,_tokenAmountOut);
-          recordBalance += _adjustedIn;
-          recordBalanceSynth -= _tokenAmountOut;
-          if(fee > 0){
-            token.approve(address(controller),_exitFee);
-            ICFC(controller).addFees(_exitFee,false);
-          }
-        }
-        _spotPriceAfter = calcSpotPrice(
-                                _inRecordBal,
-                                _outRecordBal,
-                                0
-                            );
-        require(_spotPriceAfter >= _spotPriceBefore);     
-        require(_spotPriceAfter <= _maxPrice);
-        checkDrip();
-        emit Swap(msg.sender,_inIsCHD,_tokenAmountIn,_tokenAmountOut);
-      }
 
       /**
       * @dev allows users to send chd anonymously
@@ -560,14 +360,6 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
      */
     function getPartnerContracts() external view returns(PartnerContract[] memory){
       return partnerContracts;
-    }
-
-    /**
-     * @dev allows you to check the spot price of the token pair
-     * @return uint256 price of the pair
-     */
-    function getSpotPrice() external view returns(uint256){
-      return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
     }
 
     /**
@@ -668,4 +460,212 @@ contract Charon is Math, MerkleTreeWithHistory, Token{
         revert("bad input count");
       }
   }
+
+   uint256 public recordBalance;//balance of asset stored in this contract
+    uint256 public recordBalanceSynth;//balance of asset bridged from other chain
+    uint256 public singleCHDLPToDrip;//amount to drip over next day
+    uint256 public lastDrip;
+    uint256 public dripRate;
+    event Swap(address _user,bool _inIsCHD,uint256 _tokenAmountIn,uint256 _tokenAmountOut);
+
+    /**
+     * @dev function to distribute singleCHDLPToDrip.  
+     * note can only be done once per block
+     * drip rate set in single LP depositCHD
+     */
+    function checkDrip() public {
+      if(block.timestamp > lastDrip && singleCHDLPToDrip > 0){//only oncePerBlock
+        lastDrip = block.timestamp;
+        uint256 _amountToDrip =  dripRate;
+        if(singleCHDLPToDrip < dripRate){
+          _amountToDrip = singleCHDLPToDrip;
+        }
+        recordBalanceSynth += _amountToDrip;
+        singleCHDLPToDrip -= _amountToDrip;
+      }
+    }
+
+    /**
+     * @dev Allows a user to deposit as an LP on this side of the AMM
+     * @param _poolAmountOut amount of pool tokens to recieve
+     * @param _maxCHDIn max amount of CHD to send to contract
+     * @param _maxBaseAssetIn max amount of base asset to send in
+     */
+    function lpDeposit(uint256 _poolAmountOut, uint256 _maxCHDIn, uint256 _maxBaseAssetIn)
+        external
+    {   
+        require(_lock == false);
+        uint256 _ratio = _bdiv(_poolAmountOut, supply);
+        require(_ratio > 0, "ratio zero");
+        uint256 _baseAssetIn = _bmul(_ratio, recordBalance);
+        require(_baseAssetIn <= _maxBaseAssetIn);
+        recordBalance = recordBalance + _baseAssetIn;
+        uint256 _CHDIn = _bmul(_ratio, recordBalanceSynth);
+        require(_CHDIn <= _maxCHDIn);
+        recordBalanceSynth = recordBalanceSynth + _CHDIn;
+        _mint(msg.sender,_poolAmountOut);
+        require(token.transferFrom(msg.sender,address(this), _baseAssetIn));
+        chd.transferFrom(msg.sender, address(this),_CHDIn);
+        checkDrip();
+        emit LPDeposit(msg.sender,_poolAmountOut);
+    }
+
+    /**
+     * @dev allows a user to single-side LP CHD 
+     * @param _tokenAmountIn amount of CHD to deposit
+     * @param _minPoolAmountOut minimum number of pool tokens you need out
+     */
+    function lpSingleCHD(uint256 _tokenAmountIn,uint256 _minPoolAmountOut) external{
+        require(_lock == false);
+        uint256 _poolAmountOut = calcPoolOutGivenSingleIn(
+                            recordBalanceSynth,//pool tokenIn balance
+                            supply,
+                            _tokenAmountIn//amount of token In
+                        );
+        singleCHDLPToDrip += _tokenAmountIn;
+        dripRate = singleCHDLPToDrip / 1000;
+        require(_poolAmountOut >= _minPoolAmountOut, "minPoolAmountOut");
+        _mint(msg.sender,_poolAmountOut);
+        chd.transferFrom(msg.sender,address(this), _tokenAmountIn);
+        singleLockTime[msg.sender] = block.timestamp + 24 hours;
+        emit LPDeposit(msg.sender,_poolAmountOut);
+    }
+
+    /**
+     * @dev Allows an lp to withdraw funds
+     * @param _poolAmountIn amount of pool tokens to transfer in
+     * @param _minCHDOut min aount of chd you need out
+     * @param _minBaseAssetOut min amount of base token you need out
+     * @return _tokenAmountOut amount of tokens recieved
+     */
+    function lpWithdraw(uint256 _poolAmountIn, uint256 _minCHDOut, uint256 _minBaseAssetOut)
+        external
+        returns (uint256 _tokenAmountOut)
+    {
+        require(_lock == false);
+        require(block.timestamp > singleLockTime[msg.sender], "locked");
+        checkDrip();
+        uint256 _exitFee = _bmul(_poolAmountIn, fee);
+        uint256 _pAiAfterExitFee = _poolAmountIn - _exitFee;
+        uint256 _ratio = _bdiv(_pAiAfterExitFee, supply);
+        _burn(msg.sender,_pAiAfterExitFee);//burning the total amount, but not taking out the tokens that are fees paid to the LP
+        _tokenAmountOut = _bmul(_ratio, recordBalance);
+        require(_tokenAmountOut != 0);
+        require(_tokenAmountOut >= _minBaseAssetOut);
+        recordBalance = recordBalance - _tokenAmountOut;
+        uint256 _CHDOut = _bmul(_ratio, recordBalanceSynth);
+        require(_CHDOut != 0);
+        require(_CHDOut >= _minCHDOut);
+        recordBalanceSynth = recordBalanceSynth - _CHDOut;
+        require(token.transfer(msg.sender, _tokenAmountOut));
+        chd.transfer(msg.sender, _CHDOut);
+        emit LPWithdrawal(msg.sender, _poolAmountIn);
+        //now transfer exit fee to CFC
+        if(_exitFee > 0){
+          _ratio = _bdiv(_exitFee, supply);
+          _burn(msg.sender,_exitFee);//burning the total amount, but not taking out the tokens that are fees paid to the LP
+          _tokenAmountOut = _bmul(_ratio, recordBalance);
+          recordBalance = recordBalance - _tokenAmountOut;
+          _CHDOut = _bmul(_ratio, recordBalanceSynth);
+           recordBalanceSynth = recordBalanceSynth - _CHDOut;
+          token.approve(address(controller),_tokenAmountOut);
+          ICFC(controller).addFees(_tokenAmountOut,false);
+          chd.approve(address(controller),_CHDOut);
+          ICFC(controller).addFees(_CHDOut,true);
+        }
+    }
+
+
+    /**
+     * @dev withdraw your tokens from deposit on alternate chain
+     * @param _inIsCHD bool if token sending in is CHD
+     * @param _tokenAmountIn amount of token to send in
+     * @param _minAmountOut minimum amount of out token you need
+     * @param _maxPrice max price you're willing to send the pool to
+     */
+    function swap(
+        bool _inIsCHD,
+        uint256 _tokenAmountIn,
+        uint256 _minAmountOut,
+        uint256 _maxPrice
+    )
+        external
+        returns (uint256 _tokenAmountOut, uint256 _spotPriceAfter){
+        require(_lock == false);
+        uint256 _inRecordBal;
+        uint256 _outRecordBal;
+        uint256 _exitFee = _bmul(_tokenAmountIn, fee);
+        uint256 _adjustedIn = _tokenAmountIn - _exitFee;
+        if(_inIsCHD){
+           _inRecordBal = recordBalanceSynth;
+           _outRecordBal = recordBalance;
+        } 
+        else{
+          _inRecordBal = recordBalance;
+          _outRecordBal = recordBalanceSynth;
+        }
+        require(_tokenAmountIn <= _bmul(_inRecordBal, 1 ether/ 2));//max in ratio
+        uint256 _spotPriceBefore = calcSpotPrice(
+                                    _inRecordBal,
+                                    _outRecordBal,
+                                    0
+                                );
+        require(_spotPriceBefore <= _maxPrice);
+        if(_inIsCHD){ //this is because we burn CHD on swaps (can't leave system w/o burning it)
+          _tokenAmountOut = calcSingleOutGivenIn(
+                  _outRecordBal,
+                  _inRecordBal,
+                  _adjustedIn,
+                  0,
+                  false
+              );
+        }
+        else{
+          _tokenAmountOut = calcOutGivenIn(
+                            _inRecordBal,
+                            _outRecordBal,
+                            _adjustedIn,
+                           0
+                        );
+        }
+        require(_tokenAmountOut >= _minAmountOut);
+        require(_spotPriceBefore <= _bdiv(_adjustedIn, _tokenAmountOut));
+        _outRecordBal -= _tokenAmountOut;
+        if(_inIsCHD){
+           chd.burnCHD(msg.sender,_adjustedIn);
+           require(token.transfer(msg.sender,_tokenAmountOut));
+           recordBalance -= _tokenAmountOut;
+           if(_exitFee > 0){
+            chd.approve(address(controller),_exitFee);
+            ICFC(controller).addFees(_exitFee,true);
+           }
+        } 
+        else{
+          _inRecordBal += _adjustedIn;
+          require(token.transferFrom(msg.sender,address(this), _tokenAmountIn));
+          chd.transfer(msg.sender,_tokenAmountOut);
+          recordBalance += _adjustedIn;
+          recordBalanceSynth -= _tokenAmountOut;
+          if(fee > 0){
+            token.approve(address(controller),_exitFee);
+            ICFC(controller).addFees(_exitFee,false);
+          }
+        }
+        _spotPriceAfter = calcSpotPrice(
+                                _inRecordBal,
+                                _outRecordBal,
+                                0
+                            );
+        require(_spotPriceAfter >= _spotPriceBefore);     
+        require(_spotPriceAfter <= _maxPrice);
+        checkDrip();
+        emit Swap(msg.sender,_inIsCHD,_tokenAmountIn,_tokenAmountOut);
+      }
+    /**
+     * @dev allows you to check the spot price of the token pair
+     * @return uint256 price of the pair
+     */
+    function getSpotPrice() external view returns(uint256){
+      return calcSpotPrice(recordBalanceSynth,recordBalance, 0);
+    }
 }
